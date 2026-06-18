@@ -22,6 +22,7 @@ dependencies = [
     "pyyaml>=6.0",
     "tenacity>=8.0.0",
     "mcp>=1.28.0",
+    "tomli>=2.0.0; python_version<'3.11'",
 ]
 
 [project.optional-dependencies]
@@ -33,15 +34,15 @@ dev = [
 Homepage = "https://github.com/your-org/auto_test_agent"
 
 [project.scripts]
-sdk-test-agent = "agent:clicli_main"
-testgen = "app:main"
+sdk-test-agent = "auto_test_agent.__main__:_cli_main"
+testgen = "auto_test_agent.__main__:_cli_main"
 testgen-mcp = "mcp_server:main"
 
 [tool.setuptools]
 py-modules = ["agent"]
 
 [tool.setuptools.packages.find]
-include = ["auto_test_agent*", "agents*", "ir*"]
+include = ["auto_test_agent*", "agents*", "schemas*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.yaml", "*.md"]
+"*" = ["*.yaml", "*.toml", "*.json", "*.md"]

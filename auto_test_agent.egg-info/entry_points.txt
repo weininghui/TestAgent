@@ -1,4 +1,4 @@
 [console_scripts]
-sdk-test-agent = agent:clicli_main
-testgen = app:main
+sdk-test-agent = auto_test_agent.__main__:_cli_main
+testgen = auto_test_agent.__main__:_cli_main
 testgen-mcp = mcp_server:main
