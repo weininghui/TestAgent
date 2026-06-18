@@ -1,0 +1,50 @@
+# SDK Test Generation Agent — OpenCode plugin manifest
+#
+# This file enables auto-discovery by OpenCode.  When OpenCode loads this
+# plugin, it:
+#   1. Auto-starts the MCP server (stdio transport)
+#   2. Registers all 7 tools for LLM use
+#   3. Makes the agent dispatchable via ``task()``
+
+name: sdk-test-agent
+version: 1.0.0
+description: >
+  SDK Test Generation Agent — automated C/C++ test case generation using
+  LLM analysis of SDK header files.  Scans .h files, analyses APIs, designs
+  GoogleTest test cases, generates compilable C++ GTest code, and produces
+  CI/CD build configurations.
+
+type: agent
+entry: agent.py
+
+# MCP server configuration — auto-started by OpenCode
+mcp:
+  enabled: true
+  transport: stdio
+  command: python
+  args:
+    - mcp_server.py
+  env:
+    OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+# Skill command registration (optional, for manual slash-command usage)
+commands:
+  - name: test-agent
+    description: Run the SDK test generation agent
+    args:
+      - name: goal
+        type: string
+        description: Natural language goal (e.g. "generate tests for /path/to/sdk")
+        required: false
+      - name: sdk-root
+        type: string
+        description: SDK root directory (overrides goal parsing)
+        required: false
+      - name: model
+        type: string
+        description: Model preset (longcat, dashscope, etc.)
+        required: false
+      - name: dry-run
+        type: boolean
+        description: Show plan without executing
+        required: false

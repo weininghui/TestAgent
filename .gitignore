@@ -1,0 +1,11 @@
+output/
+testhistory/
+__pycache__/
+*.pyc
+test_output_dir/
+
+# Virtual environment
+.venv/
+
+# Local model config overrides (not tracked)
+model_config.local.yaml 
