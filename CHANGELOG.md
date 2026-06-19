@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.3.0] - 2026-06-19
+
+Agent continuation — test scaffolding, failure learning, GTest analyze, session context.
+
+### Added
+- `sdk_forge/templates.py` — `generate_test_skeleton` / `forge scaffold`
+- `sdk_forge/learn.py` — persist successful compile params; merge on next build
+- `sdk_forge/test_fix.py` — `analyze_test_failures` / `forge analyze`
+- `sdk_forge/session.py` — `get_session_context`, `last_plan.json` cache
+- MCP: `generate_test_skeleton`, `analyze_test_failures`, `get_session_context`, `get_learned_config`, `forget_learned_config`
+- Report: failed test summary + learned config section
+
 ## [3.2.0] - 2026-06-19
 
 Agent intelligence — structured test plans, executable hint actions, and auto-retry build.

@@ -18,6 +18,9 @@ from sdk_forge.probe import probe_sdk_impl
 from sdk_forge.report import report_impl
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import scan_headers_impl
+from sdk_forge.session import get_session_context_impl, save_plan_state
+from sdk_forge.templates import generate_test_skeleton_impl
+from sdk_forge.test_fix import analyze_test_failures_impl
 from sdk_forge.util import normalize_str_list, parse_bool
 
 
@@ -149,7 +152,33 @@ def cmd_plan(args: argparse.Namespace) -> int:
     )
     if args.output:
         open(args.output, "w", encoding="utf-8").write(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.project_dir and result.get("status") == "ok":
+        save_plan_state(args.project_dir, result)
     return _emit(result, args.quiet)
+
+
+def cmd_scaffold(args: argparse.Namespace) -> int:
+    plan_data = None
+    if args.plan_file:
+        plan_data = open(args.plan_file, encoding="utf-8").read()
+    result = generate_test_skeleton_impl(
+        plan_json=plan_data,
+        output_dir=args.output or "tests",
+        sdk_root=args.sdk_root or "",
+        project_name=args.name,
+        overwrite=args.overwrite,
+    )
+    return _emit(result, args.quiet)
+
+
+def cmd_analyze(args: argparse.Namespace) -> int:
+    run_data = None
+    if args.run_file:
+        run_data = open(args.run_file, encoding="utf-8").read()
+    return _emit(
+        analyze_test_failures_impl(build_dir=args.build_dir or "", run_json=run_data),
+        args.quiet,
+    )
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -244,7 +273,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_plan.add_argument("--scan-file", default="", help="Use existing scan JSON instead of scanning")
     p_plan.add_argument("--include", action="append", default=[])
     p_plan.add_argument("--output", default="")
+    p_plan.add_argument("--project-dir", default="", help="Save plan to .forge/cache/last_plan.json")
     p_plan.set_defaults(func=cmd_plan)
+
+    p_scaffold = sub.add_parser("scaffold", help="Generate GTest skeleton from plan or SDK scan")
+    p_scaffold.add_argument("sdk_root", nargs="?", default="")
+    p_scaffold.add_argument("--plan-file", default="")
+    p_scaffold.add_argument("--output", default="tests")
+    p_scaffold.add_argument("--name", default="sdk_tests")
+    p_scaffold.add_argument("--overwrite", action="store_true")
+    p_scaffold.set_defaults(func=cmd_scaffold)
+
+    p_analyze = sub.add_parser("analyze", help="Analyze GTest failures from build dir")
+    p_analyze.add_argument("build_dir", nargs="?", default="")
+    p_analyze.add_argument("--run-file", default="")
+    p_analyze.set_defaults(func=cmd_analyze)
 
     p_report = sub.add_parser("report", help="Generate markdown report from last build")
     p_report.add_argument("--project-dir", default="")

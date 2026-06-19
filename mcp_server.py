@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server — thin wrapper over sdk_forge core (v3.2)."""
+"""MCP server — thin wrapper over sdk_forge core (v3.3)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from sdk_forge.coverage import collect_coverage_impl
 from sdk_forge.doctor import doctor_impl
 from sdk_forge.init import init_project_impl
 from sdk_forge.mock import generate_mocks_impl
+from sdk_forge.learn import forget_learned_config, load_learned_config
 from sdk_forge.pipeline import build_pipeline_impl
 from sdk_forge.plan import suggest_test_plan_impl
 from sdk_forge.probe import probe_sdk_impl
@@ -22,6 +23,9 @@ from sdk_forge.report import report_impl
 from sdk_forge.retry import load_build_state
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import CLANG_AVAILABLE, scan_headers_impl
+from sdk_forge.session import get_session_context_impl, save_plan_state
+from sdk_forge.templates import generate_test_skeleton_impl
+from sdk_forge.test_fix import analyze_test_failures_impl
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,9 +42,13 @@ Tools:
   - forge_doctor        → check cmake, compiler, caches
   - init_forge_project  → scaffold tests + .forge.yaml
   - suggest_test_plan   → structured test scenarios from scan
+  - generate_test_skeleton → GTest .cpp skeleton from plan
   - build_tests         → probe + compile + run with retry/auto-fix
+  - analyze_test_failures → parse GTest failure output
   - forge_report        → markdown report from last build
   - get_build_state     → read last build JSON
+  - get_session_context → plan + build + learned config
+  - get_learned_config  → cached compile params for SDK
   - scan_headers        → parse headers (libclang + regex)
   - probe_sdk           → suggest link settings
   - compile_tests       → CMake build (reads .forge.yaml/.forge.json)
@@ -70,11 +78,61 @@ async def init_forge_project(
 async def suggest_test_plan(
     sdk_root: Annotated[str, "SDK root to scan when scan_json is empty."] = "",
     scan_json: Annotated[str, "JSON from scan_headers."] = "",
+    project_dir: Annotated[str, "Save plan to .forge/cache when set."] = "",
+) -> str:
+    result = suggest_test_plan_impl(sdk_root=sdk_root, scan_json=scan_json or None)
+    if project_dir and result.get("status") == "ok":
+        save_plan_state(project_dir, result)
+        result["plan_saved"] = str((project_dir or ".") + "/.forge/cache/last_plan.json")
+    return json.dumps(result, indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Generate compilable GTest skeleton .cpp files from plan or SDK scan.")
+async def generate_test_skeleton(
+    output_dir: Annotated[str, "Directory for generated *_test.cpp files."],
+    plan_json: Annotated[str, "JSON from suggest_test_plan."] = "",
+    sdk_root: Annotated[str, "Scan SDK and plan when plan_json empty."] = "",
+    project_name: Annotated[str, "Base name fallback."] = "sdk_tests",
+    overwrite: Annotated[bool | str, "Overwrite existing test files."] = False,
 ) -> str:
     return json.dumps(
-        suggest_test_plan_impl(sdk_root=sdk_root, scan_json=scan_json or None),
+        generate_test_skeleton_impl(plan_json or None, output_dir, sdk_root, project_name, overwrite),
         indent=2, ensure_ascii=False,
     )
+
+
+@mcp.tool(description="Analyze GTest failures; returns structured review_assertion actions.")
+async def analyze_test_failures(
+    build_dir: Annotated[str, "Build directory to run tests from."] = "",
+    run_json: Annotated[str, "Optional run_tests JSON instead of re-running."] = "",
+) -> str:
+    return json.dumps(
+        analyze_test_failures_impl(build_dir, run_json or None),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Combined session: last plan, build state, learned config, report summary.")
+async def get_session_context(
+    project_dir: Annotated[str, "Project root with .forge/cache/."] = "",
+) -> str:
+    return json.dumps(get_session_context_impl(project_dir), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Load learned compile params for an SDK from prior successful builds.")
+async def get_learned_config(
+    sdk_root: Annotated[str, "SDK root path."],
+    project_dir: Annotated[str, "Project cache directory."] = "",
+) -> str:
+    return json.dumps(load_learned_config(sdk_root, project_dir), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Remove cached learned compile params for an SDK.")
+async def forget_learned_config(
+    sdk_root: Annotated[str, "SDK root path."],
+    project_dir: Annotated[str, "Project cache directory."] = "",
+) -> str:
+    return json.dumps(forget_learned_config(sdk_root, project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Probe + compile + run with retry and optional auto-fix from CMake hints.")

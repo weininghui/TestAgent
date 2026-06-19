@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.2.0** — agent intelligence: test plans, executable hint actions, auto-retry build.
+**Current release: v3.3.0** — scaffold, failure learning, GTest analyze, session context.
 
 ## What it does
 
@@ -111,6 +111,8 @@ forge compile ./tests ./build --gtest-source system    # use system GTest
 |---------|-------------|
 | `forge doctor` | Check cmake, compiler, pkg-config, caches, GTest |
 | `forge plan <sdk>` | Structured test plan from header scan |
+| `forge scaffold <sdk>` | Generate GTest skeleton from plan/scan |
+| `forge analyze <build>` | Parse GTest failures into fix suggestions |
 | `forge init <dir>` | Create `tests/`, `build/`, `.forge.yaml`, sample test |
 | `forge build` | Probe + compile + run (`--retry 3`, `--auto-fix-config`) |
 | `forge report` | Markdown report from last build |
@@ -180,6 +182,10 @@ Windows: set `LIBCLANG_PATH` to LLVM `bin`, e.g. `C:\Program Files\LLVM\bin`.
 
 | Feature | MCP | CLI | Since |
 |---------|-----|-----|-------|
+| Test skeleton codegen | `generate_test_skeleton` | `forge scaffold` | v3.3 |
+| Failure learning | `get_learned_config` | — | v3.3 |
+| GTest failure analyze | `analyze_test_failures` | `forge analyze` | v3.3 |
+| Session context | `get_session_context` | — | v3.3 |
 | Test plan generation | `suggest_test_plan` | `forge plan` | v3.2 |
 | Hint actions (auto-fix) | `actions` in compile JSON | — | v3.2 |
 | Auto-retry build | `build_tests(max_retries)` | `forge build --retry` | v3.2 |
@@ -228,7 +234,7 @@ python -m pytest test_mcp_server.py -v
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
 - [CHANGELOG](CHANGELOG.md)
-- Latest notes: [RELEASE_NOTES_v3.2.0.md](RELEASE_NOTES_v3.2.0.md)
+- Latest notes: [RELEASE_NOTES_v3.3.0.md](RELEASE_NOTES_v3.3.0.md)
 
 ## License
 

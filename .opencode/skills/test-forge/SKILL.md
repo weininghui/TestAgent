@@ -3,45 +3,31 @@ name: test-forge
 description: Scan C/C++ SDK headers, generate GTest code, compile and run tests with SDK linking
 ---
 
-# SDK Test Forge Skill
+# SDK Test Forge Skill (v3.3)
 
-## Workflow (v3.2 — Agent Autonomy)
+## Workflow
 
-### Step 0: Doctor
+### 1. Doctor + Scan + Plan
 
 ```
 forge_doctor
-```
-
-### Step 1: Scan + Plan
-
-```
 scan_headers: { sdk_root: /path/to/sdk }
-suggest_test_plan: { scan_json: <scan result> }
+suggest_test_plan: { scan_json: ..., project_dir: ./my_tests }
 ```
 
-Review `targets[].scenarios` and `needs_mock` / `conditional` flags.
-
-### Step 2: Probe + Init (if new project)
+### 2. Scaffold (new in v3.3)
 
 ```
-init_forge_project: { target_dir: ./my_tests, sdk_root: /path/to/sdk }
-probe_sdk: { sdk_root: /path/to/sdk }
+generate_test_skeleton:
+  output_dir: ./my_tests/tests
+  plan_json: <from suggest_test_plan>
 ```
 
-Merge probe suggestions into `.forge.yaml`.
+Or CLI: `forge scaffold /path/to/sdk --output tests/`
 
-### Step 3: Mocks (if plan shows needs_mock)
+Edit generated TODO/EXPECT sections only where needed.
 
-```
-generate_mocks: { sdk_root: /path/to/sdk, class_name: MyClass }
-```
-
-### Step 4: Write Tests
-
-Use plan scenarios as checklist. Write `.cpp` under `tests/`.
-
-### Step 5: Smart Build (with retry)
+### 3. Smart Build + Learn
 
 ```
 build_tests:
@@ -50,45 +36,35 @@ build_tests:
   auto_fix_config: true
 ```
 
-On failure inspect `attempts[].actions_applied` and `compile.actions`.
+Successful builds save compile params to `.forge/cache/learned/`.
 
-### Step 6: Report
+### 4. Analyze Failures (if test_failures)
+
+```
+analyze_test_failures: { build_dir: ./my_tests/build }
+```
+
+Apply `review_assertion` actions via Edit — do not blindly rewrite all tests.
+
+### 5. Report + Session
 
 ```
 forge_report: { project_dir: ./my_tests }
+get_session_context: { project_dir: ./my_tests }
 ```
 
-Paste `markdown` into PR or chat summary.
-
-## compile_tests actions reference
-
-When not using `build_tests`, read `actions` from `compile_tests` errors:
-
-| type | Config key |
-|------|------------|
-| merge_link_libraries | link_libraries |
-| merge_sdk_include_dirs | sdk_include_dirs |
-| merge_sdk_lib_dirs | sdk_lib_dirs |
-| merge_cmake_prefix_path | cmake_prefix_path |
-| merge_pkg_config_packages | pkg_config_packages |
-
-## CLI equivalents
+## CLI map
 
 | MCP | CLI |
 |-----|-----|
-| suggest_test_plan | `forge plan <sdk>` |
-| build_tests | `forge build --retry 3 --auto-fix-config` |
-| forge_report | `forge report --project-dir .` |
+| generate_test_skeleton | `forge scaffold` |
+| analyze_test_failures | `forge analyze` |
+| get_session_context | (MCP only) |
+| get_learned_config | (MCP only) |
 
 ## Rules
 
-1. Always `suggest_test_plan` before writing tests
-2. Prefer `build_tests(max_retries=3)` over manual compile loops
-3. Read `actions` before `hints` on compile failure
-4. Portable C++17 in tests
-
-## Samples
-
-- [`test_sdk/`](../../test_sdk/) — C library
-- [`test_sdk_cpp/`](../../test_sdk_cpp/) — C++ virtual + pkg-config
-- [`examples/forge_test_sdk/`](../../examples/forge_test_sdk/) — `.forge.json`
+1. scaffold before freehand coding
+2. build_tests with retry before manual compile loops
+3. analyze_test_failures before guessing assertion fixes
+4. get_session_context when resuming a prior session

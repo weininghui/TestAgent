@@ -15,6 +15,7 @@ from sdk_forge.config import (
     resolve_path,
     save_forge_config,
 )
+from sdk_forge.learn import learn_from_build, merge_learned_into_params
 from sdk_forge.probe import probe_sdk_impl
 from sdk_forge.run import run_tests_impl
 from sdk_forge.util import parse_bool
@@ -84,6 +85,9 @@ def build_with_retry_impl(
                 "pkg_config_packages": probe.get("pkg_config_packages", []),
             })
 
+    if sdk:
+        params = merge_learned_into_params(params, sdk, str(start))
+
     attempts: list[dict[str, Any]] = []
     compile_result: dict[str, Any] = {}
     auto_fixed = False
@@ -133,6 +137,11 @@ def build_with_retry_impl(
         "attempts": attempts,
         "auto_fixed": auto_fixed,
         "retries_used": len(attempts),
+        "sdk_include_dirs": params.get("sdk_include_dirs", []),
+        "sdk_lib_dirs": params.get("sdk_lib_dirs", []),
+        "link_libraries": params.get("link_libraries", []),
+        "cmake_prefix_path": params.get("cmake_prefix_path", []),
+        "pkg_config_packages": params.get("pkg_config_packages", []),
     }
 
     if compile_result.get("status") != "ok":
@@ -145,6 +154,9 @@ def build_with_retry_impl(
         result["total"] = run_result.get("total", 0)
         result["passed"] = run_result.get("passed", 0)
         result["failed"] = run_result.get("failed", 0)
+
+    if result.get("status") == "ok" and sdk:
+        result["learned"] = learn_from_build(result, str(start))
 
     return result
 

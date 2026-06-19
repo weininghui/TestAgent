@@ -679,6 +679,88 @@ class TestReport:
         assert "v1.14.0" in result["markdown"]
 
 
+class TestTemplates:
+    def test_scaffold_from_plan(self, tmp_path):
+        from sdk_forge.templates import generate_test_skeleton_impl
+
+        plan = {
+            "status": "ok",
+            "targets": [{
+                "symbol": "calc_add",
+                "kind": "function",
+                "file": "calc.h",
+                "return_type": "int",
+                "params": "int a, int b",
+                "scenarios": [
+                    {"name": "normal", "description": "positive integers"},
+                    {"name": "boundary", "description": "edge values"},
+                ],
+                "conditional": False,
+                "needs_mock": False,
+            }],
+        }
+        out = tmp_path / "tests"
+        result = generate_test_skeleton_impl(plan_json=plan, output_dir=str(out))
+        assert result["status"] == "ok"
+        assert len(result["files_written"]) == 1
+        content = (out / "calc_add_test.cpp").read_text(encoding="utf-8")
+        assert "TEST(Calc_add, Normal)" in content
+        assert "calc.h" in content
+
+
+class TestLearn:
+    def test_learn_and_load(self, tmp_path):
+        from sdk_forge.learn import learn_from_build, load_learned_config, merge_learned_into_params
+
+        state = {
+            "status": "ok",
+            "sdk_root": str(tmp_path / "sdk"),
+            "compile": {"status": "ok"},
+            "run": {"status": "ok"},
+            "link_libraries": ["calc"],
+            "sdk_include_dirs": ["/inc"],
+            "attempts": [{"attempt": 1, "actions_applied": [{"type": "merge_link_libraries", "values": ["calc"]}]}],
+        }
+        saved = learn_from_build(state, str(tmp_path))
+        assert saved["status"] == "ok"
+        loaded = load_learned_config(str(tmp_path / "sdk"), str(tmp_path))
+        assert loaded["found"] is True
+        merged = merge_learned_into_params({}, str(tmp_path / "sdk"), str(tmp_path))
+        assert "calc" in merged.get("link_libraries", [])
+
+
+class TestTestFix:
+    def test_parse_gtest_failure(self):
+        from sdk_forge.test_fix import parse_test_failures
+
+        run_result = {
+            "status": "test_failures",
+            "output": """
+[ RUN      ] CalcAdd.Normal
+/path/calc_add_test.cpp:8: Failure
+Expected: 3
+Actual: 0
+[  FAILED  ] CalcAdd.Normal
+""",
+        }
+        parsed = parse_test_failures(run_result)
+        assert parsed["failure_count"] >= 1
+        assert parsed["actions"][0]["type"] == "review_assertion"
+
+
+class TestSessionContext:
+    def test_session_context(self, tmp_path):
+        from sdk_forge.session import get_session_context_impl, save_plan_state
+        from sdk_forge.retry import save_build_state
+
+        save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": []})
+        save_build_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "passed": 1})
+        ctx = get_session_context_impl(str(tmp_path))
+        assert ctx["status"] == "ok"
+        assert ctx["plan"] is not None
+        assert ctx["build_state"] is not None
+
+
 class TestCmakeHints:
     def test_undefined_reference_hint(self):
         hints = parse_cmake_error("undefined reference to `calc_add'")

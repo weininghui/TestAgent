@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from sdk_forge.retry import load_build_state
+from sdk_forge.test_fix import parse_test_failures
 
 
 def format_report_markdown(state: dict[str, Any]) -> str:
@@ -34,6 +35,22 @@ def format_report_markdown(state: dict[str, Any]) -> str:
         lines.append(f"| Failed | {run.get('failed', 0)} |")
         lines.append("")
 
+    run = state.get("run") or {}
+    if run.get("status") == "test_failures":
+        analysis = parse_test_failures(run)
+        if analysis.get("failures"):
+            lines.append("## Failed Tests")
+            lines.append("")
+            for item in analysis["failures"][:20]:
+                lines.append(f"- **{item.get('test', '?')}**")
+                if item.get("file"):
+                    lines.append(f"  - `{item['file']}:{item.get('line', '?')}`")
+                if item.get("expected") is not None:
+                    lines.append(f"  - expected `{item.get('expected')}`, actual `{item.get('actual')}`")
+                if item.get("suggestion"):
+                    lines.append(f"  - {item['suggestion']}")
+            lines.append("")
+
     attempts = state.get("attempts") or []
     if attempts:
         lines.append("## Build Attempts")
@@ -60,7 +77,14 @@ def format_report_markdown(state: dict[str, Any]) -> str:
             lines.append(f"- Method: `{gtest['method']}`")
         lines.append("")
 
-    if status not in ("ok", "test_failures"):
+    learned = state.get("learned") or {}
+    if learned.get("path"):
+        lines.append("## Learned Config")
+        lines.append("")
+        lines.append(f"- Saved to `{learned['path']}`")
+        lines.append("")
+
+    if status not in ("ok",):
         hints = compile_info.get("hints") or []
         if hints:
             lines.append("## Hints")
