@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.6.2] - 2026-06-19
+
+Conventions: bilingual code comments and Chinese-first Agent replies.
+
+### Added
+- `docs/CONVENTIONS.md` — communication language + bilingual comment guidelines
+- Agent docs: default Chinese; English only when user asks in chat
+
+### Changed
+- Updated `docs/AGENTS.md`, `forge.md`, `SKILL.md` with language policy
+- Bilingual module docstrings on report/pipeline/session/workflow modules
+
 ## [3.6.1] - 2026-06-19
 
 Auto-generate HTML test report after `build_tests` — no manual `forge_report` for testers.

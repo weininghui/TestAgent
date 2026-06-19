@@ -1,4 +1,6 @@
-"""Markdown and HTML report generation from build results."""
+"""Markdown and HTML report generation from build results.
+从构建结果生成 Markdown / HTML 测试报告。
+"""
 
 from __future__ import annotations
 
@@ -175,7 +177,9 @@ def format_report_markdown(state: dict[str, Any]) -> str:
 
 
 def build_auto_summary(state: dict[str, Any]) -> str:
-    """Generate a plain-text summary for testers (no Agent required)."""
+    """Plain-text summary for testers (Chinese, no Agent required).
+    为测试同学生成中文纯文本摘要（无需 Agent 手写）。
+    """
     lines: list[str] = []
     status = state.get("status", "unknown")
     run = state.get("run") or {}
@@ -214,7 +218,9 @@ def build_auto_summary(state: dict[str, Any]) -> str:
 
 
 def auto_generate_report(project_dir: str, state: dict[str, Any]) -> dict[str, Any]:
-    """Write HTML report after build; uses auto summary when agent_summary is omitted."""
+    """Write HTML report after build with auto summary.
+    构建结束后写入 HTML 报告（含自动摘要）。
+    """
     summary_text = build_auto_summary(state)
     enriched = _enrich_report_state(project_dir, state)
     html_content = format_report_html(enriched, agent_summary=summary_text)

@@ -1,4 +1,6 @@
-"""Session context: plan, build state, learned config."""
+"""Session context: plan, build state, learned config, last report path.
+会话上下文：计划、构建状态、学习配置、最近报告路径。
+"""
 
 from __future__ import annotations
 

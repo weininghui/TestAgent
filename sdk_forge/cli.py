@@ -1,4 +1,6 @@
-"""Command-line interface for SDK Test Forge."""
+"""Command-line interface for SDK Test Forge.
+SDK Test Forge 命令行入口（forge 子命令）。
+"""
 
 from __future__ import annotations
 

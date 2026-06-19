@@ -1,4 +1,6 @@
-"""One-shot probe + compile + run pipeline."""
+"""One-shot probe + compile + run pipeline.
+一次性探测、编译、运行流水线。
+"""
 
 from __future__ import annotations
 
@@ -20,6 +22,9 @@ def build_pipeline_impl(
     max_retries: int | str = 1,
     auto_fix_config: bool | str = False,
 ) -> dict:
+    """Run full build; save state and auto-generate HTML report (unless auto_report: false).
+    执行完整构建；保存状态并自动生成 HTML 报告（.forge.yaml 中 auto_report: false 可关闭）。
+    """
     result = build_with_retry_impl(
         project_dir=project_dir,
         source_dir=source_dir,

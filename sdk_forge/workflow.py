@@ -1,4 +1,6 @@
-"""Workflow stage tracking for Agent sessions."""
+"""Workflow stage tracking for Agent sessions.
+Agent 会话工作流阶段跟踪（.forge/cache/workflow.json）。
+"""
 
 from __future__ import annotations
 

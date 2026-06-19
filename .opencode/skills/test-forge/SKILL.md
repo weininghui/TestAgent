@@ -5,6 +5,12 @@ description: Scan C/C++ SDK headers, generate GTest code, compile and run tests 
 
 # SDK Test Forge Skill (v3.6)
 
+## Communication / 交流语言
+
+- **Reply in Chinese by default** when talking to the user.
+- Keep CLI commands, tool names, JSON keys, and file paths in English.
+- Switch to English **only** when the user explicitly asks in the chat (e.g. "reply in English", "请用英文").
+
 ## Workflow
 
 ### 1. Doctor + Scan + Plan

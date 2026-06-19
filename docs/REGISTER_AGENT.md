@@ -352,6 +352,8 @@ C:\Users\<用户名>\.config\opencode\opencode.json
 - `.md` 文件的文件正文（YAML frontmatter 下方，方式二）
 - `opencode.json` 的 `prompt` 字段（方式三）
 
+**语言约定：** Agent 默认中文回复；用户仅在聊天中明确要求时才用英文。详见 [CONVENTIONS.md](CONVENTIONS.md)。
+
 ### .opencode/skills/<name>/SKILL.md（Skill 定义）
 
 ```

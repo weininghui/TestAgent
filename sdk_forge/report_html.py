@@ -1,4 +1,6 @@
-"""HTML report generation from build results."""
+"""HTML report generation from build results.
+从构建结果生成单文件 HTML 测试报告。
+"""
 
 from __future__ import annotations
 

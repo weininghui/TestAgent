@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.6.1** — `build_tests` / `forge build` auto-generates HTML report; open `html_path` when done.
+**Current release: v3.6.2** — Chinese-first Agent replies; bilingual code comment conventions ([docs/CONVENTIONS.md](docs/CONVENTIONS.md)).
 
 ## What it does
 
@@ -231,6 +231,11 @@ TestAgent/
 | Coverage (Linux) | `collect_coverage` | `forge coverage` | v3.0.4 |
 | GMock templates | `generate_mocks` | `forge mocks` | v3.0.5 |
 | Compile timing | `compile_duration_sec` | same | v3.0.8 |
+
+## Conventions
+
+- **Agent language:** Chinese by default; say "reply in English" in chat to switch.
+- **Code comments:** bilingual (EN + CN) for new modules and public APIs — see [docs/CONVENTIONS.md](docs/CONVENTIONS.md).
 
 ## Development
 

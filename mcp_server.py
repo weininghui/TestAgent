@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""MCP server — thin wrapper over sdk_forge core (v3.4)."""
+"""MCP server — thin wrapper over sdk_forge core.
+MCP 服务入口，封装 sdk_forge 核心能力。
+"""
 
 from __future__ import annotations
 
