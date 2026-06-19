@@ -559,8 +559,49 @@ class TestGenAgent:
 
 
 # ---------------------------------------------------------------------------
-# No CLI entry point — use via OpenCode skill or MCP tools
+# Interactive entry point — invoked by OpenCode when TestGen agent is active
 #
-#   OpenCode:  task(load_skills=["test-agent"], prompt="generate tests for ...")
-#   Python:    from mcp_server import main; main()
+# Usage:
+#   python agent.py --goal "generate tests for /path/to/sdk" [--model longcat] [--dry-run]
+#
+# When no --goal is provided, reads from stdin (for OpenCode agent mode).
 # ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="SDK Test Generation Agent")
+    parser.add_argument("--goal", type=str, default=None, help="Natural language goal")
+    parser.add_argument("--model", type=str, default=None, help="Model preset name")
+    parser.add_argument("--dry-run", action="store_true", help="Show plan without executing")
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s [%(name)s] %(message)s",
+    )
+
+    goal = args.goal
+    if not goal:
+        # Read from stdin (piped input or OpenCode agent mode)
+        goal = sys.stdin.read().strip()
+
+    if not goal:
+        print(json.dumps({"error": "No goal provided. Pass --goal or pipe input."}, ensure_ascii=False))
+        sys.exit(1)
+
+    try:
+        agent = TestGenAgent(model=args.model or "default")
+
+        if args.dry_run:
+            result = agent.plan(goal)
+            result["status"] = "dry_run"
+        else:
+            result = agent.run(goal)
+
+        print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
+        if result.get("status") in ("error", "dry_run"):
+            sys.exit(0 if args.dry_run else 1)
+    except Exception as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+        sys.exit(1)
