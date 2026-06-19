@@ -681,6 +681,59 @@ class TestReport:
         assert "SDK Test Forge Report" in result["markdown"]
         assert "v1.14.0" in result["markdown"]
 
+    def test_report_html(self, tmp_path):
+        from sdk_forge.report import report_impl
+
+        cache = tmp_path / ".forge" / "cache"
+        cache.mkdir(parents=True)
+        state = {
+            "status": "test_failures",
+            "passed": 4,
+            "failed": 1,
+            "run": {
+                "total": 5,
+                "passed": 4,
+                "failed": 1,
+                "status": "test_failures",
+                "output": "[  FAILED  ] CalcAdd.Normal\n",
+            },
+            "compile": {"gtest_tag": "v1.14.0"},
+        }
+        (cache / "last_build.json").write_text("{}", encoding="utf-8")
+        result = report_impl(
+            project_dir=str(tmp_path),
+            build_state_json=json.dumps(state),
+            output_format="html",
+            agent_summary="## Conclusion\nAll good except one test.",
+        )
+        assert result["status"] == "ok"
+        assert result["format"] == "html"
+        assert Path(result["html_path"]).is_file()
+        html = result["html"]
+        assert "SDK Test Forge Report" in html
+        assert "Agent Analysis" in html
+        assert "Conclusion" in html
+        assert "<script>" not in html
+        assert "&lt;script&gt;" not in html or "Conclusion" in html
+
+
+class TestHtmlReport:
+    def test_xss_escaped(self):
+        from sdk_forge.report_html import format_report_html
+
+        html_out = format_report_html(
+            {"status": "ok", "run": {"total": 1, "passed": 1, "failed": 0}},
+            agent_summary="<script>alert(1)</script>",
+        )
+        assert "<script>alert" not in html_out
+        assert "&lt;script&gt;" in html_out
+
+    def test_agent_summary_hidden_when_empty(self):
+        from sdk_forge.report_html import format_report_html
+
+        html_out = format_report_html({"status": "ok"}, agent_summary="")
+        assert "Agent Analysis" not in html_out
+
 
 class TestTemplates:
     def test_scaffold_from_plan(self, tmp_path):

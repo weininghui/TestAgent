@@ -52,7 +52,7 @@ Tools:
   - apply_test_fixes       → write proposals after confirm=true
   - analyze_plan_gap       → plan vs tests/coverage gap
   - get_compile_commands   → cached compile_commands.json
-  - forge_report        → markdown report from last build
+  - forge_report        → markdown / HTML / JSON report from last build
   - get_build_state     → read last build JSON
   - get_session_context → plan + build + learned config
   - get_learned_config  → cached compile params for SDK
@@ -220,12 +220,22 @@ async def build_tests(
     )
 
 
-@mcp.tool(description="Generate markdown or JSON report from last build state.")
+@mcp.tool(description="Generate markdown, HTML, or JSON report from last build state.")
 async def forge_report(
     project_dir: Annotated[str, "Project directory with .forge/cache/last_build.json."] = "",
-    output_format: Annotated[str, "markdown (default) or json."] = "markdown",
+    output_format: Annotated[str, "markdown (default), html, or json."] = "markdown",
+    agent_summary: Annotated[str, "Optional Agent analysis text for HTML report section."] = "",
+    output_path: Annotated[str, "Optional HTML output path (default .forge/cache/report.html)."] = "",
 ) -> str:
-    return json.dumps(report_impl(project_dir, output_format=output_format), indent=2, ensure_ascii=False)
+    result = report_impl(
+        project_dir,
+        output_format=output_format,
+        agent_summary=agent_summary,
+        output_path=output_path,
+    )
+    if result.get("status") == "ok" and output_format == "html" and project_dir:
+        update_workflow_stage(project_dir, "report")
+    return json.dumps(result, indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Read last build state JSON from project cache.")

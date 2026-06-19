@@ -57,12 +57,14 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
     proposals = load_proposals(str(root))
 
     compdb_path = root / ".forge" / "cache" / "compile_commands.json"
+    report_html_path = root / ".forge" / "cache" / "report.html"
     workflow = load_workflow_state(str(root))
 
     return {
         "status": "ok",
         "project_dir": str(root.resolve()),
         "workflow": workflow if workflow.get("stage") else None,
+        "last_report_html": str(report_html_path.resolve()) if report_html_path.is_file() else None,
         "plan": plan if plan and plan.get("status") != "error" else None,
         "build_state": build_state if build_state.get("status") != "error" else None,
         "learned_config": learned if learned.get("found") else None,

@@ -244,13 +244,21 @@ def cmd_session(args: argparse.Namespace) -> int:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
+    agent_summary = args.agent_summary or ""
+    if args.agent_summary_file:
+        agent_summary = open(args.agent_summary_file, encoding="utf-8").read()
     result = report_impl(
         project_dir=args.project_dir or "",
         build_state_json=args.state_file and open(args.state_file, encoding="utf-8").read() or "",
         output_format=args.format,
+        agent_summary=agent_summary,
+        output_path=args.output or "",
     )
-    if args.output and result.get("markdown"):
-        open(args.output, "w", encoding="utf-8").write(result["markdown"])
+    if args.output:
+        if result.get("html"):
+            open(args.output, "w", encoding="utf-8").write(result["html"])
+        elif result.get("markdown"):
+            open(args.output, "w", encoding="utf-8").write(result["markdown"])
     return _emit(result, args.quiet)
 
 
@@ -383,11 +391,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_session.add_argument("--project-dir", default="")
     p_session.set_defaults(func=cmd_session)
 
-    p_report = sub.add_parser("report", help="Generate markdown report from last build")
+    p_report = sub.add_parser("report", help="Generate markdown/HTML/JSON report from last build")
     p_report.add_argument("--project-dir", default="")
     p_report.add_argument("--state-file", default="")
-    p_report.add_argument("--format", default="markdown", choices=["markdown", "json"])
-    p_report.add_argument("--output", default="")
+    p_report.add_argument("--format", default="markdown", choices=["markdown", "json", "html"])
+    p_report.add_argument("--output", default="", help="Write report body to this file")
+    p_report.add_argument("--agent-summary", default="", help="Agent analysis text for HTML report")
+    p_report.add_argument("--agent-summary-file", default="", help="File with Agent analysis for HTML")
     p_report.set_defaults(func=cmd_report)
 
     return parser

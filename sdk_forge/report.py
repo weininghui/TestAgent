@@ -1,4 +1,4 @@
-"""Markdown report generation from build results."""
+"""Markdown and HTML report generation from build results."""
 
 from __future__ import annotations
 
@@ -7,8 +7,43 @@ from pathlib import Path
 from typing import Any
 
 from sdk_forge.plan_gap import load_plan_gap
+from sdk_forge.report_html import format_report_html
 from sdk_forge.retry import load_build_state
 from sdk_forge.test_fix import load_proposals, parse_test_failures
+
+
+def _enrich_report_state(project_dir: str, state: dict[str, Any]) -> dict[str, Any]:
+    root = project_dir or str(Path.cwd())
+    enriched = dict(state)
+
+    gap = load_plan_gap(root)
+    if gap.get("status") == "ok":
+        enriched["plan_gap"] = gap
+
+    props = load_proposals(root)
+    if props.get("status") == "ok":
+        enriched["proposals"] = props
+
+    cov_path = Path(root) / ".forge" / "cache" / "coverage.json"
+    if cov_path.exists():
+        try:
+            enriched["coverage"] = json.loads(cov_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    return enriched
+
+
+def _build_summary(state: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": state.get("status"),
+        "passed": state.get("passed", state.get("run", {}).get("passed", 0)),
+        "failed": state.get("failed", state.get("run", {}).get("failed", 0)),
+        "auto_fixed": state.get("auto_fixed", False),
+        "retries_used": state.get("retries_used", 0),
+        "plan_gap_missing": len((state.get("plan_gap") or {}).get("missing_targets") or []),
+        "proposal_count": len((state.get("proposals") or {}).get("proposals") or []),
+    }
 
 
 def format_report_markdown(state: dict[str, Any]) -> str:
@@ -143,6 +178,8 @@ def report_impl(
     project_dir: str = "",
     build_state_json: str = "",
     output_format: str = "markdown",
+    agent_summary: str = "",
+    output_path: str = "",
 ) -> dict[str, Any]:
     if build_state_json.strip():
         try:
@@ -155,39 +192,29 @@ def report_impl(
             return state
 
     root = project_dir or str(Path.cwd())
-    gap = load_plan_gap(root)
-    if gap.get("status") == "ok":
-        state = dict(state)
-        state["plan_gap"] = gap
-
-    props = load_proposals(root)
-    if props.get("status") == "ok":
-        state = dict(state)
-        state["proposals"] = props
-
-    cov_path = Path(root) / ".forge" / "cache" / "coverage.json"
-    if cov_path.exists():
-        try:
-            state = dict(state)
-            state["coverage"] = json.loads(cov_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            pass
+    state = _enrich_report_state(root, state)
+    summary = _build_summary(state)
 
     if output_format == "json":
-        return {"status": "ok", "report": state, "format": "json"}
+        return {"status": "ok", "report": state, "format": "json", "summary": summary}
+
+    if output_format == "html":
+        html_content = format_report_html(state, agent_summary=agent_summary)
+        html_path = Path(output_path) if output_path else Path(root) / ".forge" / "cache" / "report.html"
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        html_path.write_text(html_content, encoding="utf-8")
+        return {
+            "status": "ok",
+            "format": "html",
+            "html_path": str(html_path.resolve()),
+            "html": html_content,
+            "summary": summary,
+        }
 
     markdown = format_report_markdown(state)
     return {
         "status": "ok",
         "format": "markdown",
         "markdown": markdown,
-        "summary": {
-            "status": state.get("status"),
-            "passed": state.get("passed", state.get("run", {}).get("passed", 0)),
-            "failed": state.get("failed", state.get("run", {}).get("failed", 0)),
-            "auto_fixed": state.get("auto_fixed", False),
-            "retries_used": state.get("retries_used", 0),
-            "plan_gap_missing": len((state.get("plan_gap") or {}).get("missing_targets") or []),
-            "proposal_count": len((state.get("proposals") or {}).get("proposals") or []),
-        },
+        "summary": summary,
     }

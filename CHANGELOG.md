@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.6.0] - 2026-06-19
+
+HTML test reports with Agent analysis section.
+
+### Added
+- `sdk_forge/report_html.py` — single-file HTML report with embedded CSS
+- `forge_report(output_format=html, agent_summary=..., output_path=...)` — MCP + CLI
+- CLI: `forge report --format html`, `--agent-summary`, `--agent-summary-file`
+- Session context: `last_report_html` when `.forge/cache/report.html` exists
+- Report state enrichment refactored via `_enrich_report_state` (shared markdown/html)
+
+### Changed
+- `forge_report` advances workflow stage to `report` on successful HTML generation
+
 ## [3.5.0] - 2026-06-19
 
 Real SDK adaptations and confirmation-gated apply loop.

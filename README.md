@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.5.0** — CMake probe, plan filtering, apply-after-confirm for real SDKs like yaml-cpp.
+**Current release: v3.6.0** — HTML test reports with Agent analysis section; open in browser via `html_path`.
 
 ## What it does
 
@@ -115,7 +115,7 @@ forge compile ./tests ./build --gtest-source system    # use system GTest
 | `forge analyze <build>` | Parse GTest failures into fix suggestions |
 | `forge init <dir>` | Create `tests/`, `build/`, `.forge.yaml`, sample test |
 | `forge build` | Probe + compile + run (`--retry 3`, `--auto-fix-config`) |
-| `forge report` | Markdown report from last build |
+| `forge report` | Markdown/HTML/JSON report from last build |
 | `forge probe <sdk>` | Suggest include/lib/link settings |
 | `forge scan <sdk>` | Parse headers (`--no-cache`, `--no-clang`) |
 | `forge mocks` | Generate GMock templates (`--sdk-root`, `--output`) |
@@ -212,7 +212,8 @@ TestAgent/
 | Test plan generation | `suggest_test_plan` | `forge plan` | v3.2 |
 | Hint actions (auto-fix) | `actions` in compile JSON | — | v3.2 |
 | Auto-retry build | `build_tests(max_retries)` | `forge build --retry` | v3.2 |
-| Build report | `forge_report` | `forge report` | v3.2 |
+| Build report | `forge_report(format=html)` | `forge report --format html` | v3.6 |
+| Build report (markdown) | `forge_report` | `forge report` | v3.2 |
 | Environment doctor | `forge_doctor` | `forge doctor` | v3.1 |
 | Project scaffold | `init_forge_project` | `forge init` | v3.1 |
 | One-shot build | `build_tests` | `forge build` | v3.1 |
@@ -257,7 +258,7 @@ python -m pytest tests/ -v
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
 - [CHANGELOG](CHANGELOG.md)
-- Latest notes: [RELEASE_NOTES_v3.4.0.md](docs/releases/RELEASE_NOTES_v3.4.0.md)
+- Latest notes: [RELEASE_NOTES_v3.6.0.md](docs/releases/RELEASE_NOTES_v3.6.0.md)
 
 ## License
 
