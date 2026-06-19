@@ -187,6 +187,33 @@ def cmd_golden_init(args: argparse.Namespace) -> int:
     return _emit({"status": "ok", "golden_file": str(path)}, args.quiet)
 
 
+def cmd_golden_snapshot(args: argparse.Namespace) -> int:
+    from sdk_forge.golden import snapshot_golden_from_plan_impl
+    return _emit(
+        snapshot_golden_from_plan_impl(
+            args.project_dir or "",
+            merge=not args.no_merge,
+            confirm=args.confirm,
+            from_last_build=args.from_last_build,
+        ),
+        args.quiet,
+    )
+
+
+def cmd_autopilot(args: argparse.Namespace) -> int:
+    from sdk_forge.autopilot import run_autopilot_impl
+    return _emit(
+        run_autopilot_impl(
+            sdk_root=args.sdk_root or "",
+            project_dir=args.project_dir or "",
+            profile=args.profile or "",
+            max_enrich_rounds=args.max_enrich_rounds if args.max_enrich_rounds is not None else "",
+            auto_init=not args.no_init,
+        ),
+        args.quiet,
+    )
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
     scan_data = None
     if args.scan_file:
@@ -465,6 +492,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_gi = g_sub.add_parser("init", help="Create .forge/golden.yaml template")
     p_gi.add_argument("--project-dir", default="")
     p_gi.set_defaults(func=cmd_golden_init)
+    p_gs = g_sub.add_parser("snapshot", help="Snapshot EXPECT_EQ cases from tests into golden.yaml")
+    p_gs.add_argument("--project-dir", default="")
+    p_gs.add_argument("--from-last-build", action="store_true", help="Require last_build.json")
+    p_gs.add_argument("--no-merge", action="store_true", help="Replace golden.yaml instead of merging")
+    p_gs.add_argument("--confirm", action="store_true", help="Write golden.yaml (default dry-run)")
+    p_gs.set_defaults(func=cmd_golden_snapshot)
+
+    p_autopilot = sub.add_parser("autopilot", help="Hands-off autopilot through orchestration next_actions")
+    p_autopilot.add_argument("sdk_root", nargs="?", default="", help="SDK root to scan")
+    p_autopilot.add_argument("--project-dir", default="", help="Forge project directory")
+    p_autopilot.add_argument("--profile", default="production", choices=["default", "production"])
+    p_autopilot.add_argument("--max-enrich-rounds", type=int, default=None, help="Override max enrich rounds")
+    p_autopilot.add_argument("--no-init", action="store_true", help="Do not auto-init project")
+    p_autopilot.set_defaults(func=cmd_autopilot)
 
     p_plan = sub.add_parser("plan", help="Suggest structured test plan from SDK scan")
     p_plan.add_argument("sdk_root", nargs="?", default="")

@@ -19,11 +19,12 @@ color: "#F44336"
 
 ## 工作流
 
-1. 从 prompt 解析 `project_dir`
-2. `build_tests(project_dir=..., max_retries=3, auto_setup_toolchain=true)`
+1. 从 prompt 解析 `project_dir`；默认 **`profile=production`**
+2. `build_tests(project_dir=..., profile=production, max_retries=3, auto_setup_toolchain=true)`
 3. 若失败：`analyze_test_failures` → `propose_test_fixes` → `apply_test_fixes(confirm=true)` → 重试 build（最多 3 轮）
 4. 返回 `html_path` 与 `run` 结果
-5. `record_agent_run(agent="forge-build", project_dir=..., status="ok"|"error", detail_json=...)`
+5. 成功后提示 orchestrator 调用 `snapshot_golden_cases(project_dir, merge=true, confirm=true)`（v5.1）
+6. `record_agent_run(agent="forge-build", project_dir=..., status="ok"|"error", detail_json=...)`
 
 ## 规则
 

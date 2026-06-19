@@ -2,6 +2,22 @@
 
 Use before merging generated tests into your main branch.
 
+## Autopilot one-shot (v5.1)
+
+```bash
+forge autopilot /path/to/sdk --profile production
+# Agent executes returned next_actions until merge_ready
+```
+
+Or step-by-step:
+
+```bash
+forge assert-quality --project-dir ./my_tests
+forge golden verify --project-dir ./my_tests
+forge build --project-dir ./my_tests --profile production
+forge golden snapshot --project-dir ./my_tests --confirm
+```
+
 ## CLI one-shot
 
 ```bash
@@ -26,15 +42,20 @@ forge build --project-dir ./my_tests --profile production
 
 ```yaml
 forge_profile: production
+max_enrich_rounds: 3
+autopilot_profile: production
+auto_golden_snapshot: true
 # or use CLI: forge build --profile production
 ```
 
-## Multi-agent flow
+## Multi-agent / autopilot flow
 
 ```
-forge-enrich (parallel batches)
+run_forge_autopilot(sdk_root)
+  → forge-enrich (parallel batches, auto-retry on assertion fail)
   → forge-review (readiness checklist)
   → forge-build (--profile production)
+  → golden snapshot (optional)
 ```
 
 ## When blocked
@@ -42,4 +63,4 @@ forge-enrich (parallel batches)
 1. Read `assertion_gate.block_reasons` or HTML **断言质量** section
 2. Fix listed tests or add `.forge/golden.yaml` cases
 3. Re-run `forge assert-quality` until score ≥ 80
-4. Retry `forge build --profile production`
+4. Retry `forge build --profile production` or re-run `forge autopilot`

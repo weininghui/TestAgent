@@ -1086,6 +1086,158 @@ class TestOrchestration:
         assert state["agent_runs"][0]["agent"] == "forge-enrich"
 
 
+class TestAutopilotLoop:
+    def test_enrich_round_and_clear_agent_runs(self, tmp_path):
+        from sdk_forge.workflow import (
+            clear_agent_runs,
+            get_enrich_round,
+            increment_enrich_round,
+            record_agent_completion,
+        )
+
+        assert get_enrich_round(str(tmp_path)) == 0
+        assert increment_enrich_round(str(tmp_path)) == 1
+        assert get_enrich_round(str(tmp_path)) == 1
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
+        cleared = clear_agent_runs(str(tmp_path), agent="forge-enrich")
+        assert cleared["status"] == "ok"
+        assert cleared["remaining_runs"] == 0
+
+    def test_redispatch_after_assertion_fail(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import get_enrich_round, record_agent_completion
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "good"}, {"symbol": "weak"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "good_test.cpp").write_text(
+            "TEST(Good, Ok) { EXPECT_EQ(2 + 3, 5); }\n",
+            encoding="utf-8",
+        )
+        (tests / "weak_test.cpp").write_text(
+            "TEST(Weak, Bad) { SUCCEED(); }\n",
+            encoding="utf-8",
+        )
+        (tmp_path / ".forge.yaml").write_text(
+            "multi_agent_batch_size: 1\nmax_enrich_rounds: 3\nforge_profile: production\n",
+            encoding="utf-8",
+        )
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=1, status="ok")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        enrich_actions = [a for a in ctx["next_actions"] if a["agent"] == "forge-enrich"]
+        assert enrich_actions, ctx
+        assert enrich_actions[0]["files"] == ["weak_test.cpp"]
+        assert get_enrich_round(str(tmp_path)) == 1
+        assert ctx["enrich_round"] == 1
+        assert ctx["assertion_gate_preview"].get("passed") is False
+
+    def test_files_needing_assertion_fix(self, tmp_path):
+        from sdk_forge.orchestration import files_needing_assertion_fix
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "weak_test.cpp").write_text("TEST(W, A) { SUCCEED(); }\n", encoding="utf-8")
+        files = files_needing_assertion_fix(str(tmp_path))
+        assert "weak_test.cpp" in files
+
+
+class TestGoldenSnapshot:
+    def test_extract_expect_eq_to_golden(self, tmp_path):
+        from sdk_forge.golden import load_golden_cases, snapshot_golden_from_plan_impl
+        from sdk_forge.session import save_plan_state
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "targets": [{"symbol": "calc_add"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "calc_add_test.cpp").write_text(
+            "TEST(CalcAdd, Normal) { EXPECT_EQ(calc_add(2, 3), 5); }\n",
+            encoding="utf-8",
+        )
+        dry = snapshot_golden_from_plan_impl(str(tmp_path), merge=True, confirm=False)
+        assert dry["added_count"] == 1
+        assert dry.get("dry_run") is True
+
+        written = snapshot_golden_from_plan_impl(str(tmp_path), merge=True, confirm=True)
+        assert written["status"] == "ok"
+        assert written["added_count"] == 1
+        loaded = load_golden_cases(str(tmp_path), symbol="calc_add")
+        cases = loaded.get("cases") or []
+        assert any(c.get("expect") == 5 for c in cases)
+
+    def test_snapshot_merge_skips_existing(self, tmp_path):
+        from sdk_forge.golden import init_golden_template, snapshot_golden_from_plan_impl
+
+        init_golden_template(str(tmp_path))
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "calc_add_test.cpp").write_text(
+            "TEST(CalcAdd, Normal) { EXPECT_EQ(calc_add(2, 3), 5); }\n",
+            encoding="utf-8",
+        )
+        first = snapshot_golden_from_plan_impl(str(tmp_path), merge=True, confirm=True)
+        second = snapshot_golden_from_plan_impl(str(tmp_path), merge=True, confirm=True)
+        assert first["added_count"] >= 1
+        assert second["added_count"] == 0
+        assert second["skipped_count"] >= 1
+
+
+class TestAutopilotEntry:
+    def test_autopilot_init_returns_needs_agent(self, tmp_path, monkeypatch):
+        from sdk_forge.autopilot import run_autopilot_impl
+
+        sdk = tmp_path / "sdk"
+        inc = sdk / "include"
+        inc.mkdir(parents=True)
+        (inc / "demo.h").write_text(
+            "int add(int a, int b);\n",
+            encoding="utf-8",
+        )
+        project = tmp_path / "forge_project"
+
+        monkeypatch.setattr(
+            "sdk_forge.autopilot.ensure_toolchain_impl",
+            lambda **kw: {"status": "ok", "skipped": True},
+        )
+
+        result = run_autopilot_impl(
+            sdk_root=str(sdk),
+            project_dir=str(project),
+            profile="production",
+            max_enrich_rounds=3,
+        )
+        assert result["status"] in ("needs_agent", "ready_for_build")
+        assert result["project_dir"] == str(project.resolve())
+        assert "next_actions" in result
+        assert result["orchestration"]["max_enrich_rounds"] == 3
+        assert (project / ".forge.yaml").is_file()
+
+    @pytest.mark.asyncio
+    async def test_mcp_run_forge_autopilot(self, tmp_path, monkeypatch):
+        from mcp_server import run_forge_autopilot
+
+        sdk = tmp_path / "sdk"
+        (sdk / "include").mkdir(parents=True)
+        (sdk / "include" / "x.h").write_text("void x();\n", encoding="utf-8")
+        project = tmp_path / "proj"
+
+        monkeypatch.setattr(
+            "sdk_forge.autopilot.ensure_toolchain_impl",
+            lambda **kw: {"status": "ok"},
+        )
+        result = json.loads(await run_forge_autopilot(str(sdk), str(project), "production", 2))
+        assert result["status"] in ("needs_agent", "ready_for_build", "ok", "blocked")
+        assert result["enrich_round"] >= 0
+
+
 class TestAssertionQuality:
     def test_detects_weak_succeed(self, tmp_path):
         from sdk_forge.assertion_quality import analyze_assertion_quality_impl

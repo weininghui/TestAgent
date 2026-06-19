@@ -95,3 +95,53 @@ def record_agent_completion(
     state["updated_at"] = datetime.now(timezone.utc).isoformat()
     path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"status": "ok", "recorded": entry, "path": str(path)}
+
+
+def _workflow_path(project_dir: str) -> Path:
+    root = Path(project_dir or Path.cwd())
+    cache = root / ".forge" / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    return cache / "workflow.json"
+
+
+def _load_state_raw(project_dir: str) -> dict[str, Any]:
+    path = _workflow_path(project_dir)
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_state_raw(project_dir: str, state: dict[str, Any]) -> None:
+    state["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _workflow_path(project_dir).write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def get_enrich_round(project_dir: str = "") -> int:
+    state = _load_state_raw(project_dir)
+    try:
+        return int(state.get("enrich_round", 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def increment_enrich_round(project_dir: str = "") -> int:
+    state = _load_state_raw(project_dir)
+    n = get_enrich_round(project_dir) + 1
+    state["enrich_round"] = n
+    _save_state_raw(project_dir, state)
+    return n
+
+
+def clear_agent_runs(project_dir: str = "", agent: str = "") -> dict[str, Any]:
+    """Remove completion records for one agent (e.g. forge-enrich) to allow re-dispatch."""
+    state = _load_state_raw(project_dir)
+    runs = state.get("agent_runs") or []
+    if agent:
+        state["agent_runs"] = [r for r in runs if str(r.get("agent") or "") != agent]
+    else:
+        state["agent_runs"] = []
+    _save_state_raw(project_dir, state)
+    return {"status": "ok", "cleared_agent": agent or "all", "remaining_runs": len(state["agent_runs"])}

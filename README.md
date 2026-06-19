@@ -8,7 +8,9 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: [v5.0.0](docs/releases/RELEASE_NOTES_v5.0.0.md)** — Production quality gates, golden oracle, multi-agent orchestration, auto toolchain setup.
+**Current release: [v5.1.0](docs/releases/RELEASE_NOTES_v5.1.0.md)** — Hands-off autopilot, assertion-driven enrich loop, golden snapshot.
+
+Previous: [v5.0.0](docs/releases/RELEASE_NOTES_v5.0.0.md) — Production quality gates, golden oracle, multi-agent orchestration.
 
 ## What it does
 
@@ -54,7 +56,30 @@ The orchestrator runs: `forge-env` → `forge-scan` → `forge-scaffold` → par
 
 Agent docs: [`.opencode/agents/forge.md`](.opencode/agents/forge.md) · Skill: [`.opencode/skills/test-forge/SKILL.md`](.opencode/skills/test-forge/SKILL.md)
 
-## Production workflow (v5.0)
+## Autopilot (v5.1)
+
+Provide only an SDK path — the orchestrator runs the full pipeline with automatic enrich retries:
+
+```bash
+forge autopilot ./examples/test_sdk_cpp --profile production
+# or MCP: run_forge_autopilot(sdk_root=..., profile=production)
+```
+
+| Phase | Behavior |
+|-------|----------|
+| init / env / scan / scaffold | Programmatic (no LLM) |
+| enrich | Agent executes `next_actions`; **assertion gate auto-retries** weak files up to `max_enrich_rounds` |
+| review → build | `forge-review` then `forge-build --profile production` |
+| post-build | Optional `golden snapshot` from generated `EXPECT_EQ` |
+
+```yaml
+# .forge.yaml autopilot options (v5.1)
+max_enrich_rounds: 3          # default 1 = v5.0 single-round behavior
+autopilot_profile: production
+auto_golden_snapshot: true
+```
+
+## Production workflow (v5.0+)
 
 For merge-ready tests, use the **production profile**:
 
@@ -115,7 +140,8 @@ JSON config: [`examples/forge_test_sdk/.forge.json`](examples/forge_test_sdk/.fo
 | `forge enrich` | Agent enrichment briefs (`--test-files`) |
 | `forge quality` | Scaffold placeholder ratio |
 | `forge assert-quality` | Semantic assertion score (v5.0) |
-| `forge golden init\|verify` | Golden oracle template / verification (v5.0) |
+| `forge golden init\|verify\|snapshot` | Golden oracle template / verify / snapshot from tests (v5.1) |
+| `forge autopilot <sdk>` | Hands-off orchestration entry (v5.1) |
 | `forge build` | Probe + compile + run + HTML report (`--profile production`, `--retry 3`) |
 | `forge bench` | Benchmark plan→scaffold→quality→build |
 | `forge gap` | Plan vs tests / coverage gap |
@@ -136,7 +162,8 @@ All commands emit JSON to stdout. Exit codes: `0` ok, `1` test failures, `2` err
 | `generate_test_skeleton` | `forge scaffold` |
 | `enrich_test_cases` | `forge enrich` |
 | `analyze_assertion_quality` | `forge assert-quality` |
-| `load_golden_cases` / `verify_golden_coverage` | `forge golden` |
+| `load_golden_cases` / `verify_golden_coverage` / `snapshot_golden_cases` | `forge golden` |
+| `run_forge_autopilot` | `forge autopilot` |
 | `build_tests` | `forge build` |
 | `get_session_context` | `forge session` (includes `orchestration`) |
 | `record_agent_run` | Multi-agent completion tracking |
@@ -242,7 +269,7 @@ python -m pytest tests/ -v
 ## Releases
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
-- Latest: [RELEASE_NOTES_v5.0.0.md](docs/releases/RELEASE_NOTES_v5.0.0.md)
+- Latest: [RELEASE_NOTES_v5.1.0.md](docs/releases/RELEASE_NOTES_v5.1.0.md)
 
 ## License
 

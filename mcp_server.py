@@ -56,7 +56,8 @@ Tools:
   - enrich_test_cases     → Agent briefs for complex case completion
   - analyze_scaffold_quality → placeholder/TODO ratio
   - analyze_assertion_quality → semantic weak/tautology/AGENT gate
-  - load_golden_cases / verify_golden_coverage → golden oracle
+  - load_golden_cases / verify_golden_coverage / snapshot_golden_cases → golden oracle
+  - run_forge_autopilot   → hands-off init→orchestration next_actions (v5.1)
   - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
   - analyze_test_failures → parse GTest failure output
@@ -220,6 +221,48 @@ async def verify_golden_coverage(
 ) -> str:
     from sdk_forge.golden import verify_golden_in_tests
     return json.dumps(verify_golden_in_tests(project_dir), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Snapshot EXPECT_EQ cases from test sources into .forge/golden.yaml (merge by default).")
+async def snapshot_golden_cases(
+    project_dir: Annotated[str, "Project root with tests/."] = "",
+    merge: Annotated[bool | str, "Merge with existing golden.yaml (default true)."] = True,
+    confirm: Annotated[bool | str, "Write golden.yaml (default false = dry-run)."] = False,
+) -> str:
+    from sdk_forge.golden import snapshot_golden_from_plan_impl
+    from sdk_forge.util import parse_bool
+    return json.dumps(
+        snapshot_golden_from_plan_impl(
+            project_dir,
+            merge=parse_bool(merge, default=True),
+            confirm=parse_bool(confirm, default=False),
+        ),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Hands-off autopilot: init/env/scan/scaffold then return orchestration next_actions.")
+async def run_forge_autopilot(
+    sdk_root: Annotated[str, "SDK root to scan and test."] = "",
+    project_dir: Annotated[str, "Forge project directory (auto-created if empty)."] = "",
+    profile: Annotated[str, "Forge profile: production (default) or default."] = "production",
+    max_enrich_rounds: Annotated[int | str, "Max assertion-driven enrich rounds (0 = config default)."] = 0,
+) -> str:
+    from sdk_forge.autopilot import run_autopilot_impl
+    rounds: int | str = ""
+    if max_enrich_rounds not in (0, "0", "", None):
+        rounds = max_enrich_rounds
+    return json.dumps(
+        run_autopilot_impl(
+            sdk_root=sdk_root,
+            project_dir=project_dir,
+            profile=profile,
+            max_enrich_rounds=rounds,
+        ),
+        indent=2,
+        ensure_ascii=False,
+    )
 
 
 @mcp.tool(description="Append TEST_P boundary cases for low-coverage plan targets.")

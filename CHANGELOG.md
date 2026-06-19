@@ -1,5 +1,24 @@
 # Changelog
 
+## [5.1.0] - 2026-06-20
+
+Hands-off Autopilot: assertion-driven enrich loop, golden snapshot, single entry.
+
+### Added
+- **`sdk_forge/autopilot.py`** — `run_autopilot_impl` programmatic init→orchestration
+- MCP **`run_forge_autopilot`**; CLI **`forge autopilot`**
+- **`snapshot_golden_from_plan_impl`** — extract `EXPECT_EQ` from tests → `.forge/golden.yaml`
+- MCP **`snapshot_golden_cases`**; CLI **`forge golden snapshot`**
+- **`workflow.py`**: `get_enrich_round`, `increment_enrich_round`, `clear_agent_runs`
+- **`orchestration.py`**: assertion gate closed-loop re-dispatch for weak files
+- Config: `max_enrich_rounds`, `autopilot_profile`, `auto_golden_snapshot`
+- Agent docs updated for v5.1 autopilot flow
+
+### Changed
+- Production profile preset includes `max_enrich_rounds: 3` and `auto_golden_snapshot: true`
+- `get_orchestration_context` returns `enrich_round`, `max_enrich_rounds`, `assertion_gate_preview`, `merge_ready`
+- `init_project_impl` normalizes Windows paths in `.forge.yaml` (forward slashes)
+
 ## [5.0.0] - 2026-06-20
 
 Production quality roadmap (v4.7–v5.0 consolidated).

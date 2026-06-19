@@ -21,9 +21,9 @@ color: "#00BCD4"
 1. 从 prompt 解析：`project_dir`, `batch_id`, `test_files`（逗号分隔 basename）
 2. `enrich_test_cases(project_dir=..., test_files=...)`
 3. 按返回的 `briefs` 编辑对应测试文件：
-   - 优先使用 `oracle_hints` / `golden_cases`
+   - **必读** brief 中的 `oracle_hints` / `golden_cases`
    - 将 `// AGENT:` 替换为真实 `EXPECT_*` 断言
-4. `analyze_assertion_quality(project_dir=..., test_files=...)` — **score ≥ 80**，无 weak/tautology
+4. `analyze_assertion_quality(project_dir=..., test_files=...)` — **必须执行**；score ≥ 80，无 weak/tautology
 5. `analyze_scaffold_quality(project_dir=..., test_files=...)` 确认 batch 内无 AGENT 标记
 6. `record_agent_run(agent="forge-enrich", batch_id=N, project_dir=..., status="ok")`
 

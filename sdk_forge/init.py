@@ -29,6 +29,11 @@ auto_report: true
 # Multi-agent orchestration (v4.6)
 multi_agent_batch_size: 4
 
+# Autopilot (v5.1) — closed-loop enrich + golden snapshot
+# max_enrich_rounds: 3
+# autopilot_profile: production
+# auto_golden_snapshot: true
+
 # Production profile (v4.7+) — use: forge build --profile production
 # forge_profile: production
 # min_assertion_score: 80
@@ -65,7 +70,7 @@ def init_project_impl(
     if not sample.exists():
         sample.write_text(SAMPLE_TEST, encoding="utf-8")
 
-    sdk = sdk_root or "../sdk"
+    sdk = (sdk_root or "../sdk").replace("\\", "/")
     config_path = root / ".forge.yaml"
     if not config_path.exists():
         include_lines = f'  - "{sdk}/include"' if sdk else "  []"

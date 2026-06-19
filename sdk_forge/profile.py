@@ -17,6 +17,9 @@ PRODUCTION_PRESETS: dict[str, Any] = {
     "assertion_quality_gate": True,
     "min_line_coverage_pct": 80,
     "coverage_gate": True,
+    "max_enrich_rounds": 3,
+    "autopilot_profile": "production",
+    "auto_golden_snapshot": True,
 }
 
 
