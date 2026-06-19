@@ -176,3 +176,24 @@ def clear_review_verdict(project_dir: str = "") -> None:
     state.pop("review_verdict", None)
     state.pop("review_detail", None)
     _save_state_raw(project_dir, state)
+
+
+def save_scan_batch_result(project_dir: str, batch_id: int, scan_result: dict[str, Any]) -> dict[str, Any]:
+    """Store one parallel scan batch result in workflow.json."""
+    state = _load_state_raw(project_dir)
+    batches = state.setdefault("scan_batches", {})
+    batches[str(batch_id)] = scan_result
+    _save_state_raw(project_dir, state)
+    return {"status": "ok", "batch_id": batch_id, "batch_count": len(batches)}
+
+
+def get_scan_batches(project_dir: str = "") -> dict[str, Any]:
+    state = _load_state_raw(project_dir)
+    raw = state.get("scan_batches") or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def clear_scan_batches(project_dir: str = "") -> None:
+    state = _load_state_raw(project_dir)
+    state.pop("scan_batches", None)
+    _save_state_raw(project_dir, state)

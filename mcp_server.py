@@ -58,6 +58,8 @@ Tools:
   - analyze_assertion_quality → semantic weak/tautology/AGENT gate
   - load_golden_cases / verify_golden_coverage / snapshot_golden_cases / draft_golden_cases → golden oracle
   - run_forge_autopilot   → hands-off init→orchestration next_actions (v5.1)
+  - advance_forge_workflow → record sub-agent + return next step (v5.3)
+  - record_scan_batch     → store parallel scan batch result (v5.3)
   - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
   - analyze_test_failures → parse GTest failure output
@@ -398,6 +400,65 @@ async def record_agent_run(
         detail = dict(detail or {})
         detail["review_verdict"] = review_verdict.strip().lower()
     result = record_agent_completion(project_dir, agent, status=status, batch_id=bid, detail=detail)
+    return json.dumps(result, indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Advance workflow after sub-agent completes; records run and returns next step.")
+async def advance_forge_workflow(
+    project_dir: Annotated[str, "Project root."] = "",
+    last_agent: Annotated[str, "Completed sub-agent name (empty to only read next step)."] = "",
+    last_status: Annotated[str, "ok or error for last_agent."] = "ok",
+    batch_id: Annotated[int | str, "Batch id when applicable."] = "",
+    review_verdict: Annotated[str, "forge-review only: pass or block."] = "",
+    detail_json: Annotated[str, "Optional JSON detail for last run."] = "",
+) -> str:
+    from sdk_forge.workflow_advance import advance_forge_workflow_impl
+
+    bid: int | None = None
+    if batch_id not in ("", None):
+        try:
+            bid = int(batch_id)
+        except (TypeError, ValueError):
+            bid = None
+    detail = None
+    if detail_json:
+        try:
+            detail = json.loads(detail_json)
+        except json.JSONDecodeError:
+            detail = {"raw": detail_json}
+    return json.dumps(
+        advance_forge_workflow_impl(
+            project_dir=project_dir,
+            last_agent=last_agent,
+            last_status=last_status,
+            batch_id=bid,
+            review_verdict=review_verdict,
+            detail=detail,
+        ),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Store parallel scan batch JSON in workflow (forge-scan sub-agent).")
+async def record_scan_batch(
+    project_dir: Annotated[str, "Project root."] = "",
+    batch_id: Annotated[int | str, "Scan batch id."] = 0,
+    scan_json: Annotated[str, "scan_headers JSON for this batch."] = "",
+) -> str:
+    from sdk_forge.workflow import save_scan_batch_result
+
+    try:
+        bid = int(batch_id)
+    except (TypeError, ValueError):
+        return json.dumps({"status": "error", "error": "batch_id required"}, indent=2)
+    if not scan_json:
+        return json.dumps({"status": "error", "error": "scan_json required"}, indent=2)
+    try:
+        payload = json.loads(scan_json)
+    except json.JSONDecodeError as exc:
+        return json.dumps({"status": "error", "error": str(exc)}, indent=2)
+    result = save_scan_batch_result(project_dir, bid, payload)
     return json.dumps(result, indent=2, ensure_ascii=False)
 
 

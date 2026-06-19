@@ -19,6 +19,9 @@ PRODUCTION_PRESETS: dict[str, Any] = {
     "coverage_gate": True,
     "max_enrich_rounds": 3,
     "max_agent_retries": 2,
+    "multi_agent_batch_size": "auto",
+    "scan_batch_size": 8,
+    "auto_oracle_draft": True,
     "autopilot_profile": "production",
     "auto_golden_snapshot": True,
 }

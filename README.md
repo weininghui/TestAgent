@@ -8,9 +8,9 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: [v5.2.0](docs/releases/RELEASE_NOTES_v5.2.0.md)** — Multi-agent retry, review gate, build↔enrich loop, forge-oracle.
+**Current release: [v5.3.0](docs/releases/RELEASE_NOTES_v5.3.0.md)** — Autopilot step loop, parallel scan, dynamic enrich batch, oracle pipeline.
 
-Previous: [v5.1.0](docs/releases/RELEASE_NOTES_v5.1.0.md) — Hands-off autopilot, assertion-driven enrich loop, golden snapshot.
+Previous: [v5.2.0](docs/releases/RELEASE_NOTES_v5.2.0.md) — Multi-agent retry, review gate, build↔enrich loop.
 
 ## What it does
 
@@ -294,7 +294,7 @@ python -m pytest tests/ -v
 ## Releases
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
-- Latest: [RELEASE_NOTES_v5.2.0.md](docs/releases/RELEASE_NOTES_v5.2.0.md)
+- Latest: [RELEASE_NOTES_v5.3.0.md](docs/releases/RELEASE_NOTES_v5.3.0.md)
 
 ## License
 

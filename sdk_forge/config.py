@@ -170,6 +170,7 @@ def save_forge_config(config: dict[str, Any]) -> dict[str, Any]:
         "scaffold_quality_gate", "max_placeholder_ratio", "quality_gate_mode", "auto_report",
         "multi_agent_batch_size", "forge_profile", "autopilot_profile",
         "max_enrich_rounds", "auto_golden_snapshot", "max_agent_retries",
+        "scan_batch_size", "auto_oracle_draft",
         "min_assertion_score", "block_weak_tests", "block_agent_markers",
         "assertion_quality_gate", "coverage_gate", "min_line_coverage_pct",
     )

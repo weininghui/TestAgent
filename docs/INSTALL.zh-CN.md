@@ -10,7 +10,7 @@
 | [2. OpenCode 插件 — 首次安装](#2-opencode-插件--首次安装) | 第一次配置 MCP + Agent |
 | [3. 更新到最新版本](#3-更新到最新版本) | 已安装但版本过旧 |
 
-**当前 Release：** [v5.2.0](releases/RELEASE_NOTES_v5.2.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/TestAgent/releases)。
+**当前 Release：** [v5.3.0](releases/RELEASE_NOTES_v5.3.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/TestAgent/releases)。
 
 ## 最省事怎么用（推荐）
 

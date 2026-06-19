@@ -10,7 +10,7 @@ This guide separates three topics:
 | [2. OpenCode plugin — first install](#2-opencode-plugin-first-install) | First-time MCP + Agent setup |
 | [3. Update to the latest release](#3-update-to-the-latest-release) | Already installed but version is old |
 
-**Current release:** [v5.2.0](releases/RELEASE_NOTES_v5.2.0.md) — check [GitHub Releases](https://github.com/weininghui/TestAgent/releases) for the latest tag.
+**Current release:** [v5.3.0](releases/RELEASE_NOTES_v5.3.0.md) — check [GitHub Releases](https://github.com/weininghui/TestAgent/releases) for the latest tag.
 
 ## Easiest workflows (recommended)
 

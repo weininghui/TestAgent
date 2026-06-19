@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.3.0] - 2026-06-20
+
+Multi-agent speed: Autopilot step loop, parallel scan, dynamic batch, oracle pipeline.
+
+### Added
+- **`advance_forge_workflow`** MCP — record sub-agent completion + return `next_agent` / `prompt_hint`
+- **`record_scan_batch`** MCP + **`sdk_forge/scan_merge.py`** — parallel scan batches merge into plan
+- **`multi_agent_batch_size: auto`** — dynamic enrich batch sizing by file count
+- **`scan_batch_size`** config — parallel forge-scan for large SDKs
+- **`auto_oracle_draft`** — dispatch forge-oracle before first enrich (production default)
+- **`stage_timeline`** in orchestration context — agent_runs observability
+- **`TestOrchestrationV53`**, **`TestAutopilotAdvance`**
+
+### Changed
+- Production preset: `multi_agent_batch_size: auto`, `scan_batch_size: 8`, `auto_oracle_draft: true`
+- [`.opencode/agents/forge.md`](.opencode/agents/forge.md) — v5.3 step loop with `advance_forge_workflow`
+- [`.opencode/agents/forge-scan.md`](.opencode/agents/forge-scan.md) — parallel batch workflow
+
 ## [5.2.0] - 2026-06-20
 
 Multi-agent maturity: agent error retry, review hard gate, build→enrich loop, forge-oracle.

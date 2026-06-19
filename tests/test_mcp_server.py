@@ -1281,6 +1281,138 @@ class TestForgeOracle:
         assert written["added_count"] >= 0
 
 
+class TestAutopilotAdvance:
+    def test_advance_after_enrich(self, tmp_path):
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.workflow_advance import advance_forge_workflow_impl
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "x_test.cpp").write_text("// AGENT: fill\n", encoding="utf-8")
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+
+        result = advance_forge_workflow_impl(
+            str(tmp_path),
+            last_agent="forge-enrich",
+            batch_id=0,
+            last_status="ok",
+        )
+        assert result["status"] in ("needs_agent", "idle", "ok")
+        assert "orchestration" in result
+
+    async def test_mcp_advance_forge_workflow(self, tmp_path):
+        from mcp_server import advance_forge_workflow
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "x_test.cpp").write_text("TEST(X, Ok) { EXPECT_EQ(1,1); }\n", encoding="utf-8")
+        for agent in ("forge-env", "forge-scan", "forge-scaffold", "forge-enrich"):
+            record_agent_completion(str(tmp_path), agent, batch_id=0, status="ok")
+
+        raw = await advance_forge_workflow(str(tmp_path), "forge-enrich", "ok", 0)
+        result = json.loads(raw)
+        assert "status" in result
+        assert "next_agent" in result
+
+
+class TestOrchestrationV53:
+    def test_resolve_batch_size_auto(self):
+        from sdk_forge.orchestration import resolve_batch_size
+
+        assert resolve_batch_size("auto", 3) == 1
+        assert resolve_batch_size("auto", 10) == 4
+        assert resolve_batch_size("auto", 20) == 7
+
+    def test_oracle_gate_before_enrich(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "x_test.cpp").write_text("// AGENT: fill\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text(
+            "auto_oracle_draft: true\nmulti_agent_batch_size: 1\n",
+            encoding="utf-8",
+        )
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        oracle = [a for a in ctx["next_actions"] if a["agent"] == "forge-oracle"]
+        assert oracle, ctx["next_actions"]
+
+    def test_scan_batch_dispatch(self, tmp_path, monkeypatch):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.workflow import record_agent_completion
+
+        sdk = tmp_path / "sdk"
+        inc = sdk / "include"
+        inc.mkdir(parents=True)
+        for i in range(6):
+            (inc / f"h{i}.h").write_text("void f();\n", encoding="utf-8")
+
+        (tmp_path / ".forge.yaml").write_text(
+            f"sdk_root: {sdk.as_posix()}\nscan_batch_size: 2\n",
+            encoding="utf-8",
+        )
+        record_agent_completion(str(tmp_path), "forge-env", status="ok")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        scan_actions = [a for a in ctx["next_actions"] if a["agent"] == "forge-scan"]
+        assert len(scan_actions) >= 1
+        assert scan_actions[0].get("batch_id") == 0
+        assert ctx["scan_batches"]
+
+    def test_merge_scan_batches(self, tmp_path):
+        from sdk_forge.scan_merge import merge_scan_batches_impl
+        from sdk_forge.workflow import save_scan_batch_result
+
+        sdk = tmp_path / "sdk"
+        sdk.mkdir()
+        save_scan_batch_result(str(tmp_path), 0, {
+            "status": "ok",
+            "sdk_root": str(sdk),
+            "files": [{"filename": "a.h", "functions": [{"name": "foo"}]}],
+        })
+        save_scan_batch_result(str(tmp_path), 1, {
+            "status": "ok",
+            "sdk_root": str(sdk),
+            "files": [{"filename": "b.h", "functions": [{"name": "bar"}]}],
+        })
+        for bid in (0, 1):
+            from sdk_forge.workflow import record_agent_completion
+            record_agent_completion(str(tmp_path), "forge-scan", batch_id=bid, status="ok")
+
+        result = merge_scan_batches_impl(str(tmp_path), sdk_root=str(sdk))
+        assert result["status"] == "ok"
+        assert result["target_count"] >= 1
+
+    def test_stage_timeline(self, tmp_path):
+        from sdk_forge.orchestration import build_stage_timeline, get_orchestration_context
+        from sdk_forge.workflow import record_agent_completion
+
+        record_agent_completion(str(tmp_path), "forge-env", status="ok")
+        record_agent_completion(str(tmp_path), "forge-scan", status="ok")
+        ctx = get_orchestration_context(str(tmp_path))
+        timeline = ctx.get("stage_timeline") or []
+        assert len(timeline) >= 2
+        assert timeline[0]["agent"] == "forge-env"
+
+
 class TestGoldenSnapshot:
     def test_extract_expect_eq_to_golden(self, tmp_path):
         from sdk_forge.golden import load_golden_cases, snapshot_golden_from_plan_impl
