@@ -44,27 +44,45 @@ def _resolve_and_validate_path(file_path: str, sdk_root: str) -> Path:
 
 @tool
 def list_header_files(sdk_root: str) -> List[str]:
-    """Recursively list all C/C++ header (.h) files under ``sdk_root/include/``.
+    """Recursively list all C/C++ header (.h) files under SDK root.
 
-    Uses :meth:`pathlib.Path.rglob` to find every ``*.h`` file in the
-    ``include`` subdirectory hierarchy.  Returns absolute paths sorted
-    alphabetically.
+    Searches ``sdk_root/include/`` first (standard SDK layout); if that
+    directory does not exist, falls back to searching the entire
+    ``sdk_root`` tree.  Common non-SDK directories (``.venv``, ``venv``,
+    ``node_modules``, ``__pycache__``, ``build``, ``out``) are excluded.
+    Returns absolute paths sorted alphabetically.
 
     Args:
         sdk_root: The root directory of the SDK.
 
     Returns:
-        A sorted list of absolute file paths to ``.h`` files.  Returns an
-        empty list if the ``include`` directory does not exist.
+        A sorted list of absolute file paths to ``.h`` files.
     """
-    include_dir = Path(sdk_root) / "include"
-    if not include_dir.exists() or not include_dir.is_dir():
-        return []
-
     header_files: List[str] = []
-    for h_path in include_dir.rglob("*.h"):
-        if h_path.is_file():
-            header_files.append(str(h_path.resolve(strict=False)))
+
+    # Standard SDK layout: look under sdk_root/include/
+    include_dir = Path(sdk_root) / "include"
+    if include_dir.exists() and include_dir.is_dir():
+        for h_path in include_dir.rglob("*.h"):
+            if h_path.is_file():
+                header_files.append(str(h_path.resolve(strict=False)))
+
+    if header_files:
+        return sorted(header_files)
+
+    # Fallback: search sdk_root itself (for loose .h files in project root)
+    _EXCLUDED_DIRS = {
+        ".venv", "venv", "node_modules", "__pycache__",
+        "build", "out", ".git", ".svn", ".idea", ".vscode",
+    }
+    for h_path in Path(sdk_root).rglob("*.h"):
+        if not h_path.is_file():
+            continue
+        # Check if the file is inside an excluded directory
+        rel = h_path.relative_to(sdk_root)
+        if any(part in _EXCLUDED_DIRS for part in rel.parts[:-1]):
+            continue
+        header_files.append(str(h_path.resolve(strict=False)))
 
     return sorted(header_files)
 

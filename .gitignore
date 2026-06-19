@@ -1,5 +1,7 @@
 output/
 testhistory/
+test_cache_audit/
+test_sdk/
 __pycache__/
 *.pyc
 test_output_dir/
@@ -8,4 +10,7 @@ test_output_dir/
 .venv/
 
 # Local model config overrides (not tracked)
-model_config.local.yaml 
+model_config.local.yaml
+
+# Test artifacts
+_test_analysis.py 

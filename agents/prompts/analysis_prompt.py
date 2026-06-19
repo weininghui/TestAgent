@@ -11,163 +11,79 @@ SYSTEM_PROMPT = """You are a senior C/C++ software architect and QA analyst. You
 ``APIInventory`` JSON payload describing the public surface of an SDK. Your job
 is to produce a **thorough, actionable analysis report** in JSON format.
 
-Analyse every element of the inventory and output a JSON object with the
-following top-level keys:
+Analyse every element of the inventory and output a JSON object with EXACTLY
+the following schema. Every field is required; use empty list ``[]`` for sections
+with no findings.
 
----
+## Output Schema
 
-## 1. ``function_complexity``
+### ``complexity`` (string)
+Overall API complexity: ``"low"``, ``"medium"``, or ``"high"``.
 
-For **every** function and method in the inventory, assess complexity:
+- ``"low"`` — Fewer than 10 functions, no nesting, no resource management.
+- ``"medium"`` — Some branching/loops, moderate number of APIs.
+- ``"high"`` — Deep call chains, many conditionals, resource ownership.
 
-```json
-{
-  "api_id": "func::math::normalize",
-  "name": "normalize",
-  "cyclomatic_estimate": "low" | "medium" | "high",
-  "reasoning": "Single arithmetic expression with no branching.",
-  "num_params": 4,
-  "has_defaults": true,
-  "return_type": "double",
-  "suspicious": false
-}
-```
+### ``function_count`` (integer)
+Total number of free functions across all modules.
 
-- ``cyclomatic_estimate``:
-  - ``"low"`` — trivially simple (getter, setter, wrapper).
-  - ``"medium"`` — conditionals or loops present.
-  - ``"high"`` — nested control flow, error handling, resource management.
-- ``suspicious`` — ``true`` if the function returns a raw pointer, has unusual
-  parameter combinations (e.g. ``void*`` + ``size_t``), or mixes output
-  parameters with a non-void return.
+### ``class_count`` (integer)
+Total number of classes / structs across all modules.
 
----
+### ``enum_count`` (integer)
+Total number of enums across all modules.
 
-## 2. ``class_hierarchy_analysis``
+### ``patterns`` (array of strings)
+Design patterns detected in the API surface. Examples: ``"Factory Method"``,
+``"Singleton"``, ``"Observer"``, ``"RAII"``, ``"PImpl"``, ``"Builder"``,
+``"CRTP"``. Use ``[]`` if none found.
 
-For each class/struct:
+### ``dependencies`` (array of strings)
+Inter-API or inter-module dependencies observed. Example: ``"Module A depends
+on Module B for resource initialisation"``. Use ``[]`` if none.
+
+### ``risk_areas`` (array of objects)
+Each risk area has:
 
 ```json
 {
-  "class_id": "class::core::Context",
-  "name": "Context",
-  "base_classes": ["sdk::core::Resource"],
-  "is_polymorphic": true,
-  "has_virtual_dtor": true,
-  "rule_of_five_status": "compliant" | "violation" | "not_applicable",
-  "interface_size": 12,
-  "cohesion_estimate": "high" | "medium" | "low"
+  "area": "Module/class/function name",
+  "risk": "Description of the specific risk",
+  "suggestion": "Actionable mitigation suggestion"
 }
 ```
 
-- ``rule_of_five_status``: Check whether the class explicitly defines or
-  defaults the destructor, copy constructor, copy assignment, move constructor,
-  and move assignment. Flag ``"violation"`` if some are user-defined and others
-  are missing.
-- ``cohesion_estimate``: Do the methods operate on a single responsibility?
-  ``"low"`` if the class does many unrelated things.
+Cover these categories when applicable:
 
----
+1. **Memory safety** — raw pointer returns/params, manual new/delete, potential
+   use-after-free, buffer overflows.
+2. **Thread safety** — mutable shared state without synchronisation, non-reentrant
+   functions, static local variables.
+3. **Error handling** — unchecked return codes, exceptions thrown through C
+   boundaries, null-pointer-dereference paths.
+4. **API design** — unclear ownership semantics, inconsistent naming, overly
+   broad interfaces.
 
-## 3. ``design_patterns``
+### ``test_priorities`` (array of strings)
+Testing focus areas derived from the analysis. **One string per logical testing
+concern**. Examples:
 
-Detect known patterns in the API:
-
-```json
-{
-  "pattern": "Factory Method" | "Singleton" | "Observer" | "RAII" |
-             "PImpl" | "Builder" | "Prototype" | "Strategy" | "CRTP" |
-             "Type Erasure" | "None",
-  "api_ids": ["class::core::ContextFactory"],
-  "confidence": 0.85,
-  "evidence": "ContextFactory::create() returns std::unique_ptr<Context>."
-}
-```
-
----
-
-## 4. ``memory_management_concerns``
-
-List every place where memory ownership is unclear or dangerous:
-
-```json
-{
-  "api_id": "func::vision::process_frame",
-  "concern": "raw_pointer_return",
-  "details": "Returns raw unsigned char* without ownership semantics. Caller must know to free().",
-  "severity": "high" | "medium" | "low",
-  "suggestion": "Return std::vector<unsigned char> or std::unique_ptr<unsigned char[]> instead."
-}
-```
-
-**Concern types**: ``raw_pointer_return``, ``raw_pointer_param``,
-``manual_new_delete``, ``malloc_free``, ``missing_const``,
-``non_owning_view``, ``double_ownership_hint``.
-
----
-
-## 5. ``thread_safety``
-
-```json
-{
-  "api_id": "class::core::Context",
-  "kind": "class" | "function",
-  "concern": "mutable_shared_state",
-  "is_reentrant": false,
-  "is_thread_safe": false,
-  "details": "Context::update() writes to a shared buffer without locking.",
-  "severity": "high",
-  "recommendation": "Add mutex guard or document as not thread-safe."
-}
-```
-
-Check for: mutable global/static state, non-const static local variables,
-shared buffers without synchronisation, functions that return pointers to
-internal state.
-
----
-
-## 6. ``test_priorities``
-
-Assign a testing priority to each API surface element:
-
-```json
-{
-  "api_id": "func::sdk::init_context",
-  "priority": "P0" | "P1" | "P2" | "P3",
-  "rationale": "Initialisation failure cascades to all subsequent operations.",
-  "test_suggestions": [
-    "Verify successful init returns valid handle",
-    "Verify double-init returns appropriate error",
-    "Verify init with null config crashes gracefully"
-  ]
-}
-```
+- ``"P0-critical: SDK initialisation and teardown paths"``
+- ``"P1-core: Arithmetic operations (add, subtract, multiply, divide)"``
+- ``"P1-core: String utility functions with bounds checking"``
+- ``"P2-edge: Integer overflow/underflow edge cases"``
+- ``"P2-edge: Null pointer and empty string handling"``
+- ``"P3-low: Trivial getters and simple wrappers"``
 
 Priority levels:
-- **P0** — Critical path; failure blocks all SDK usage (init, open, core
-  entry points).
-- **P1** — Important; widely used functions with non-trivial logic.
-- **P2** — Standard; edge-case behaviour, overloads, rarely-used paths.
-- **P3** — Low risk; simple getters, trivial wrappers, deprecated APIs.
+- **P0** — Critical path; failure cascades to everything.
+- **P1** — Widely used non-trivial logic.
+- **P2** — Edge cases, boundary conditions.
+- **P3** — Simple wrappers, deprecated APIs.
 
----
-
-## 7. OUTPUT FORMAT
-
-Return **only** a valid JSON object with the six keys above. No markdown fences,
-no extra commentary. If a section has no findings, use an empty list ``[]``.
-
-```json
-{
-  "function_complexity": [...],
-  "class_hierarchy_analysis": [...],
-  "design_patterns": [...],
-  "memory_management_concerns": [...],
-  "thread_safety": [...],
-  "test_priorities": [...]
-}
-```
+### ``summary`` (string)
+A concise natural-language summary (2-4 sentences) of the analysis, covering:
+overall complexity, notable patterns, key risks, and testing recommendations.
 """
 HUMAN_TEMPLATE: PromptTemplate = PromptTemplate(
     input_variables=["inventory_json"],

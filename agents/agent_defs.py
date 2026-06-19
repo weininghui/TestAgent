@@ -20,19 +20,16 @@ JSON formats — all of these work:
 **Per-agent overrides**::
 
     {
-      "default": "longcat",                    # all agents use longcat
-      "code_gen": { "temperature": 0.2 },      # override specific fields
-      "scanner": "gpt-4o-mini"                 # scanner uses a different model
+      "default": { "temperature": 0.2 },          # all agents use 0.2 temp
+      "code_gen": { "temperature": 0.2 },          # override specific fields
+      "scanner": { "temperature": 0.1 }
     }
 
-**Wrapped format** (for OpenCode embedding that needs extra presets)::
+**Wrapped format** (for OpenCode embedding)::
 
     {
-      "models": {
-        "my-model": { "model": "...", "base_url": "..." }
-      },
       "agents": {
-        "default": "longcat",
+        "default": { "temperature": 0.2 },
         "code_gen": { "temperature": 0.2 }
       }
     }
@@ -76,8 +73,8 @@ class AgentConfig:
     role: str = ""
     description: str = ""
     capabilities: list[str] = field(default_factory=list)
-    model: str = "LongCat-2.0-Preview"
-    base_url: str = "https://api.longcat.chat/openai/v1"
+    model: str = ""
+    base_url: str = ""
     api_key_env: str = "OPENAI_API_KEY"
     api_key: str = ""           # optional literal key override
     temperature: float = 0.1
@@ -214,15 +211,7 @@ def _resolve_preset(value: str | dict) -> dict:
         from agents.models import get_model
 
         preset = get_model(value)
-        return {
-            "model": preset.model,
-            "base_url": preset.base_url,
-            "api_key_env": preset.api_key_env,
-            "api_key": "",
-            "temperature": preset.temperature,
-            "max_tokens": preset.max_tokens,
-            "timeout": preset.timeout,
-        }
+        return preset.to_llm_config()
     if isinstance(value, dict):
         return value
     return {}
@@ -240,11 +229,6 @@ def _merge_from(agents: dict[str, AgentConfig], data: dict) -> None:
 
     # --- Unwrap if the data has an "agents" wrapper ---
     if "agents" in data and isinstance(data["agents"], dict):
-        # Load model presets from the "models" section first
-        if "models" in data and isinstance(data["models"], dict):
-            from agents.models import load_presets_from_json
-
-            load_presets_from_json(data)
         data = data["agents"]
 
     # ── Extract top-level model-field keys as implicit "default" ──────
@@ -288,8 +272,8 @@ def _merge_from(agents: dict[str, AgentConfig], data: dict) -> None:
                 role=str(resolved.get("role", name)),
                 description=str(resolved.get("description", "")),
                 capabilities=list(resolved.get("capabilities", [])),
-                model=str(resolved.get("model", "LongCat-2.0-Preview")),
-                base_url=str(resolved.get("base_url", "https://api.longcat.chat/openai/v1")),
+                model=str(resolved.get("model", "")),
+                base_url=str(resolved.get("base_url", "")),
                 api_key_env=str(resolved.get("api_key_env", "OPENAI_API_KEY")),
                 api_key=str(resolved.get("api_key", "")),
                 temperature=float(resolved.get("temperature", 0.1)),

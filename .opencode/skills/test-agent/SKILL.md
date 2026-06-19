@@ -35,7 +35,6 @@ In OpenCode, this agent can be invoked in **two ways**:
 |--------|-----|
 | **Auto-agency** | The user just talks to you — you recognise an SDK test-generation request and autonomously handle it |
 | **Explicit goal** | `task(category="deep", load_skills=["test-agent"], prompt="generate tests for /path/to/sdk")` |
-| **Slash command** | `/test-agent generate --sdk-root /path/to/sdk` |
 
 ## 🔧 MCP Tools Available
 
@@ -101,49 +100,14 @@ You: 1. Call scan_headers(sdk_root="/home/user/sdk")
 | `SDK_ROOT` | No | Default SDK root (can pass via tool arg) |
 | `SDK_OUTPUT_ROOT` | No | Default output dir (default: `./output`) |
 
-## ⚙️ Model Presets
-
-| Preset | Model | Provider |
-|--------|-------|----------|
-| `longcat` (default) | LongCat-2.0-Preview | LongCat |
-| `dashscope` | kimi-k2.5 | Aliyun DashScope |
-
-Custom presets can be added in `model_config.yaml` at the project root.
-
-## 🚀 Quick Start (for users)
-
-```bash
-# Activate venv
-.venv\Scripts\activate
-
-# Full pipeline
-python agent.py --goal "generate tests for C:/path/to/sdk"
-
-# Just scan + analyse
-python agent.py --goal "scan and analyse C:/path/to/sdk"
-
-# Preview plan only
-python agent.py --goal "generate tests for C:/path/to/sdk" --dry-run
-
-# Or use the CLI directly
-python app.py --sdk-root C:/path/to/sdk
-
-# Or MCP server
-python mcp_server.py
-```
-
 ## 📁 Project Structure
 
 ```
 .
 ├── agent.py              # ← Autonomous agent entry (goal-driven)
-├── app.py                # CLI entry point
 ├── mcp_server.py         # MCP server (7 tools, auto-started)
-├── __main__.py           # python -m auto_test_agent
-├── __init__.py           # Package (auto_test_agent v1.0.0)
-├── pyproject.toml        # Package metadata (pip install -e .)
+├── pyproject.toml        # Package metadata
 ├── plugin.yaml           # OpenCode plugin manifest
-├── model_config.yaml     # Custom model presets
 ├── agents/
 │   ├── pipeline.py       # Pipeline orchestrator (6 stages)
 │   ├── models.py         # ModelConfig + LLM factory

@@ -27,7 +27,7 @@ from typing import Any
 from agents.agent_defs import load_agents
 from agents.container_env import ContainerEnv
 from agents.keychain import set_key, get_key, has_key, list_keys, clear_keys
-from agents.models import list_models, get_model, get_llm
+from agents.models import get_model, get_llm
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,24 @@ _BOLD = "\033[1m"
 _DIM = "\033[2m"
 _RESET = "\033[0m"
 _CLEAR = "\033[2J\033[H"
+_BG_BLUE = "\033[44m"
+_BG_GREEN = "\033[42m"
+_BG_DIM = "\033[100m"
+_REVERSE = "\033[7m"
+
+# ── Mode constants ────────────────────────────────────────────────────────
+MODE_EXECUTE = "execute"
+MODE_PLAN = "plan"
+
+_MODE_LABELS = {
+    MODE_EXECUTE: f"{_GREEN}●{_RESET} execute",
+    MODE_PLAN: f"{_YELLOW}●{_RESET} plan",
+}
+
+_MODE_HELP = {
+    MODE_EXECUTE: "Goals run immediately without confirmation.",
+    MODE_PLAN: "Show the plan first and ask for confirmation before executing.",
+}
 
 
 def _c(text: str, colour: str) -> str:
@@ -185,13 +203,14 @@ class InteractiveSession:
         session.start()
     """
 
-    def __init__(self, model: str = "longcat") -> None:
+    def __init__(self, model: str = "default") -> None:
         self.model = model
         self.project_info: dict[str, Any] | None = None
         self.container_env = ContainerEnv()
         self._agents = load_agents()
         self._running = True
         self._keys_prompted = False
+        self._mode: str = MODE_EXECUTE
 
         # Import lazily to avoid circular imports at module level
         from agent import TestGenAgent
@@ -233,7 +252,12 @@ class InteractiveSession:
     def _prompt(self) -> str:
         """Display the input prompt and return the user's line."""
         project_tag = Path.cwd().name
-        return input(f"\n{_GREEN}{_BOLD}❯{_RESET} {_CYAN}{project_tag}{_RESET} ").strip()
+        mode_prompt = _MODE_LABELS.get(self._mode, self._mode)
+        return input(
+            f"\n{_GREEN}{_BOLD}❯{_RESET} "
+            f"{_CYAN}{project_tag}{_RESET} "
+            f"{_DIM}({mode_prompt}{_DIM}){_RESET} "
+        ).strip()
 
     def _say(self, text: str, colour: str = "", indent: int = 0) -> None:
         """Print output to the user."""
@@ -260,14 +284,19 @@ class InteractiveSession:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _show_welcome(self) -> None:
-        """Print the welcome banner."""
+        """Print the welcome banner — OpenCode-like header."""
         print(_CLEAR, end="")
         width = shutil.get_terminal_size().columns
-        print(f"{_BOLD}{_CYAN}{'═' * width}{_RESET}")
-        print(f"{_BOLD}{_CYAN}  SDK Test Generation Agent — Interactive Mode{_RESET}")
-        print(f"{_DIM}  Type a goal (e.g. \"generate tests for this project\") "
-              f"or /help for commands{_RESET}")
-        print(f"{_CYAN}{'═' * width}{_RESET}")
+
+        # Top bar
+        mode_tag = _MODE_LABELS.get(self._mode, self._mode)
+        bar = (
+            f"{_BG_BLUE}{_BOLD}  SDK Test Generation Agent{_RESET}"
+            f"{_BG_DIM}{_DIM}  {mode_tag}  {_RESET}"
+        )
+        print(f"\n  {bar}")
+        print(f"  {_DIM}  Type a goal or /help for commands{_RESET}")
+        print(f"  {_CYAN}{'─' * min(width - 2, 60)}{_RESET}")
 
     def _auto_scan(self) -> None:
         """Auto-scan the current project on startup."""
@@ -364,6 +393,8 @@ class InteractiveSession:
             "clear": self._cmd_clear,
             "project": self._cmd_project,
             "config": self._cmd_config,
+            "mode": self._cmd_mode,
+            "status": self._cmd_status,
         }
         fn = handler.get(cmd)
         if fn:
@@ -378,6 +409,8 @@ class InteractiveSession:
             ("/help, /h", "Show this help"),
             ("/exit, /quit, /q", "Exit the session"),
             ("/key set/list/save", "Manage API keys interactively"),
+            ("/mode execute|plan", "Switch between execute / plan modes"),
+            ("/status", "Show session status"),
             ("/agents", "List registered sub-agents"),
             ("/models", "Show available model presets"),
             ("/scan", "Re-scan the current project"),
@@ -419,12 +452,14 @@ class InteractiveSession:
             )
 
     def _cmd_models(self, _arg: str = "") -> None:
-        """List available model presets."""
-        models = list_models()
-        self._say(f"{_b(f'Available Models ({len(models)})')}", _CYAN)
-        for name in sorted(models):
-            cfg = get_model(name)
-            self._say(f"  {_b(name):<20} {_dim(cfg.model):<30} {cfg.base_url}")
+        """Show current model config."""
+        from agents.models import get_model_config
+        cfg = get_model_config()
+        if cfg:
+            self._say(f"{_b('Model Configuration')}", _CYAN)
+            self._say(f"  {_b('default'):<20} {_dim(cfg.model):<30} {cfg.base_url}")
+        else:
+            self._say(f"  {_YELLOW}No model configured. Use /config set.{_RESET}")
 
     def _cmd_scan(self, _arg: str = "") -> None:
         """Re-scan the project directory."""
@@ -458,16 +493,88 @@ class InteractiveSession:
         if flags:
             self._say(f"  Build   : {', '.join(flags)}")
 
-    def _cmd_config(self, _arg: str = "") -> None:
-        """Show agent configuration."""
+    def _cmd_config(self, arg: str) -> None:
+        """Show or set model configuration."""
+        parts = arg.strip().split(maxsplit=1)
+        sub = parts[0].lower() if parts else ""
+
+        from agents.models import config_path, load_config, save_config, get_model_config
+
+        # ── /config set — interactive prompt ──────────────────────────────
+        if sub == "set":
+            self._say(f"{_b('Configure Model')}  {_DIM}(leave empty to keep current){_RESET}", _CYAN)
+
+            cur = get_model_config()
+
+            url = input(f"  Base URL [{_c(cur.base_url if cur else '(none)', _YELLOW)}]: ").strip()
+            if not url and cur:
+                url = cur.base_url
+
+            model = input(f"  Model name [{_c(cur.model if cur else '(none)', _YELLOW)}]: ").strip()
+            if not model and cur:
+                model = cur.model
+
+            from agents.keychain import has_key
+            key_hint = "set" if has_key("OPENAI_API_KEY") else "not set"
+            key_input = input(f"  API key [{_c(key_hint, _YELLOW)}] (paste or leave empty): ").strip()
+
+            if url and model:
+                save_config(url=url, model=model, api_key=key_input or None)
+                self._show_done("Config saved to ~/.sdk-test-agent/config.json")
+            else:
+                self._show_error("URL and model name are required.")
+            return
+
+        # ── /config url <url> ─────────────────────────────────────────────
+        if sub == "url" and len(parts) > 1:
+            from agents.models import save_config
+            cur = load_config()
+            save_config(url=parts[1], model=cur.get("model", ""))
+            self._show_done(f"Base URL set")
+            return
+
+        # ── /config model <model> ─────────────────────────────────────────
+        if sub == "model" and len(parts) > 1:
+            from agents.models import save_config
+            cur = load_config()
+            save_config(url=cur.get("base_url", ""), model=parts[1])
+            self._show_done(f"Model set to {parts[1]}")
+            return
+
+        # ── /config key <key> ─────────────────────────────────────────────
+        if sub == "key" and len(parts) > 1:
+            from agents.keychain import set_key
+            set_key("OPENAI_API_KEY", parts[1])
+            cur = load_config()
+            if cur.get("model"):
+                save_config(url=cur["base_url"], model=cur["model"], api_key=parts[1])
+            self._show_done("API key saved")
+            return
+
+        # ── /config — show current ────────────────────────────────────────
+        self._say(f"{_b('Model Configuration')}", _CYAN)
+        cfg = get_model_config()
+        if cfg:
+            self._say(f"  URL   : {_c(cfg.base_url, _YELLOW)}")
+            self._say(f"  Model : {_c(cfg.model, _YELLOW)}")
+            from agents.keychain import has_key
+            if has_key(cfg.api_key_env):
+                self._show_done(f"API key '{cfg.api_key_env}' configured")
+            else:
+                self._show_error(f"API key '{cfg.api_key_env}' NOT set")
+            self._say(f"  Temp  : {cfg.temperature}")
+            self._say(f"  Path  : {_dim(str(config_path()))}")
+        else:
+            self._say(f"  {_YELLOW}No model configured.{_RESET}")
+            self._say(f"  {_DIM}Use /config set to configure.{_RESET}")
+
+        # Also show agent-level overrides
         agents = load_agents()
-        self._say(f"{_b('Agent Configuration')}", _CYAN)
-        for name in sorted(agents):
-            a = agents[name]
-            self._say(
-                f"  {_b(name):<16} model={_c(a.model, _YELLOW)} "
-                f"temp={a.temperature} tokens={a.max_tokens}"
-            )
+        overrides = {n: a for n, a in agents.items() if a.model or a.base_url}
+        if overrides:
+            self._say(f"\n  {_b('Per-agent overrides')}")
+            for name, a in sorted(overrides.items()):
+                self._say(f"    {name:<14} model={_c(a.model or '(default)', _YELLOW)}")
 
     def _cmd_key(self, arg: str) -> None:
         """Manage API keys interactively: set, list, clear."""
@@ -635,6 +742,48 @@ class InteractiveSession:
     def _cmd_clear(self, _arg: str = "") -> None:
         """Clear the terminal screen."""
         print(_CLEAR, end="")
+        self._show_welcome()
+
+    def _cmd_mode(self, arg: str) -> None:
+        """Switch between execute and plan modes."""
+        mode = arg.strip().lower()
+
+        if mode == MODE_EXECUTE:
+            self._mode = MODE_EXECUTE
+            self._show_done(f"Switched to {_MODE_LABELS[self._mode]} mode")
+            self._say(_dim(f"  {_MODE_HELP[self._mode]}"), indent=1)
+        elif mode == MODE_PLAN:
+            self._mode = MODE_PLAN
+            self._show_done(f"Switched to {_MODE_LABELS[self._mode]} mode")
+            self._say(_dim(f"  {_MODE_HELP[self._mode]}"), indent=1)
+        elif not mode:
+            self._say(f"Current mode: {_MODE_LABELS.get(self._mode, self._mode)}", _CYAN)
+            self._say("")
+            self._say(f"  {_b('/mode execute')}  — {_MODE_HELP[MODE_EXECUTE]}")
+            self._say(f"  {_b('/mode plan')}     — {_MODE_HELP[MODE_PLAN]}")
+        else:
+            self._say(f"Unknown mode: {mode}. Use 'execute' or 'plan'.", _YELLOW)
+
+    def _cmd_status(self, _arg: str = "") -> None:
+        """Show current session status."""
+        self._say(f"{_b('Session Status')}", _CYAN)
+        self._say(f"  Mode    : {_MODE_LABELS.get(self._mode, self._mode)}")
+        self._say(f"  Model   : {_b(self.model)}")
+        if self.project_info:
+            self._say(f"  Project : {_b(self.project_info['name'])} — {self.project_info.get('summary', '')}")
+        else:
+            self._say(f"  Project : {_dim('(not scanned)')}")
+        self._say(f"  Docker  : {'available' if ContainerEnv.is_available() else 'not available'}")
+
+        # Key status
+        from agents.models import get_model
+        cfg = get_model(self.model)
+        key_name = cfg.api_key_env
+        from agents.keychain import has_key
+        if has_key(key_name):
+            self._show_done(f"API key '{key_name}' is configured")
+        else:
+            self._show_error(f"API key '{key_name}' is NOT set")
 
     # ──────────────────────────────────────────────────────────────────────────
     # Natural language handler
@@ -739,16 +888,39 @@ class InteractiveSession:
             return
 
         enriched = f"{goal} sdk root: {sdk_root}"
-        self._say(f"{_b('Test Generation Pipeline')}", _CYAN)
+
+        # Section header
+        width = shutil.get_terminal_size().columns
+        self._say(f"  {_CYAN}{'─' * min(width - 2, 56)}{_RESET}")
+        self._say(f"  {_BOLD}{_CYAN}Test Generation Pipeline{_RESET}")
+        self._say(f"  {_CYAN}{'─' * min(width - 2, 56)}{_RESET}")
 
         # 1 — Plan
         self._show_progress("Planning ...")
         plan = self._agent.plan(enriched)
         stages = plan.get("stages", [])
-        self._show_done(f"Plan: {len(stages)} stage(s) — {', '.join(stages)}")
-        self._say(_dim(f"  Model: {plan.get('model', 'default')}"), indent=1)
+        model_name = plan.get('model', 'default')
 
-        # 2 — Execute
+        # Show plan details
+        self._say(f"  {_b('Plan Preview')}  {_DIM}({len(stages)} stage(s), model: {model_name}){_RESET}")
+        for i, s in enumerate(stages, 1):
+            self._say(_dim(f"    {i}. {s}"), indent=1)
+
+        # 2 — Plan mode: ask for confirmation
+        if self._mode == MODE_PLAN:
+            self._say("")
+            try:
+                confirm = input(
+                    f"  {_YELLOW}Execute this plan?{_RESET} "
+                    f"{_DIM}[Y/n]{_RESET} "
+                ).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "n"
+            if confirm and confirm not in ("y", "yes", ""):
+                self._say(f"  {_DIM}Plan cancelled.{_RESET}")
+                return
+
+        # 3 — Execute
         self._show_progress("Running pipeline (this may take a while) ...")
         t0 = time.monotonic()
         try:
@@ -758,7 +930,7 @@ class InteractiveSession:
             self._show_error(f"Pipeline failed: {exc}")
             return
 
-        # 3 — Show results
+        # 4 — Show results
         self._show_result(result, elapsed)
 
         # 4 — Offer next steps

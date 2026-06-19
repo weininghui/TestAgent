@@ -22,7 +22,7 @@ class PipelineMemory:
         self._stage_order: list[str] = []
         self.persist_path = Path(persist_path)
 
-    def store_stage_output(self, stage_name: str, output: dict[str, Any]) -> None:
+    def store_stage_output(self, stage_name: str, output: Any) -> None:
         """Save a stage's output."""
         entry = {
             "stage": stage_name,
@@ -33,7 +33,12 @@ class PipelineMemory:
         if stage_name not in self._stage_order:
             self._stage_order.append(stage_name)
         self._persist()
-        logger.info("PipelineMemory: stored stage '%s' (%d keys)", stage_name, len(output))
+        key_count: int = (
+            len(output)
+            if isinstance(output, dict)
+            else (output if isinstance(output, (int, float)) else 0)
+        )
+        logger.info("PipelineMemory: stored stage '%s' (%d keys)", stage_name, key_count)
 
     def get_stage_output(self, stage_name: str) -> dict[str, Any] | None:
         """Retrieve a specific stage's output dict, or None if not found."""

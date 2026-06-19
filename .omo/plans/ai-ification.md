@@ -59,16 +59,16 @@
 Transform aiagent-main from a mixed local-code + AI hybrid into a pure LangChain-driven AI pipeline. All pipeline stages (SDK scanning, API analysis, test design, code generation) are performed by LangChain agents. Compilation moves to CI/CD infrastructure.
 
 ### Concrete Deliverables
-- [ ] Cleaned repository: only `agents/`, `ir/`, `config/`, `app.py`, `.github/`, `Dockerfile`, `requirements.txt`, `.gitignore`
-- [ ] 6 LangChain pipeline agents in `agents/chains/`
-- [ ] LangChain tool definitions in `agents/tools/`
-- [ ] Prompt templates in `agents/prompts/`
-- [ ] Cache and memory modules in `agents/`
-- [ ] Pipeline orchestrator in `agents/pipeline.py`
-- [ ] New `app.py` with CLI interface
-- [ ] `.github/workflows/ci.yml` for GitHub Actions
-- [ ] `Dockerfile` for local build verification
-- [ ] Updated `requirements.txt`
+- [x] Cleaned repository: only `agents/`, `ir/`, `config/`, `app.py`, `.github/`, `Dockerfile`, `requirements.txt`, `.gitignore`
+- [x] 6 LangChain pipeline agents in `agents/chains/`
+- [x] LangChain tool definitions in `agents/tools/`
+- [x] Prompt templates in `agents/prompts/`
+- [x] Cache and memory modules in `agents/`
+- [x] Pipeline orchestrator in `agents/pipeline.py`
+- [x] New `app.py` with CLI interface
+- [x] `.github/workflows/ci.yml` for GitHub Actions
+- [x] `Dockerfile` for local build verification
+- [x] Updated `requirements.txt`
 
 ### Definition of Done
 ```bash
@@ -204,7 +204,7 @@ Max Concurrent: 7 (Wave 2)
 
 ## TODOs
 
-- [ ] 1. **Project Cleanup — Delete all non-AI code and junk files**
+- [x] 1. **Project Cleanup — Delete all non-AI code and junk files**
 
   **What to do**:
   - Delete these directories and files (non-AI code):
@@ -276,7 +276,7 @@ Max Concurrent: 7 (Wave 2)
   - Message: `cleanup: remove all non-AI code and junk files`
   - Files: All deleted + CLEANUP_MANIFEST.md
 
-- [ ] 2. **LangChain Dependency Setup**
+- [x] 2. **LangChain Dependency Setup**
 
   **What to do**:
   - Update `requirements.txt` with LangChain dependencies:
@@ -333,7 +333,7 @@ Max Concurrent: 7 (Wave 2)
   - Message: `cleanup: remove all non-AI code and junk files`
   - Files: requirements.txt, agents/__init__.py, agents/tools/__init__.py, agents/chains/__init__.py, agents/prompts/__init__.py
 
-- [ ] 3. **Preserve and Enhance ir/ Data Schemas**
+- [x] 3. **Preserve and Enhance ir/ Data Schemas**
 
   **What to do**:
   - Keep existing `ir/api_schema.py`, `ir/contract_schema.py`, `ir/testcase_schema.py` as-is
@@ -381,7 +381,7 @@ Max Concurrent: 7 (Wave 2)
   - Message: `feat(ir): add JSON serialization to data schemas`
   - Files: ir/*.py
 
-- [ ] 4. **agents/llm.py — LangChain ChatOpenAI Wrapper**
+- [x] 4. **agents/llm.py — LangChain ChatOpenAI Wrapper**
 
   **What to do**:
   - Create `agents/llm.py` that wraps `langchain_openai.ChatOpenAI`
@@ -455,7 +455,7 @@ Max Concurrent: 7 (Wave 2)
   - Message: `feat(agents): add LangChain ChatOpenAI wrapper`
   - Files: agents/llm.py
 
-- [ ] 5. **agents/cache.py — Cache Layer Preservation**
+- [x] 5. **agents/cache.py — Cache Layer Preservation**
 
   **What to do**:
   - Create `agents/cache.py` that provides a content-hash based LLM result cache
@@ -517,7 +517,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES (groups with Task 4)
   - Message: `feat(agents): add LangChain ChatOpenAI wrapper and cache layer`
 
-- [ ] 6. **agents/memory.py — Cross-Stage Memory with LangChain**
+- [x] 6. **agents/memory.py — Cross-Stage Memory with LangChain**
 
   **What to do**:
   - Create `agents/memory.py` that provides cross-stage context passing between pipeline agents
@@ -569,7 +569,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES (groups with Task 5)
   - Message: `feat(agents): add cache layer and cross-stage memory`
 
-- [ ] 7. **agents/tools/ — SDK Header Reading Tools**
+- [x] 7. **agents/tools/ — SDK Header Reading Tools**
 
   **What to do**:
   - Create `agents/tools/sdk_tools.py` with LangChain `@tool`-decorated functions:
@@ -620,7 +620,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(tools): add SDK header reading and analysis tools`
 
-- [ ] 8. **agents/tools/ — Code Generation Tools**
+- [x] 8. **agents/tools/ — Code Generation Tools**
 
   **What to do**:
   - Create `agents/tools/code_gen_tools.py` with LangChain `@tool`-decorated functions:
@@ -671,7 +671,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES (groups with Task 7)
   - Message: `feat(tools): add SDK reading and code generation tools`
 
-- [ ] 9. **agents/tools/ — File I/O and Utility Tools**
+- [x] 9. **agents/tools/ — File I/O and Utility Tools**
 
   **What to do**:
   - Create `agents/tools/file_tools.py` with general-purpose file tools:
@@ -721,7 +721,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES (groups with Tasks 7-8)
   - Message: `feat(tools): add SDK reading, code generation, and file utility tools`
 
-- [ ] 10. **agents/prompts/ — All Pipeline Prompt Templates**
+- [x] 10. **agents/prompts/ — All Pipeline Prompt Templates**
 
   **What to do**:
   - Create 6 LangChain `PromptTemplate` files in `agents/prompts/`:
@@ -789,7 +789,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(prompts): add 6 LangChain prompt templates for pipeline stages`
 
-- [ ] 11. **agents/chains/scanner_chain.py — SDK Scanner Agent**
+- [x] 11. **agents/chains/scanner_chain.py — SDK Scanner Agent**
 
   **What to do**:
   - Create `agents/chains/scanner_chain.py` as a LangChain `Chain` (or Runnable)
@@ -836,7 +836,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(chains): add SDK scanner agent chain`
 
-- [ ] 12. **agents/chains/analysis_chain.py — API Analysis Agent**
+- [x] 12. **agents/chains/analysis_chain.py — API Analysis Agent**
 
   **What to do**:
   - Create `agents/chains/analysis_chain.py` as a LangChain chain
@@ -885,7 +885,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(chains): add API analysis agent chain`
 
-- [ ] 13. **agents/chains/test_design_chain.py — Test Case Designer Agent**
+- [x] 13. **agents/chains/test_design_chain.py — Test Case Designer Agent**
 
   **What to do**:
   - Create `agents/chains/test_design_chain.py` as a LangChain chain
@@ -932,7 +932,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(chains): add test case designer agent chain`
 
-- [ ] 14. **agents/chains/code_gen_chain.py — GTest Code Generator Agent**
+- [x] 14. **agents/chains/code_gen_chain.py — GTest Code Generator Agent**
 
   **What to do**:
   - Create `agents/chains/code_gen_chain.py` as a LangChain chain
@@ -989,7 +989,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(chains): add GTest code generator agent chain`
 
-- [ ] 15. **agents/chains/ci_gen_chain.py — CI/CD Config Generator Agent**
+- [x] 15. **agents/chains/ci_gen_chain.py — CI/CD Config Generator Agent**
 
   **What to do**:
   - Create `agents/chains/ci_gen_chain.py` as a LangChain chain
@@ -1054,7 +1054,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(chains): add CI/CD config generator agent chain`
 
-- [ ] 16. **agents/chains/report_chain.py — Report Generator Agent**
+- [x] 16. **agents/chains/report_chain.py — Report Generator Agent**
 
   **What to do**:
   - Create `agents/chains/report_chain.py` as a LangChain chain
@@ -1115,7 +1115,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(chains): add report generator agent chain`
 
-- [ ] 17. **agents/pipeline.py — Pipeline Orchestrator**
+- [x] 17. **agents/pipeline.py — Pipeline Orchestrator**
 
   **What to do**:
   - Create `agents/pipeline.py` as the main LangChain pipeline orchestrator
@@ -1174,7 +1174,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(pipeline): add pipeline orchestrator with 6 stages`
 
-- [ ] 18. **app.py — New CLI Entry Point**
+- [x] 18. **app.py — New CLI Entry Point**
 
   **What to do**:
   - Rewrite `app.py` as the CLI entry point for the LangChain pipeline
@@ -1241,7 +1241,7 @@ Max Concurrent: 7 (Wave 2)
   **Commit**: YES
   - Message: `feat(cli): add new LangChain pipeline CLI entry point`
 
-- [ ] 19. **.github/workflows/ci.yml — GitHub Actions CI/CD Pipeline**
+- [x] 19. **.github/workflows/ci.yml — GitHub Actions CI/CD Pipeline**
 
   **What to do**:
   - Create `.github/workflows/ci.yml` with a GitHub Actions workflow:
@@ -1290,7 +1290,7 @@ Max Concurrent: 7 (Wave 2)
   ```
   **Commit**: YES (groups with Task 20), Message: `feat(ci): add GitHub Actions workflow and Dockerfile`
 
-- [ ] 20. **Dockerfile — Local Build Environment**
+- [x] 20. **Dockerfile — Local Build Environment**
 
   **What to do**:
   - Create Dockerfile for local build verification:
@@ -1317,7 +1317,7 @@ Max Concurrent: 7 (Wave 2)
   ```
   **Commit**: YES (groups with Task 19)
 
-- [ ] 21. **End-to-End Integration Test**
+- [x] 21. **End-to-End Integration Test**
 
   **What to do**:
   - Create test script that validates full pipeline:
@@ -1342,25 +1342,25 @@ Max Concurrent: 7 (Wave 2)
 
 > 4 review agents run in PARALLEL. ALL must APPROVE. Present consolidated results to user and get explicit "okay" before completing.
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
 
   **What to do**: Read the plan end-to-end. Verify all "Must Have" items are implemented. Check all "Must NOT Have" items are absent. Verify cleanup was done correctly (no GTest, ninja, WebUI, generators, etc. left behind). Check evidence files exist in `.omo/evidence/`.
 
   **Output**: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality + Build Verification** — `unspecified-high`
+- [x] F2. **Code Quality + Build Verification** — `unspecified-high`
 
   **What to do**: Run `python -m py_compile *.py agents/**/*.py` for syntax check. Verify there are no imports from deleted modules. Check for any remaining references to generators, runners, parsers, etc. Verify `requirements.txt` has valid LangChain dependencies.
 
   **Output**: `Syntax [PASS/FAIL] | Imports [CLEAN/ISSUES] | Deps [PASS/FAIL] | VERDICT`
 
-- [ ] F3. **Real Manual QA — Pipeline Execution** — `unspecified-high`
+- [x] F3. **Real Manual QA — Pipeline Execution** — `unspecified-high`
 
   **What to do**: Run `python app.py --help` to verify CLI works. Run Python verification: `python -c "from agents.pipeline import Pipeline; p = Pipeline(); print(p.get_stages())"`. Check generated output files have correct structure. Verify LangChain agents can initialize and produce structured output.
 
   **Output**: `CLI [PASS/FAIL] | Pipeline Init [PASS/FAIL] | Stage Generation [N/N] | VERDICT`
 
-- [ ] F4. **Scope Fidelity + Cleanup Verification** — `deep`
+- [x] F4. **Scope Fidelity + Cleanup Verification** — `deep`
 
   **What to do**: For each task in TODOs: read "What to do", verify actual implementation matches. Check no deleted directories remain. Confirm CI/CD workflow references correct files and is runnable. Detect any cross-task contamination.
 
@@ -1404,10 +1404,10 @@ python app.py --config config/scivision_config.yaml --llm-enabled --no-cache --d
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present
-- [ ] All "Must NOT Have" absent
-- [ ] Pipeline produces valid APIInventory, TestCaseCollection, GTest code
-- [ ] CI/CD workflow parses as valid YAML
-- [ ] No imports from deleted modules
-- [ ] LangChain-based (no urllib/raw HTTP calls)
-- [ ] All old agent code (tool_chat.py, session_manager.py, etc.) replaced
+- [x] All "Must Have" present
+- [x] All "Must NOT Have" absent
+- [x] Pipeline produces valid APIInventory, TestCaseCollection, GTest code
+- [x] CI/CD workflow parses as valid YAML
+- [x] No imports from deleted modules
+- [x] LangChain-based (no urllib/raw HTTP calls)
+- [x] All old agent code (tool_chat.py, session_manager.py, etc.) replaced

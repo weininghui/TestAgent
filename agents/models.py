@@ -1,69 +1,50 @@
-"""LLM model presets — built-in + JSON override.
+"""Simplified model config — no built-in presets, uses ~/.sdk-test-agent/config.json.
 
 Usage:
-    from agents.models import get_llm, list_models
+    # First-time setup (interactive):
+    from agents.models import save_config
+    save_config(url="https://api.openai.com/v1", model="gpt-4o", api_key="sk-...")
 
-    # Create an LLM wrapper from a preset
-    llm = get_llm("longcat")
-
-    # Register a custom preset at runtime
-    from agents.models import ModelConfig, add_preset
-    add_preset("my-model", ModelConfig(model="gpt-4o", base_url="..."))
-
-For per-agent model configuration (each agent using a different LLM), see
-``agent_config.json`` or the ``SDK_AGENT_CONFIG_JSON`` env var.
+    # Later runs:
+    from agents.models import get_llm
+    llm = get_llm()
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from agents.llm import LLMWrapper
 
 logger = logging.getLogger(__name__)
 
+# ── Config file path ────────────────────────────────────────────────────────
+_CONFIG_DIR = Path.home() / ".sdk-test-agent"
+_CONFIG_PATH = _CONFIG_DIR / "config.json"
 
-# ---------------------------------------------------------------------------
-# Data model
-# ---------------------------------------------------------------------------
+# ── Best defaults ───────────────────────────────────────────────────────────
+DEFAULT_TEMPERATURE = 0.1
+DEFAULT_MAX_TOKENS = 16_000
+DEFAULT_TIMEOUT = 1200
 
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Describes a single LLM endpoint.
-
-    Fields
-    ------
-    model:
-        Model name sent to the provider (e.g. ``"LongCat-2.0-Preview"``).
-    base_url:
-        OpenAI-compatible API base URL.
-    api_key_env:
-        Name of the environment variable that holds the API key.
-        Defaults to ``"OPENAI_API_KEY"``.
-    temperature:
-        Generation temperature.  Defaults to ``0.1``.
-    max_tokens:
-        Maximum output tokens.  Defaults to ``16_000``.
-    timeout:
-        Request timeout in seconds.  Defaults to ``1200``.
-    """
+    """Describes a single LLM endpoint."""
 
     model: str
     base_url: str
     api_key_env: str = "OPENAI_API_KEY"
-    temperature: float = 0.1
-    max_tokens: int = 16_000
-    timeout: int = 1200
+    temperature: float = DEFAULT_TEMPERATURE
+    max_tokens: int = DEFAULT_MAX_TOKENS
+    timeout: int = DEFAULT_TIMEOUT
 
     def to_llm_config(self) -> dict:
-        """Return a config dict whose keys match what ``LLMWrapper`` expects.
-
-        The returned dict uses the ``llm_*`` key naming convention so it
-        can be passed directly to ``LLMWrapper(config)``.
-        """
+        """Return a config dict consumable by ``LLMWrapper(config)``."""
         return {
             "llm_model": self.model,
             "llm_base_url": self.base_url,
@@ -74,132 +55,87 @@ class ModelConfig:
         }
 
 
-# ---------------------------------------------------------------------------
-# Predefined model presets (built-in defaults)
-# ---------------------------------------------------------------------------
-
-LONG_CAT = ModelConfig(
-    model="LongCat-2.0-Preview",
-    base_url="https://api.longcat.chat/openai/v1",
-    api_key_env="OPENAI_API_KEY",
-    temperature=0.1,
-    max_tokens=16_000,
-)
-
-DASHSCOPE = ModelConfig(
-    model="kimi-k2.5",
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-    api_key_env="OPENAI_API_KEY",
-    temperature=0.2,
-    max_tokens=30_000,
-)
-
-# ---------------------------------------------------------------------------
-# In-memory registry (populated from built-ins + external config)
-# ---------------------------------------------------------------------------
-
-_MODELS: dict[str, ModelConfig] = {
-    "longcat": LONG_CAT,
-    "dashscope": DASHSCOPE,
-    "default": LONG_CAT,
-}
+# ── Config file I/O ─────────────────────────────────────────────────────────
 
 
-# ---------------------------------------------------------------------------
-# Shared merge helper
-# ---------------------------------------------------------------------------
+def config_path() -> Path:
+    return _CONFIG_PATH
 
 
-def _merge_presets(
-    presets: dict[str, Any],
-    source: str = "<unknown>",
-) -> int:
-    """Merge model presets from a parsed config dict into ``_MODELS``.
-
-    Returns the number of successfully loaded presets.
-    """
-    loaded = 0
-    for name, cfg in presets.items():
-        if not isinstance(cfg, dict):
-            continue
+def load_config() -> dict[str, Any]:
+    """Load saved config, returning ``{}`` if none."""
+    if _CONFIG_PATH.exists():
         try:
-            _MODELS[name] = ModelConfig(
-                model=str(cfg["model"]),
-                base_url=str(cfg["base_url"]),
-                api_key_env=str(cfg.get("api_key_env", "OPENAI_API_KEY")),
-                temperature=float(cfg.get("temperature", 0.1)),
-                max_tokens=int(cfg.get("max_tokens", 16_000)),
-                timeout=int(cfg.get("timeout", 1200)),
-            )
-            loaded += 1
-        except (KeyError, TypeError, ValueError) as exc:
-            logger.warning("Skipping preset %r in %s: %s", name, source, exc)
-    if loaded:
-        logger.info("Loaded %d preset(s) from %s (total registry: %d)", loaded, source, len(_MODELS))
-    return loaded
+            return json.loads(_CONFIG_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Failed to read config: %s", exc)
+    return {}
 
 
-# ---------------------------------------------------------------------------
-# JSON loader (for OpenCode embedding / runtime use)
-# ---------------------------------------------------------------------------
+def save_config(
+    url: str,
+    model: str,
+    api_key: str | None = None,
+) -> dict[str, Any]:
+    """Save model settings to ``~/.sdk-test-agent/config.json``.
 
-
-def load_presets_from_json(data: dict) -> int:
-    """Load model presets from a JSON dict (for OpenCode embedding).
-
-    This is a **public** function intended to be called by
-    :class:`agents.agent_defs.AgentRegistry` when parsing JSON config.
-
-    Returns the number of presets loaded.
+    If *api_key* is provided it is stored in the in-memory keychain
+    (never written to disk in plain text).
     """
-    models_section = data.get("models", {})
-    if not isinstance(models_section, dict):
-        return 0
-    return _merge_presets(models_section, source="json")
+    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    data: dict[str, Any] = {"base_url": url.rstrip("/"), "model": model}
+    if api_key:
+        data["api_key_env"] = "OPENAI_API_KEY"
+        from agents.keychain import set_key  # noqa: late import avoids cycle
+
+        set_key("OPENAI_API_KEY", api_key)
+    _CONFIG_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    logger.info("Config saved to %s", _CONFIG_PATH)
+    return data
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
-def get_model(name: str = "default") -> ModelConfig:
-    """Look up a :class:`ModelConfig` by name.
-
-    Falls back to the default preset when *name* is unknown (with a
-    warning).
-    """
-    if name in _MODELS:
-        return _MODELS[name]
-    logger.warning("Unknown model preset %r — falling back to 'default'", name)
-    return _MODELS["default"]
-
-
-def get_llm(name: str = "default") -> LLMWrapper:
-    """Create a fully-configured :class:`LLMWrapper` from a model preset.
-
-    This is the primary entry-point for obtaining an LLM instance::
-
-        from agents.models import get_llm
-        llm = get_llm("longcat")
-    """
-    cfg = get_model(name)
-    logger.info(
-        "LLM: model=%s  endpoint=%s  temperature=%.2f  max_tokens=%d",
-        cfg.model,
-        cfg.base_url,
-        cfg.temperature,
-        cfg.max_tokens,
+def get_model_config() -> ModelConfig | None:
+    """Build a :class:`ModelConfig` from saved settings, or ``None``."""
+    cfg = load_config()
+    if not cfg or "model" not in cfg or "base_url" not in cfg:
+        return None
+    return ModelConfig(
+        model=cfg["model"],
+        base_url=cfg["base_url"],
+        api_key_env=cfg.get("api_key_env", "OPENAI_API_KEY"),
     )
+
+
+# ── Public API ──────────────────────────────────────────────────────────────
+
+
+def get_llm(name: str | None = None) -> LLMWrapper:
+    """Create a fully-configured :class:`LLMWrapper` from saved config.
+
+    Raises :class:`ValueError` if no model has been configured yet.
+    """
+    cfg = get_model_config()
+    if cfg is None:
+        raise ValueError(
+            "No model configured.  Run the interactive session and use "
+            "/config set, or create ~/.sdk-test-agent/config.json manually:\n"
+            '  {"base_url": "https://...", "model": "..."}'
+        )
+    logger.info("LLM: model=%s  endpoint=%s", cfg.model, cfg.base_url)
     return LLMWrapper(cfg.to_llm_config())
 
 
+def get_model(name: str | None = None) -> ModelConfig:
+    """Return the current :class:`ModelConfig` (ignores *name*).
+
+    Returns the single saved config from ``~/.sdk-test-agent/config.json``.
+    """
+    cfg = get_model_config()
+    if cfg is None:
+        raise ValueError("No model configured")
+    return cfg
+
+
 def list_models() -> list[str]:
-    """Return the names of all registered model presets."""
-    return list(_MODELS.keys())
-
-
-def add_preset(name: str, config: ModelConfig) -> None:
-    """Register (or override) a model preset at runtime."""
-    _MODELS[name] = config
-    logger.info("Runtime preset added: %s → %s", name, config.model)
+    """Return ``["default"]`` when a config exists, else ``[]``."""
+    return ["default"] if get_model_config() else []

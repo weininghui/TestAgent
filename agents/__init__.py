@@ -14,7 +14,7 @@ Public API
     AgentRole, AgentCapability, AgentDefinition, AgentRegistry
 
 ``models``
-    ModelConfig, get_llm(), get_model(), list_models(), add_preset()
+    ModelConfig, get_llm(), get_model(), save_config(), load_config()
 
 ``config``
     PipelineConfig

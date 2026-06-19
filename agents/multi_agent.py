@@ -37,7 +37,7 @@ Usage
     from agents.models import get_llm
     from agents.multi_agent import MultiAgentPipeline
 
-    llm = get_llm("longcat")
+    llm = get_llm()
     pipeline = MultiAgentPipeline(llm, config={"sdk_root": "C:/sdk", "output_root": "./output"})
     result = pipeline.run("generate tests for C:/sdk")
 
@@ -587,7 +587,7 @@ class MultiAgentPipeline:
             "goal": goal,
             "sdk_root": sdk_root,
             "output_root": self._output_root,
-            "model": self.config.get("model", "longcat"),
+            "model": self.config.get("model", "default"),
             "stages": stages,
             "completed_stages": [],
             "errors": [],

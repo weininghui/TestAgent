@@ -42,10 +42,11 @@ SDK Headers (.h)
 
 - **Pure LLM-driven** — No libclang, no Jinja2 templates, no custom parsers
 - **LangChain pipeline** — Modular, reusable, extensible
-- **Dual interface** — CLI (`app.py`) + MCP server (`mcp_server.py`)
-- **Multi-model** — Pluggable model presets (LongCat, DashScope, custom)
+- **MCP server integration** — Full pipeline access via Model Context Protocol
+- **Config-driven model selection** — Single config file, any OpenAI-compatible provider
 - **Cross-stage memory** — Each stage knows what previous stages produced
 - **Disk-persisted cache** — SHA-256 content-hash based, avoids redundant LLM calls
+- **OpenCode skill** — Designed for seamless use as an OpenCode skill via MCP
 
 ## Quick Start
 
@@ -60,32 +61,17 @@ SDK Headers (.h)
 pip install -r requirements.txt
 ```
 
-### Run (CLI)
+### MCP Server
+
+This project is a pure OpenCode MCP plugin. It runs as an MCP server and is
+auto-started by OpenCode when invoked as a skill. The only entry points are
+`mcp_server.py` (MCP server) and `agent.py` (autonomous goal-driven agent).
 
 ```bash
-# Full pipeline (default model: longcat)
-python app.py --sdk-root /path/to/sdk
-
-# With a different model preset
-python app.py --sdk-root /path/to/sdk --model dashscope
-
-# Dry-run (validate pipeline without LLM calls)
-python app.py --sdk-root /path/to/sdk --dry-run
-
-# Run a single stage
-python app.py --sdk-root /path/to/sdk --stage scanner
-```
-
-### Run (MCP Server)
-
-The MCP server exposes the pipeline as LLM-callable tools via the
-[Model Context Protocol](https://modelcontextprotocol.io/).
-
-```bash
-# stdio transport (default — for OpenCode skills)
+# stdio transport (default, used by OpenCode skills)
 python mcp_server.py
 
-# SSE transport (for Docker / remote setups)
+# SSE transport (for remote setups)
 python mcp_server.py --transport sse --port 8080
 ```
 
@@ -101,36 +87,49 @@ Once running, any MCP client can call these tools:
 | `generate_report` | Generate Markdown + JSON report |
 | `generate_tests` | **End-to-end**: all 6 stages |
 
-## CLI Reference
+### Usage as an OpenCode Skill
+
+The agent is designed to be invoked as an OpenCode skill:
 
 ```
-usage: app.py [-h] [--model {longcat,dashscope,default}]
-              [--sdk-root SDK_ROOT] [--output-root OUTPUT_ROOT]
-              [--build-dir BUILD_DIR] [--llm-enabled] [--no-cache]
-              [--dry-run] [--stage {scanner,analysis,test_design,code_gen,ci_gen,report}]
-              [--verbose]
+task(category="deep", load_skills=["test-agent"], prompt="generate tests for /path/to/sdk")
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--model` | `longcat` | Model preset name |
-| `--sdk-root` | `""` | SDK root directory (required) |
-| `--output-root` | `./output` | Output directory |
-| `--build-dir` | `build` | Build directory name |
-| `--no-cache` | `false` | Disable LLM response caching |
-| `--dry-run` | `false` | Validate pipeline without LLM calls |
-| `--stage` | — | Run a single pipeline stage only |
-| `--verbose` / `-v` | `false` | DEBUG-level logging |
+This invokes the MCP server, which runs the full pipeline and produces output
+in the configured output directory.
 
-## Model Presets
+Example MCP client usage:
 
-| Preset | Model | Provider | Endpoint |
-|--------|-------|----------|----------|
-| `longcat` (default) | LongCat-2.0-Preview | LongCat | `api.longcat.chat` |
-| `dashscope` | kimi-k2.5 | Aliyun DashScope | `dashscope.aliyuncs.com` |
+```json
+{
+  "tool": "generate_tests",
+  "arguments": {
+    "sdk_root": "/path/to/sdk",
+    "model_preset": "longcat"
+  }
+}
+```
 
-Add custom presets in `agents/models.py`. The API key is read from the
-`OPENAI_API_KEY` environment variable by default (configurable per preset).
+## Model Configuration
+
+The project uses a configuration file at `~/.sdk-test-agent/config.json` to
+define the LLM endpoint. There are no hardcoded model presets — all model
+settings (URL, model name, API key) are configured at runtime.
+
+### Configuration System
+
+Two layers of configuration are supported:
+
+1. **Environment variables**:
+   - `OPENAI_API_KEY` — API key for the LLM provider
+   - `SDK_ROOT` — Default SDK root directory
+   - `SDK_OUTPUT_ROOT` — Default output directory
+   - `SDK_MODEL` — Default model name
+
+2. **Configuration file** (`~/.sdk-test-agent/config.json`):
+   - Persistent settings across runs
+   - Model URL, model name, and API key management
+   - Pipeline defaults and preferences
 
 ## Project Structure
 
@@ -142,7 +141,8 @@ Add custom presets in `agents/models.py`. The API key is read from the
 │   ├── cache.py            # LLMCache — SHA-256 disk-persisted cache
 │   ├── memory.py           # PipelineMemory — cross-stage state
 │   ├── config.py           # PipelineConfig dataclass
-│   ├── models.py           # ModelConfig presets
+│   ├── models.py           # Model config helpers & save_config()
+│   ├── keychain.py         # In-memory API key management
 │   ├── pipeline.py         # Pipeline orchestrator (6 stages)
 │   ├── chains/             # 6 LangChain chains (one per stage)
 │   │   ├── scanner_chain.py
@@ -161,15 +161,17 @@ Add custom presets in `agents/models.py`. The API key is read from the
 │       ├── test_design_prompt.py
 │       ├── code_gen_prompt.py
 │       ├── ci_gen_prompt.py
-│       └── report_prompt.py
-├── ir/                     # Data schemas
+│       ├── report_prompt.py
+│       ├── builder.py      # Prompt builder utilities
+│       └── techniques.py   # Prompt technique helpers
+├── schemas/                 # Data schemas
 │   ├── api_schema.py       # APIInventory, FunctionInfo, etc.
 │   ├── testcase_schema.py  # TestCaseCollection
 │   └── contract_schema.py  # ContractInfo
-├── app.py                  # CLI entry point
 ├── mcp_server.py           # MCP server entry point
+├── agent.py                # Autonomous goal-driven agent
+├── plugin.yaml             # OpenCode skill configuration
 ├── tests/                  # Integration tests
-├── Dockerfile              # Containerised MCP server
 ├── .github/workflows/      # CI workflow
 └── requirements.txt        # Python dependencies
 ```
@@ -179,11 +181,26 @@ Add custom presets in `agents/models.py`. The API key is read from the
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | Yes | API key for the LLM provider |
-| `SDK_ROOT` | No | Default SDK root (can be overridden via CLI) |
+| `SDK_ROOT` | No | Default SDK root directory |
 | `SDK_OUTPUT_ROOT` | No | Default output directory (default: `./output`) |
-| `SDK_LOG_LEVEL` | No | Logging level (default: `INFO`) |
-| `SDK_NO_CACHE` | No | Disable caching if set |
-| `SDK_MODEL` | No | Default model preset name |
+| `SDK_MODEL` | No | Default model name |
+
+### Configuration File
+
+A persistent configuration file at `~/.sdk-test-agent/config.json` stores your settings:
+
+```json
+{
+  "base_url": "https://api.openai.com/v1",
+  "model": "gpt-4o",
+  "sdk_root": "/path/to/sdk",
+  "output_root": "./output"
+}
+```
+
+- `base_url` — OpenAI-compatible API endpoint
+- `model` — Model name
+- `sdk_root` / `output_root` — Pipeline directory defaults
 
 ## Development
 
@@ -197,24 +214,50 @@ python -m pytest tests/ -v
 python -m pytest tests/test_integration.py::TestIntegration::test_pipeline_init -v
 ```
 
-### Adding a New Model Preset
+### Configuring a Custom Model
+
+Use the `save_config()` helper in `agents/models.py` or write directly to
+`~/.sdk-test-agent/config.json`:
 
 ```python
-# In agents/models.py
-from agents.models import ModelConfig, _MODELS
+from agents.models import save_config
 
-MY_MODEL = ModelConfig(
+# Set a custom OpenAI-compatible endpoint
+save_config(
+    url="https://api.custom-provider.com/v1",
     model="my-model-name",
-    base_url="https://api.example.com/v1",
-    api_key_env="MY_API_KEY",
+    api_key="sk-...",  # stored in keychain, never written to disk in plaintext
 )
-_MODELS["my-preset"] = MY_MODEL
+```
+
+Or manually create `~/.sdk-test-agent/config.json`:
+
+```json
+{
+  "base_url": "https://api.custom-provider.com/v1",
+  "model": "my-model-name"
+}
+```
+
+### MCP Server Development
+
+When developing with the MCP server:
+
+```bash
+# Run the MCP server in stdio mode (for OpenCode skills)
+python mcp_server.py
+
+# Run the MCP server in SSE mode
+python mcp_server.py --transport sse --port 8080
+
+# Test MCP server tools
+python -c "from mcp_server import main; main()"
 ```
 
 ### Cache
 
 LLM responses are cached by SHA-256 hash of `(model + prompt + temperature)`
-in `<output_root>/cache/`. Use `--no-cache` to bypass during development.
+in `<output_root>/cache/`. The pipeline handles caching automatically.
 
 ## Output Structure
 
@@ -229,6 +272,16 @@ in `<output_root>/cache/`. Use `--no-cache` to bypass during development.
 ├── report.json             # JSON summary
 └── pipeline_memory.json    # Cross-stage context snapshot
 ```
+
+### Generated Files
+
+The pipeline generates:
+
+- **GTest source files** (`.cpp`) — Complete test suites for SDK APIs
+- **CMake configuration** — Build system for compiling and running tests
+- **GitHub Actions workflows** — CI/CD pipelines for automated testing
+- **Reports** — Markdown and JSON summaries of the test generation process
+- **Memory snapshots** — Cross-stage context for debugging and analysis
 
 ## License
 

@@ -1,10 +1,9 @@
-from schemas.api_schema import APIInventory, ModuleInfo, FunctionInfo, ClassInfo, MethodInfo, ParamInfo, EnumInfo
-from schemas.contract_schema import ContractInfo, ContractCollection
-from schemas.testcase_schema import TestCaseCollection, TestCaseInfo
+from ir.api_schema import APIInventory, FunctionInfo, ParamInfo
+from ir.testcase_schema import TestCaseCollection, TestCaseInfo as TestCase
+from ir.contract_schema import ContractInfo
 
 __all__ = [
-    "APIInventory", "ModuleInfo", "FunctionInfo", "ClassInfo",
-    "MethodInfo", "ParamInfo", "EnumInfo",
-    "ContractInfo", "ContractCollection",
-    "TestCaseCollection", "TestCaseInfo",
+    "APIInventory", "FunctionInfo", "ParamInfo",
+    "TestCaseCollection", "TestCase",
+    "ContractInfo",
 ]

@@ -11,39 +11,18 @@ import os
 class PipelineConfig:
     """Immutable pipeline settings.
 
-    Defaults are suitable for most local runs; override via CLI flags
-    (``--sdk-root``, ``--output-root``, etc.).
+    Defaults are suitable for most local runs; override via CLI flags.
     """
 
-    #: Absolute path to the SDK root directory (the directory scanned for
-    #: ``.h`` header files).
     sdk_root: str = ""
-
-    #: Directory for generated test code, reports, and cache files.
     output_root: str = "./output"
-
-    #: Build directory (relative to *output_root* or absolute).
     build_dir: str = "build"
-
-    #: Logging verbosity (``"DEBUG"``, ``"INFO"``, ``"WARNING"``, …).
     log_level: str = "INFO"
-
-    #: Disable LLM call caching (useful during prompt development).
     no_cache: bool = False
-
-    #: Enable LLM pipeline mode (otherwise stages are no-ops).
     llm_enabled: bool = False
-
-    #: Short name of the LLM model preset (used for display; actual
-    #: model config lives in ``agents/models.py``).
-    model: str = "longcat"
-
-    # ------------------------------------------------------------------
-    # Derived helpers
-    # ------------------------------------------------------------------
+    model: str = "default"
 
     def as_dict(self) -> dict[str, object]:
-        """Return a plain dictionary consumable by ``Pipeline.__init__``."""
         return {
             "sdk_root": self.sdk_root,
             "output_root": self.output_root,
@@ -56,7 +35,6 @@ class PipelineConfig:
 
     @classmethod
     def from_dict(cls, d: dict[str, object]) -> PipelineConfig:
-        """Construct from a dictionary (e.g. parsed from environment)."""
         return cls(
             sdk_root=str(d.get("sdk_root", "")),
             output_root=str(d.get("output_root", "./output")),
@@ -64,22 +42,11 @@ class PipelineConfig:
             log_level=str(d.get("log_level", "INFO")),
             no_cache=bool(d.get("no_cache", False)),
             llm_enabled=bool(d.get("llm_enabled", False)),
-            model=str(d.get("model", "longcat")),
+            model=str(d.get("model", "default")),
         )
-
-    # ------------------------------------------------------------------
-    # Env-var convenience (optional — not used by app.py today)
-    # ------------------------------------------------------------------
 
     @classmethod
     def from_env(cls) -> PipelineConfig:
-        """Read settings from environment variables with ``SDK_`` prefix.
-
-        Examples
-        --------
-        ``SDK_ROOT=/opt/sdk``, ``SDK_OUTPUT_ROOT=./out``,
-        ``SDK_LOG_LEVEL=DEBUG``, ``SDK_NO_CACHE=1``.
-        """
         return cls(
             sdk_root=os.environ.get("SDK_ROOT", ""),
             output_root=os.environ.get("SDK_OUTPUT_ROOT", "./output"),
@@ -87,5 +54,5 @@ class PipelineConfig:
             log_level=os.environ.get("SDK_LOG_LEVEL", "INFO"),
             no_cache=bool(os.environ.get("SDK_NO_CACHE", "")),
             llm_enabled=bool(os.environ.get("SDK_LLM_ENABLED", "")),
-            model=os.environ.get("SDK_MODEL", "longcat"),
+            model=os.environ.get("SDK_MODEL", "default"),
         )

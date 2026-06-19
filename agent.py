@@ -45,8 +45,8 @@ logger = logging.getLogger("agent")
 # Intent parsing helpers
 # ---------------------------------------------------------------------------
 
-# Known model presets (used for intent extraction)
-_KNOWN_MODELS = {"longcat", "dashscope", "default", "gpt-4o", "gpt-4o-mini"}
+# Known model names (used for intent extraction)
+_KNOWN_MODELS = {"default", "gpt-4o", "gpt-4o-mini"}
 
 # Stage aliases  → canonical names
 _STAGE_ALIASES: dict[str, str] = {
@@ -126,11 +126,13 @@ def _extract_sdk_root(goal: str) -> str | None:
 
 
 def _extract_model(goal: str) -> str:
-    """Extract a model preset name from the goal."""
+    """Extract a model name from the goal (for display only)."""
     for alias_lower in _KNOWN_MODELS:
         if alias_lower in goal.lower():
             return alias_lower
-    return "longcat"
+    from agents.models import get_model_config
+    cfg = get_model_config()
+    return cfg.model if cfg else "default"
 
 
 def _extract_output_root(goal: str) -> str:
@@ -209,7 +211,7 @@ class TestGenAgent:
 
     def __init__(
         self,
-        model: str = "longcat",
+        model: str = "default",
         output_root: str = "./output",
     ) -> None:
         self.model = model
@@ -223,29 +225,18 @@ class TestGenAgent:
     def _get_llm(self, stage: str | None = None) -> LLMWrapper:
         """Create an :class:`LLMWrapper` for *stage*, respecting agent config.
 
-        When the agent config for *stage* has a model/base-url different from
-        the hardcoded ``_BUILTIN_AGENTS`` defaults, this method returns an
-        LLM configured per that agent's settings.  Otherwise it falls back
-        to the preset-name-based ``get_llm()`` path.
-
-        If *stage* is ``None``, the ``main`` agent (or the first available
-        agent) is used.
+        When the agent config for *stage* has explicit model/base-url fields
+        (set via ``agent_config.json``), this returns a per-agent LLM.
+        Otherwise falls back to the default config from ``~/.sdk-test-agent/config.json``.
         """
-        # Priority: explicit stage → "main" → fallback to preset
-        candidates = [stage] if stage else []
-        if not candidates:
-            candidates = ["main"]
+        candidates = [stage] if stage else ["main"]
         for name in candidates:
             acfg = self._agents.get(name)
             if acfg is None:
                 continue
-            # Quick check: is this agent's config different from default?
-            # If model, base_url, or api_key diverges, use per-agent config.
-            if (acfg.model != "LongCat-2.0-Preview"
-                    or acfg.base_url != "https://api.longcat.chat/openai/v1"
-                    or acfg.api_key):
+            if acfg.model and acfg.base_url:
                 return LLMWrapper(acfg.to_llm_config())
-        return get_llm(self.model)
+        return get_llm()
 
     # ------------------------------------------------------------------
     # Sub-agent queries
@@ -568,84 +559,8 @@ class TestGenAgent:
 
 
 # ---------------------------------------------------------------------------
-# CLI entry point
+# No CLI entry point — use via OpenCode skill or MCP tools
+#
+#   OpenCode:  task(load_skills=["test-agent"], prompt="generate tests for ...")
+#   Python:    from mcp_server import main; main()
 # ---------------------------------------------------------------------------
-
-
-def clicli_main() -> None:
-    """CLI entry point — parse arguments and run the agent."""
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="SDK Test Generation Agent — autonomous goal-driven entry point",
-    )
-    parser.add_argument(
-        "--goal", "-g",
-        default=None,
-        help="Natural language goal (e.g. 'generate tests for C:/sdk')",
-    )
-    parser.add_argument(
-        "--sdk-root",
-        default=None,
-        help="SDK root (overrides goal parsing)",
-    )
-    parser.add_argument(
-        "--model", "-m",
-        default="longcat",
-        help="Model preset name (default: longcat)",
-    )
-    parser.add_argument(
-        "--output-root", "-o",
-        default="./output",
-        help="Output directory (default: ./output)",
-    )
-    parser.add_argument(
-        "--dry-run", "-n",
-        action="store_true",
-        help="Show execution plan without running the pipeline",
-    )
-    parser.add_argument(
-        "--verbose", "-v",
-        action="store_true",
-        help="Enable debug logging",
-    )
-
-    args = parser.parse_args()
-
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s [%(name)s] %(levelname)-8s %(message)s",
-        datefmt="%H:%M:%S",
-    )
-
-    agent = TestGenAgent(model=args.model, output_root=args.output_root)
-
-    # Build goal string
-    goal_parts: list[str] = []
-    if args.goal:
-        goal_parts.append(args.goal)
-    if args.sdk_root:
-        goal_parts.append(f"sdk root: {args.sdk_root}")
-    goal = " ".join(goal_parts) if goal_parts else ""
-
-    if not goal:
-        # Interactive prompt
-        goal = input("🎯 Enter goal for the test generation agent: ").strip()
-        if not goal:
-            print("No goal provided. Use --help for usage.")
-            sys.exit(1)
-
-    if args.dry_run:
-        plan = agent.plan(goal)
-        print(json.dumps(plan, indent=2, default=str, ensure_ascii=False))
-        return
-
-    result = agent.run(goal)
-    print(json.dumps(result, indent=2, default=str, ensure_ascii=False))
-
-    if result.get("status") == "error":
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    clicli_main()

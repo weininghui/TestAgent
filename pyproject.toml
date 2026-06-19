@@ -34,15 +34,10 @@ dev = [
 Homepage = "https://github.com/your-org/auto_test_agent"
 
 [project.scripts]
-sdk-test-agent = "auto_test_agent.__main__:_cli_main"
-testgen = "auto_test_agent.__main__:_cli_main"
 testgen-mcp = "mcp_server:main"
 
-[tool.setuptools]
-py-modules = ["agent"]
-
 [tool.setuptools.packages.find]
-include = ["auto_test_agent*", "agents*", "schemas*"]
+include = ["agents*", "schemas*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml", "*.toml", "*.json", "*.md"]

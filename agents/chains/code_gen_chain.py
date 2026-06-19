@@ -26,7 +26,7 @@ from agents.cache import LLMCache
 from agents.llm import LLMWrapper
 from agents.prompts import PromptBuilder
 from agents.prompts.code_gen_prompt import HUMAN_TEMPLATE, SYSTEM_PROMPT
-from agents.tools.code_gen_tools import write_gtest_file
+from agents.tools.code_gen_tools import raw_write_gtest_file as write_gtest_file
 from schemas.testcase_schema import TestCaseCollection, TestCaseInfo
 
 logger = logging.getLogger(__name__)

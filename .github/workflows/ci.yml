@@ -34,7 +34,7 @@ jobs:
 
       - name: Validate CLI dry-run
         run: |
-          python app.py --sdk-root test_sdk --dry-run --verbose
+          python cli.py --sdk-root test_sdk --dry-run --verbose
 
   generate-and-build:
     name: Generate & build C++ tests
@@ -66,7 +66,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          python app.py --sdk-root test_sdk --model longcat --verbose
+          python cli.py --sdk-root test_sdk --model default --verbose
 
       - name: List generated files
         run: |

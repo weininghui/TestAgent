@@ -29,8 +29,8 @@ from schemas.testcase_schema import TestCaseCollection
 from agents.llm import LLMWrapper
 from agents.tools.code_gen_tools import (
     ensure_output_dir,
-    write_cmake_file,
-    write_workflow_file,
+    raw_write_cmake_file as write_cmake_file,
+    raw_write_workflow_file as write_workflow_file,
 )
 from agents.prompts import PromptBuilder
 from agents.prompts.ci_gen_prompt import HUMAN_TEMPLATE, SYSTEM_PROMPT
