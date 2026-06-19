@@ -5,12 +5,16 @@ OpenCode 插件入口：自动检查依赖与包版本，再启动 MCP。
 
 from __future__ import annotations
 
+import json
+import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+_AUTO_UPDATE_INTERVAL_SEC = 6 * 3600  # at most once per 6 hours
 
 
 def _read_project_version() -> str:
@@ -24,6 +28,63 @@ def _pip_install(args: list[str]) -> None:
         [sys.executable, "-m", "pip", "install", *args, "-q"],
         cwd=str(ROOT),
     )
+
+
+def _auto_update_enabled() -> bool:
+    return os.environ.get("FORGE_AUTO_UPDATE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _maybe_git_auto_update() -> None:
+    """Optional: pull origin/main when FORGE_AUTO_UPDATE=1 (throttled)."""
+    if not _auto_update_enabled():
+        return
+    if not (ROOT / ".git").is_dir():
+        return
+
+    cache_dir = ROOT / ".forge" / "cache"
+    cache_file = cache_dir / "plugin_auto_update.json"
+    now = time.time()
+    if cache_file.is_file():
+        try:
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+            if now - float(data.get("last_check", 0)) < _AUTO_UPDATE_INTERVAL_SEC:
+                return
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    try:
+        subprocess.run(
+            ["git", "fetch", "origin"],
+            cwd=str(ROOT),
+            capture_output=True,
+            timeout=90,
+            check=False,
+        )
+        behind = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD..origin/main"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        count = int((behind.stdout or "0").strip() or "0")
+        if count > 0:
+            subprocess.run(["git", "checkout", "main"], cwd=str(ROOT), capture_output=True, timeout=30, check=False)
+            subprocess.run(
+                ["git", "reset", "--hard", "origin/main"],
+                cwd=str(ROOT),
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(
+            json.dumps({"last_check": now, "pulled_commits": count}, indent=2),
+            encoding="utf-8",
+        )
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return
 
 
 def _ensure_runtime_deps() -> None:
@@ -50,6 +111,7 @@ def _ensure_editable_package() -> None:
 
 
 def main() -> None:
+    _maybe_git_auto_update()
     _ensure_runtime_deps()
     _ensure_editable_package()
     from mcp_server import main as mcp_main

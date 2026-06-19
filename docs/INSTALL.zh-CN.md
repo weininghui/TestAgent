@@ -22,6 +22,30 @@
 `plugin.yaml` 已改为 `python run_mcp.py`：OpenCode 启动 MCP 时会**自动**检查 `mcp`/`pydantic` 依赖和 `sdk_forge` 版本，必要时静默 `pip install -e .`。  
 你仍需要 **重启 OpenCode**（MCP 子进程不会热更新），但通常**不必再手动 pip**。
 
+### 想「尽量自动」更新 GitHub 代码？
+
+设置环境变量 **`FORGE_AUTO_UPDATE=1`** 后，每次 OpenCode 启动 MCP（`run_mcp.py`）时会：
+
+1. 每 **6 小时最多一次** `git fetch` + 若落后则 `reset` 到 `origin/main`
+2. 再自动 `pip install -e .`（已有逻辑）
+
+**Windows（用户环境变量，永久生效）：**
+
+```powershell
+[System.Environment]::SetEnvironmentVariable(
+  "FORGE_AUTO_UPDATE", "1", "User"
+)
+```
+
+或在 OpenCode 的 MCP 配置里为 `sdk-test-forge` 增加 `env`（若你的 OpenCode 版本支持）：
+
+```json
+"env": { "FORGE_AUTO_UPDATE": "1" }
+```
+
+**注意：** 自动拉代码需要网络；仅适用于 **git 克隆的插件目录**（全局 `plugins/sdk-test-forge`）。  
+**不会**在运行中热更新 — 拉完新代码后，下次 **重启 OpenCode** 才会加载新 MCP 逻辑；同一次会话内仍是旧进程。
+
 **Windows 一键更新（全局插件目录）：**
 
 ```powershell
