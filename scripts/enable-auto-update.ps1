@@ -7,7 +7,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Repo = "https://github.com/weininghui/sdk-forge.git"
+$Repo = "https://github.com/weininghui/TestAgent.git"
+# After renaming the GitHub repo to sdk-forge, this URL redirects automatically.
 
 Write-Host "==> Setting FORGE_AUTO_UPDATE=1 (User environment)"
 [System.Environment]::SetEnvironmentVariable("FORGE_AUTO_UPDATE", "1", "User")

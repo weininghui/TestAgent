@@ -10,7 +10,7 @@ $AgentsDir = "$env:APPDATA\OpenCode\agents"
 
 if (-not (Test-Path $PluginDir)) {
     Write-Host "Plugin dir not found: $PluginDir"
-    Write-Host "First install: git clone --branch $Ref https://github.com/weininghui/sdk-forge.git `"$PluginDir`""
+    Write-Host "First install: git clone --branch $Ref https://github.com/weininghui/TestAgent.git `"$PluginDir`""
     exit 1
 }
 

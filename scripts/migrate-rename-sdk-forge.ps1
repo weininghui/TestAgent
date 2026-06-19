@@ -6,7 +6,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Repo = "https://github.com/weininghui/sdk-forge.git"
+$Repo = "https://github.com/weininghui/TestAgent.git"
+# After renaming the GitHub repo to sdk-forge, this URL redirects automatically.
 
 Write-Host "==> SDK Forge rename migration"
 

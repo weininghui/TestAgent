@@ -8,7 +8,7 @@ AGENTS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agents"
 
 if [[ ! -d "$PLUGIN_DIR" ]]; then
   echo "Plugin dir not found: $PLUGIN_DIR"
-  echo "First install: git clone --branch $REF https://github.com/weininghui/sdk-forge.git \"$PLUGIN_DIR\""
+  echo "First install: git clone --branch $REF https://github.com/weininghui/TestAgent.git \"$PLUGIN_DIR\""
   exit 1
 fi
 

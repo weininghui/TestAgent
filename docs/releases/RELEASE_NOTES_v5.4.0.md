@@ -13,6 +13,19 @@ Rebrand to **SDK Forge** — unified professional naming.
 
 **Unchanged:** Python module `sdk_forge`, CLI `forge`, Agent `forge`.
 
+## GitHub repository rename (manual)
+
+The code and docs use **`weininghui/sdk-forge`**. Rename the repository on GitHub:
+
+1. Open https://github.com/weininghui/TestAgent/settings
+2. **Repository name** → `sdk-forge` → Rename
+
+Old clone URLs (`TestAgent.git`) redirect automatically. Then run:
+
+```bash
+git remote set-url origin https://github.com/weininghui/sdk-forge.git
+```
+
 ## Migration
 
 See [MIGRATION_v5.4.md](../MIGRATION_v5.4.md) or run:
