@@ -1,16 +1,16 @@
-# SDK Test Forge Agent
+﻿# SDK Forge
 
 **English** | [简体中文](README.zh-CN.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/weininghui/TestAgent)](https://github.com/weininghui/TestAgent/releases)
+[![Release](https://img.shields.io/github/v/release/weininghui/sdk-forge)](https://github.com/weininghui/sdk-forge/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: [v5.3.0](docs/releases/RELEASE_NOTES_v5.3.0.md)** — Autopilot step loop, parallel scan, dynamic enrich batch, oracle pipeline.
+**Current release: [v5.4.0](docs/releases/RELEASE_NOTES_v5.4.0.md)** — Rebrand to SDK Forge (`sdk-forge` plugin / GitHub repo).
 
-Previous: [v5.2.0](docs/releases/RELEASE_NOTES_v5.2.0.md) — Multi-agent retry, review gate, build↔enrich loop.
+Previous: [v5.3.0](docs/releases/RELEASE_NOTES_v5.3.0.md) — Autopilot step loop, parallel scan, dynamic enrich batch.
 
 ## What it does
 
@@ -20,7 +20,7 @@ Previous: [v5.2.0](docs/releases/RELEASE_NOTES_v5.2.0.md) — Multi-agent retry,
 4. **Quality gates** — placeholder ratio, assertion score, golden oracle
 5. **Compile & run** with CMake; HTML report + structured JSON on failure
 
-Works as an **OpenCode MCP plugin** (`sdk-test-forge`) or a **CLI** for scripts and CI.
+Works as an **OpenCode MCP plugin** (`sdk-forge`) or a **CLI** for scripts and CI.
 
 ## Installation & updates
 
@@ -41,15 +41,14 @@ python -c "import sdk_forge; print(sdk_forge.__version__)"   # should match late
 forge autopilot --help                                       # v5.1+ must list autopilot
 ```
 
-OpenCode plugin directory (Windows): `%APPDATA%\OpenCode\plugins\sdk-test-forge`
+OpenCode plugin directory (Windows): `%APPDATA%\OpenCode\plugins\sdk-forge`
 
 After any update: `pip install -e .` in that directory, then **restart OpenCode completely**.
 
 ## Quick start (CLI)
 
 ```bash
-git clone https://github.com/weininghui/TestAgent.git
-cd TestAgent
+git clone https://github.com/weininghui/sdk-forge.git`ncd sdk-forge
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -61,8 +60,8 @@ Full CLI setup: [docs/INSTALL.md §1](docs/INSTALL.md#1-cli-only-no-opencode-plu
 Optional extras:
 
 ```bash
-pip install "sdk-test-forge[clang]"   # libclang header parsing
-pip install "sdk-test-forge[yaml]"    # .forge.yaml (JSON works without PyYAML)
+pip install "sdk-forge[clang]"   # libclang header parsing
+pip install "sdk-forge[yaml]"    # .forge.yaml (JSON works without PyYAML)
 ```
 
 ## Quick start (OpenCode Agent)
@@ -223,7 +222,7 @@ Build a fixture SDK: see [examples/README.md](examples/README.md).
 ## Project layout
 
 ```
-TestAgent/
+sdk-forge/
 ├── sdk_forge/          # Python package (CLI + core)
 ├── mcp_server.py       # OpenCode MCP entry
 ├── tests/              # pytest suite
@@ -293,7 +292,7 @@ python -m pytest tests/ -v
 
 ## Releases
 
-- [All releases](https://github.com/weininghui/TestAgent/releases)
+- [All releases](https://github.com/weininghui/sdk-forge/releases)
 - Latest: [RELEASE_NOTES_v5.3.0.md](docs/releases/RELEASE_NOTES_v5.3.0.md)
 
 ## License

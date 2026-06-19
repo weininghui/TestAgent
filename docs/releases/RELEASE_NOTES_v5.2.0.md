@@ -1,4 +1,4 @@
-# Release Notes — v5.2.0
+﻿# Release Notes — v5.2.0
 
 Multi-agent orchestration maturity: failure recovery, review hard gate, build↔enrich loop, forge-oracle.
 
@@ -32,7 +32,7 @@ Primary **forge** + `forge-env`, `forge-scan`, `forge-scaffold`, `forge-enrich`,
 ## Upgrade
 
 ```powershell
-cd $env:APPDATA\OpenCode\plugins\sdk-test-forge
+cd $env:APPDATA\OpenCode\plugins\sdk-forge
 git fetch --tags && git checkout v5.2.0
 pip install -e .
 ```

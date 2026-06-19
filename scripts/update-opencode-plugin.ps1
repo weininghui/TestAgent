@@ -2,7 +2,7 @@
 # 一键更新 OpenCode 全局插件目录
 param(
     [string]$Ref = "main",
-    [string]$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-test-forge"
+    [string]$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-forge"
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,7 +10,7 @@ $AgentsDir = "$env:APPDATA\OpenCode\agents"
 
 if (-not (Test-Path $PluginDir)) {
     Write-Host "Plugin dir not found: $PluginDir"
-    Write-Host "First install: git clone --branch $Ref https://github.com/weininghui/TestAgent.git `"$PluginDir`""
+    Write-Host "First install: git clone --branch $Ref https://github.com/weininghui/sdk-forge.git `"$PluginDir`""
     exit 1
 }
 

@@ -1,9 +1,9 @@
-# SDK Test Forge — OpenCode Plugin
+# SDK Forge — OpenCode Plugin
 # Auto-registers the MCP server and skill for OpenCode.
 
-name: sdk-test-forge
-description: SDK Test Forge — auto-generate GTest test suites from C/C++ SDK headers
-version: 5.3.0
+name: sdk-forge
+description: SDK Forge — auto-generate GTest test suites from C/C++ SDK headers
+version: 5.4.0
 
 # MCP server configuration
 mcp:
@@ -12,7 +12,7 @@ mcp:
 
 # Skills this plugin provides
 skills:
-  - name: test-forge
+  - name: sdk-forge
     description: |
       Scan C/C++ SDK headers, design test cases, generate GTest code,
       compile, run, and report results — all using OpenCode's built-in

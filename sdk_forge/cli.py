@@ -1,5 +1,5 @@
-"""Command-line interface for SDK Test Forge.
-SDK Test Forge 命令行入口（forge 子命令）。
+"""Command-line interface for SDK Forge.
+SDK Forge 命令行入口（forge 子命令）。
 """
 
 from __future__ import annotations
@@ -379,7 +379,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="forge", description="SDK Test Forge CLI")
+    parser = argparse.ArgumentParser(prog="forge", description="SDK Forge CLI")
     parser.add_argument("--quiet", action="store_true", help="Minimal JSON output")
     sub = parser.add_subparsers(dest="command", required=True)
 

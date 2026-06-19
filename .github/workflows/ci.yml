@@ -1,4 +1,4 @@
-name: SDK Test Forge CI
+name: SDK Forge CI
 
 on:
   push:
@@ -54,7 +54,7 @@ jobs:
       - name: Cache GTest FetchContent
         uses: actions/cache@v4
         with:
-          path: ~/.cache/sdk-test-forge
+          path: ~/.cache/sdk-forge
           key: gtest-${{ runner.os }}-v1.14.0-${{ hashFiles('sdk_forge/build.py') }}
           restore-keys: |
             gtest-${{ runner.os }}-v1.14.0-
@@ -73,14 +73,14 @@ jobs:
 
       - name: Run integration tests
         env:
-          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest
+          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-forge-gtest
         run: |
           python -m pytest tests/ -v -k "TestCompileAndRun or TestCliIntegration or TestCoveragePipeline or TestE2EPipeline"
           forge scan examples/test_sdk --no-clang
 
       - name: Sanitizer smoke (ASan)
         env:
-          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest-asan
+          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-forge-gtest-asan
         run: |
           cmake -S examples/test_sdk -B examples/test_sdk/build
           cmake --build examples/test_sdk/build
@@ -114,7 +114,7 @@ jobs:
       - name: Cache GTest FetchContent
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/sdk-test-forge-gtest
+          path: ${{ runner.temp }}/sdk-forge-gtest
           key: gtest-${{ runner.os }}-v1.14.0-${{ hashFiles('sdk_forge/build.py') }}
           restore-keys: |
             gtest-${{ runner.os }}-v1.14.0-
@@ -128,7 +128,7 @@ jobs:
 
       - name: Run integration tests (Windows)
         env:
-          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest
+          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-forge-gtest
         run: |
           python -m pytest tests/ -v -k "TestCompileAndRun and not pkg_config and not test_medium"
           python -m pytest tests/ -v -k TestCliIntegration

@@ -1,4 +1,4 @@
-# 安装与更新 — OpenCode 插件与 CLI
+﻿# 安装与更新 — OpenCode 插件与 CLI
 
 [English](INSTALL.md) | **简体中文**
 
@@ -10,13 +10,13 @@
 | [2. OpenCode 插件 — 首次安装](#2-opencode-插件--首次安装) | 第一次配置 MCP + Agent |
 | [3. 更新到最新版本](#3-更新到最新版本) | 已安装但版本过旧 |
 
-**当前 Release：** [v5.3.0](releases/RELEASE_NOTES_v5.3.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/TestAgent/releases)。
+**当前 Release：** [v5.4.0](releases/RELEASE_NOTES_v5.4.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/sdk-forge/releases)。
 
 ## 最省事怎么用（推荐）
 
 | 你的习惯 | 做法 | 更新时要做的事 |
 |----------|------|----------------|
-| **只测某一个 SDK 项目** | OpenCode **直接打开 TestAgent 仓库**（方式 A） | `git pull` + **重启 OpenCode**（`run_mcp.py` 会自动 pip） |
+| **只测某一个 SDK 项目** | OpenCode **直接打开 SDK Forge 仓库**（方式 A） | `git pull` + **重启 OpenCode**（`run_mcp.py` 会自动 pip） |
 | **所有项目都要用 forge** | 全局插件目录 + 一键脚本 | 运行 `scripts/update-opencode-plugin.ps1` + **重启 OpenCode** |
 
 `plugin.yaml` 已改为 `python run_mcp.py`：OpenCode 启动 MCP 时会**自动**检查 `mcp`/`pydantic` 依赖和 `sdk_forge` 版本，必要时静默 `pip install -e .`。  
@@ -44,7 +44,7 @@ powershell -ExecutionPolicy Bypass -File scripts/enable-auto-update.ps1
 [System.Environment]::SetEnvironmentVariable("FORGE_AUTO_UPDATE", "1", "User")
 ```
 
-**前提：** 插件目录必须是 **git 克隆**（`%APPDATA%\OpenCode\plugins\sdk-test-forge`），不能是 zip 拷贝。
+**前提：** 插件目录必须是 **git 克隆**（`%APPDATA%\OpenCode\plugins\sdk-forge`），不能是 zip 拷贝。
 
 **仍须知道：** 拉完新代码后，**完全退出再打开 OpenCode** 才会加载新 MCP（同一次会话不会热更新）。若自动更新拉了新提交，`.forge/cache/pending_opencode_restart.json` 会提示需要重启。
 
@@ -63,13 +63,13 @@ powershell -ExecutionPolicy Bypass -File scripts/enable-auto-update.ps1
 )
 ```
 
-或在 OpenCode 的 MCP 配置里为 `sdk-test-forge` 增加 `env`（若你的 OpenCode 版本支持）：
+或在 OpenCode 的 MCP 配置里为 `sdk-forge` 增加 `env`（若你的 OpenCode 版本支持）：
 
 ```json
 "env": { "FORGE_AUTO_UPDATE": "1" }
 ```
 
-**注意：** 自动拉代码需要网络；仅适用于 **git 克隆的插件目录**（全局 `plugins/sdk-test-forge`）。  
+**注意：** 自动拉代码需要网络；仅适用于 **git 克隆的插件目录**（全局 `plugins/sdk-forge`）。  
 **不会**在运行中热更新 — 拉完新代码后，下次 **重启 OpenCode** 才会加载新 MCP 逻辑；同一次会话内仍是旧进程。
 
 **Windows 一键更新（全局插件目录）：**
@@ -86,7 +86,7 @@ powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
 |------|----------|-------------------|
 | `python -c "import sdk_forge; print(sdk_forge.__version__)"` | **运行时代码版本** | **是（最可靠）** |
 | `plugin.yaml` 里的 `version:` | OpenCode 插件清单 | 是 |
-| `pip show sdk-test-forge` → `Version` | `pyproject.toml` 包元数据 | 仅当发布时同步更新了 `pyproject.toml` |
+| `pip show sdk-forge` → `Version` | `pyproject.toml` 包元数据 | 仅当发布时同步更新了 `pyproject.toml` |
 | GitHub Release tag | 官方发布版本 | 是 |
 
 若 `pip show` 仍是 `4.0.0`，但 `sdk_forge.__version__` 已是 `5.2.0`，说明 **代码已更新、pip 元数据未重装** — 在插件目录再执行一次 `pip install -e .`。
@@ -120,14 +120,13 @@ OpenCode MCP 工具列表中应能看到 **`run_forge_autopilot`**、**`snapshot
 ### 安装
 
 ```bash
-git clone https://github.com/weininghui/TestAgent.git
-cd TestAgent
+git clone https://github.com/weininghui/sdk-forge.git`ncd sdk-forge
 pip install -r requirements.txt
 pip install -e .
 
 # 可选
-pip install "sdk-test-forge[clang]"   # libclang 头文件解析
-pip install "sdk-test-forge[yaml]"    # .forge.yaml
+pip install "sdk-forge[clang]"   # libclang 头文件解析
+pip install "sdk-forge[yaml]"    # .forge.yaml
 ```
 
 ### 验证
@@ -141,7 +140,7 @@ forge --help
 
 ## 2. OpenCode 插件 — 首次安装
 
-本仓库是 **Python MCP 插件**（`sdk-test-forge`），**不会**出现在 OpenCode 的 npm 插件市场里。请在 MCP 列表找 `sdk-test-forge`，在 Agent 下拉框找 `forge`。
+本仓库是 **Python MCP 插件**（`sdk-forge`），**不会**出现在 OpenCode 的 npm 插件市场里。请在 MCP 列表找 `sdk-forge`，在 Agent 下拉框找 `forge`。
 
 任选 **一种** 方式：
 
@@ -150,8 +149,7 @@ forge --help
 1. 克隆：
 
    ```bash
-   git clone https://github.com/weininghui/TestAgent.git
-   cd TestAgent
+   git clone https://github.com/weininghui/sdk-forge.git`n   cd sdk-forge
    ```
 
 2. 安装 Python 包（可编辑模式）：
@@ -161,7 +159,7 @@ forge --help
    pip install -e .
    ```
 
-3. 用 OpenCode **打开 TestAgent 根目录**。
+3. 用 OpenCode **打开 SDK Forge 根目录**。
 
 4. OpenCode 自动加载根目录 `plugin.yaml` → 启动 `python mcp_server.py`。
 
@@ -174,30 +172,30 @@ forge --help
    ~/.config/opencode/agents/          # Linux / macOS
    ```
 
-6. OpenCode 聊天窗口选择 Agent **`forge`**；确认 MCP **`sdk-test-forge`** 已启用。
+6. OpenCode 聊天窗口选择 Agent **`forge`**；确认 MCP **`sdk-forge`** 已启用。
 
 ### 方式 B — 全局插件目录（任意项目都能用）
 
 Windows 标准路径：
 
 ```
-%APPDATA%\OpenCode\plugins\sdk-test-forge
+%APPDATA%\OpenCode\plugins\sdk-forge
 ```
 
 示例完整路径：
 
 ```
-C:\Users\<你的用户名>\AppData\Roaming\OpenCode\plugins\sdk-test-forge
+C:\Users\<你的用户名>\AppData\Roaming\OpenCode\plugins\sdk-forge
 ```
 
 **步骤（Windows PowerShell）：**
 
 ```powershell
-$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-test-forge"
+$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-forge"
 New-Item -ItemType Directory -Force -Path (Split-Path $PluginDir) | Out-Null
 
 # 首次安装：克隆指定 release tag
-git clone --branch v5.1.0 --depth 1 https://github.com/weininghui/TestAgent.git $PluginDir
+git clone --branch v5.1.0 --depth 1 https://github.com/weininghui/sdk-forge.git $PluginDir
 
 cd $PluginDir
 pip install -r requirements.txt
@@ -212,9 +210,9 @@ Copy-Item -Force ".opencode\agents\forge*.md" $AgentsDir
 **Linux / macOS：**
 
 ```bash
-PLUGIN_DIR="$HOME/.config/opencode/plugins/sdk-test-forge"
+PLUGIN_DIR="$HOME/.config/opencode/plugins/sdk-forge"
 mkdir -p "$(dirname "$PLUGIN_DIR")"
-git clone --branch v5.1.0 --depth 1 https://github.com/weininghui/TestAgent.git "$PLUGIN_DIR"
+git clone --branch v5.1.0 --depth 1 https://github.com/weininghui/sdk-forge.git "$PLUGIN_DIR"
 cd "$PLUGIN_DIR"
 pip install -r requirements.txt
 pip install -e .
@@ -227,8 +225,8 @@ cp .opencode/agents/forge*.md "$HOME/.config/opencode/agents/"
 ```json
 {
   "mcp": {
-    "sdk-test-forge": {
-      "command": ["python", "C:/Users/YOU/AppData/Roaming/OpenCode/plugins/sdk-test-forge/mcp_server.py"],
+    "sdk-forge": {
+      "command": ["python", "C:/Users/YOU/AppData/Roaming/OpenCode/plugins/sdk-forge/mcp_server.py"],
       "enabled": true,
       "type": "local"
     }
@@ -244,7 +242,7 @@ cp .opencode/agents/forge*.md "$HOME/.config/opencode/agents/"
 
 ## 3. 更新到最新版本
 
-适用于：OpenCode 里没有 `run_forge_autopilot`、或 `sdk_forge.__version__` 低于 [最新 Release](https://github.com/weininghui/TestAgent/releases)。
+适用于：OpenCode 里没有 `run_forge_autopilot`、或 `sdk_forge.__version__` 低于 [最新 Release](https://github.com/weininghui/sdk-forge/releases)。
 
 > **注意：** 只 `git pull` 不够，必须 **`pip install -e .`** 并 **重启 OpenCode**（MCP 是子进程，不会热更新）。
 
@@ -255,7 +253,7 @@ cp .opencode/agents/forge*.md "$HOME/.config/opencode/agents/"
 **Windows PowerShell：**
 
 ```powershell
-$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-test-forge"
+$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-forge"
 cd $PluginDir
 
 # 若是 git 仓库
@@ -276,7 +274,7 @@ Copy-Item -Force ".opencode\agents\forge*.md" "$env:APPDATA\OpenCode\agents\"
 **Linux / macOS：**
 
 ```bash
-PLUGIN_DIR="$HOME/.config/opencode/plugins/sdk-test-forge"
+PLUGIN_DIR="$HOME/.config/opencode/plugins/sdk-forge"
 cd "$PLUGIN_DIR"
 git fetch --tags
 git checkout v5.1.0
@@ -286,10 +284,10 @@ cp .opencode/agents/forge*.md "$HOME/.config/opencode/agents/"
 # 重启 OpenCode
 ```
 
-### 路径 B — 直接打开 TestAgent 仓库的用户
+### 路径 B — 直接打开 SDK Forge 仓库的用户
 
 ```bash
-cd /path/to/TestAgent
+cd /path/to/sdk-forge
 git fetch --tags
 git checkout v5.1.0
 pip install -r requirements.txt
@@ -305,7 +303,7 @@ pip install -e . --force-reinstall
 
 ```powershell
 $Src = "E:\vs_test\AINew\aiagent-main"
-$Dst = "$env:APPDATA\OpenCode\plugins\sdk-test-forge"
+$Dst = "$env:APPDATA\OpenCode\plugins\sdk-forge"
 robocopy $Src $Dst /MIR /XD .git build .forge __pycache__ .pytest_cache
 cd $Dst
 pip install -e . --force-reinstall
@@ -317,7 +315,7 @@ Copy-Item -Force ".opencode\agents\forge*.md" "$env:APPDATA\OpenCode\agents\"
 ```bash
 python -c "import sdk_forge; print(sdk_forge.__version__)"
 forge autopilot --help
-pip show sdk-test-forge
+pip show sdk-forge
 ```
 
 | 检查项 | v5.2.0 预期 |

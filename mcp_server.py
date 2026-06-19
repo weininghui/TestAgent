@@ -43,8 +43,8 @@ logging.basicConfig(
 logger = logging.getLogger("mcp_server")
 
 mcp = FastMCP(
-    "SDK Test Forge Tools",
-    instructions="""SDK Test Forge Tools — scan, plan, compile, and run GTest suites for C/C++ SDKs.
+    "SDK Forge",
+    instructions="""SDK Forge — scan, plan, compile, and run GTest suites for C/C++ SDKs.
 
 Tools:
   - forge_doctor        → check cmake, compiler, caches
@@ -616,7 +616,7 @@ async def generate_mocks(
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="MCP server for SDK Test Forge")
+    parser = argparse.ArgumentParser(description="MCP server for SDK Forge")
     parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio")
     parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()

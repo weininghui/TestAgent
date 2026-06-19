@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.4.0] - 2026-06-20
+
+Rebrand to **SDK Forge** — professional naming across GitHub, OpenCode plugin, and pip.
+
+### Changed
+- GitHub repository: `TestAgent` → **`sdk-forge`**
+- OpenCode plugin ID / directory: `sdk-test-forge` → **`sdk-forge`**
+- pip package: `sdk-test-forge` → **`sdk-forge`**
+- Brand display: SDK Test Forge → **SDK Forge**
+- Skill: `test-forge` → **`sdk-forge`**
+- GTest/scan cache default path: `sdk-forge` (legacy `sdk-test-forge` fallback on read)
+- Scheduled task: `SDKForge-PluginAutoUpdate`
+
+### Unchanged
+- Python module `sdk_forge`, CLI `forge`, Agent `forge`, MCP tool names
+
+### Added
+- [`docs/MIGRATION_v5.4.md`](docs/MIGRATION_v5.4.md)
+- [`scripts/migrate-rename-sdk-forge.ps1`](scripts/migrate-rename-sdk-forge.ps1)
+
 ## [5.3.0] - 2026-06-20
 
 Multi-agent speed: Autopilot step loop, parallel scan, dynamic batch, oracle pipeline.

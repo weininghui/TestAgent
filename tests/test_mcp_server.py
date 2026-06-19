@@ -1,4 +1,4 @@
-"""Tests for mcp_server.py — SDK Test Forge MCP server."""
+﻿"""Tests for mcp_server.py — SDK Forge MCP server."""
 
 import json
 import os
@@ -758,7 +758,7 @@ class TestReport:
         }
         result = report_impl(build_state_json=json.dumps(state))
         assert result["status"] == "ok"
-        assert "SDK Test Forge Report" in result["markdown"]
+        assert "SDK Forge Report" in result["markdown"]
         assert "v1.14.0" in result["markdown"]
 
     def test_report_html(self, tmp_path):
@@ -790,7 +790,7 @@ class TestReport:
         assert result["format"] == "html"
         assert Path(result["html_path"]).is_file()
         html = result["html"]
-        assert "SDK Test Forge Report" in html
+        assert "SDK Forge Report" in html
         assert "测试摘要" in html
         assert "Conclusion" in html
         assert "<script>" not in html

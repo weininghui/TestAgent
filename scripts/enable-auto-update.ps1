@@ -1,13 +1,13 @@
-# Enable GitHub auto-update fallback for SDK Test Forge OpenCode plugin
+# Enable GitHub auto-update fallback for SDK Forge OpenCode plugin
 # 启用 GitHub 自动更新兜底（环境变量 + 可选每日计划任务）
 param(
-    [string]$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-test-forge",
+    [string]$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-forge",
     [bool]$DailyTask = $true,
     [string]$DailyAt = "03:00"
 )
 
 $ErrorActionPreference = "Stop"
-$Repo = "https://github.com/weininghui/TestAgent.git"
+$Repo = "https://github.com/weininghui/sdk-forge.git"
 
 Write-Host "==> Setting FORGE_AUTO_UPDATE=1 (User environment)"
 [System.Environment]::SetEnvironmentVariable("FORGE_AUTO_UPDATE", "1", "User")
@@ -33,10 +33,13 @@ Write-Host "==> Running initial update"
 powershell -NoProfile -ExecutionPolicy Bypass -File $UpdateScript
 
 if ($DailyTask) {
-    $TaskName = "SDKTestForge-PluginAutoUpdate"
-    $Existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($Existing) {
-        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+    $TaskName = "SDKForge-PluginAutoUpdate"
+    $LegacyTask = "SDKTestForge-PluginAutoUpdate"
+    foreach ($Name in @($TaskName, $LegacyTask)) {
+        $Existing = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
+        if ($Existing) {
+            Unregister-ScheduledTask -TaskName $Name -Confirm:$false
+        }
     }
     $Action = New-ScheduledTaskAction `
         -Execute "powershell.exe" `
@@ -44,7 +47,7 @@ if ($DailyTask) {
     $Trigger = New-ScheduledTaskTrigger -Daily -At $DailyAt
     $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
     Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings `
-        -Description "Auto-update SDK Test Forge OpenCode plugin from GitHub main" | Out-Null
+        -Description "Auto-update SDK Forge OpenCode plugin from GitHub main" | Out-Null
     Write-Host "==> Scheduled task registered: $TaskName (daily at $DailyAt)"
 }
 

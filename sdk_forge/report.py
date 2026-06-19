@@ -79,7 +79,7 @@ def _build_summary(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def format_report_markdown(state: dict[str, Any]) -> str:
-    lines = ["# SDK Test Forge Report", ""]
+    lines = ["# SDK Forge Report", ""]
     status = state.get("status", "unknown")
     lines.append(f"**Status:** {status}")
     lines.append("")

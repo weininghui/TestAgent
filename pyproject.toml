@@ -3,15 +3,15 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sdk-test-forge"
-version = "5.3.0"
-description = "SDK Test Forge — OpenCode plugin and CLI for automated C/C++ GTest generation"
+name = "sdk-forge"
+version = "5.4.0"
+description = "SDK Forge — OpenCode plugin and CLI for automated C/C++ GTest generation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-keywords = ["sdk", "test-generation", "gtest", "opencode"]
+keywords = ["sdk", "test-generation", "gtest", "opencode", "sdk-forge"]
 authors = [
-    { name = "SDK Test Forge" },
+    { name = "SDK Forge" },
 ]
 
 dependencies = [
@@ -28,8 +28,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/weininghui/TestAgent"
-Repository = "https://github.com/weininghui/TestAgent"
+Homepage = "https://github.com/weininghui/sdk-forge"
+Repository = "https://github.com/weininghui/sdk-forge"
 
 [project.scripts]
 forge-mcp = "mcp_server:main"

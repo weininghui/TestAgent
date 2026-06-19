@@ -1,4 +1,4 @@
-"""Environment diagnostics for SDK Test Forge."""
+"""Environment diagnostics for SDK Forge."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def doctor_impl() -> dict:
         "name": "sdk_test_forge",
         "ok": True,
         "version": FORGE_VERSION,
-        "hint": f"SDK Test Forge {FORGE_VERSION} — authoritative package version",
+        "hint": f"SDK Forge {FORGE_VERSION} — authoritative package version",
     })
     checks.append({"name": "python", "ok": True, "version": sys.version.split()[0]})
     checks.append(_check_cmd("cmake"))

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-FORGE_YAML_TEMPLATE = """# SDK Test Forge project config (v4.1)
+FORGE_YAML_TEMPLATE = """# SDK Forge project config (v4.1)
 sdk_root: {sdk_root}
 tests_dir: {tests_dir}
 build_dir: {build_dir}

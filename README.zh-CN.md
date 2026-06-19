@@ -1,14 +1,14 @@
-# SDK Test Forge Agent
+﻿# SDK Forge
 
 [English](README.md) | **简体中文**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/weininghui/TestAgent)](https://github.com/weininghui/TestAgent/releases)
+[![Release](https://img.shields.io/github/v/release/weininghui/sdk-forge)](https://github.com/weininghui/sdk-forge/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
 面向 C/C++ SDK 的 OpenCode 插件与 **独立 CLI**（`forge`）：扫描头文件、生成 GTest 用例、链接真实 SDK 编译运行，并输出 HTML 报告。
 
-**当前版本：[v5.3.0](docs/releases/RELEASE_NOTES_v5.3.0.md)** — Autopilot 步进循环、并行 scan、动态 enrich batch、oracle 前置。
+**当前版本：[v5.4.0](docs/releases/RELEASE_NOTES_v5.4.0.md)** — 品牌重命名为 SDK Forge（`sdk-forge` 插件与 GitHub 仓库）。
 
 上一版：[v5.0.0](docs/releases/RELEASE_NOTES_v5.0.0.md) — 生产级门禁、Golden oracle、多 Agent 编排。
 
@@ -20,7 +20,7 @@
 4. **质量门禁** — 占位符比例、断言评分、Golden oracle
 5. **编译运行** — CMake 构建；失败时返回结构化 JSON 与 CMake 提示
 
-可作为 **OpenCode MCP 插件**（`sdk-test-forge`）或 **CLI** 用于脚本与 CI。
+可作为 **OpenCode MCP 插件**（`sdk-forge`）或 **CLI** 用于脚本与 CI。
 
 ## 安装与更新
 
@@ -41,15 +41,14 @@ python -c "import sdk_forge; print(sdk_forge.__version__)"   # 应与最新 Rele
 forge autopilot --help                                       # v5.1+ 必须有 autopilot
 ```
 
-OpenCode 插件目录（Windows）：`%APPDATA%\OpenCode\plugins\sdk-test-forge`
+OpenCode 插件目录（Windows）：`%APPDATA%\OpenCode\plugins\sdk-forge`
 
 每次更新代码后：在该目录执行 `pip install -e .`，并 **完全重启 OpenCode**。
 
 ## 快速开始（CLI）
 
 ```bash
-git clone https://github.com/weininghui/TestAgent.git
-cd TestAgent
+git clone https://github.com/weininghui/sdk-forge.git`ncd sdk-forge
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -61,8 +60,8 @@ pip install -e .
 可选依赖：
 
 ```bash
-pip install "sdk-test-forge[clang]"   # libclang 头文件解析
-pip install "sdk-test-forge[yaml]"    # .forge.yaml（无 PyYAML 时可用 JSON）
+pip install "sdk-forge[clang]"   # libclang 头文件解析
+pip install "sdk-forge[yaml]"    # .forge.yaml（无 PyYAML 时可用 JSON）
 ```
 
 ## 快速开始（OpenCode Agent）
@@ -223,7 +222,7 @@ JSON 配置示例：[`examples/forge_test_sdk/.forge.json`](examples/forge_test_
 ## 项目结构
 
 ```
-TestAgent/
+sdk-forge/
 ├── sdk_forge/          # Python 包（CLI + 核心逻辑）
 ├── mcp_server.py       # OpenCode MCP 入口
 ├── tests/              # pytest 测试
@@ -293,8 +292,8 @@ python -m pytest tests/ -v
 
 ## 发布
 
-- [全部 Release](https://github.com/weininghui/TestAgent/releases)
-- 最新：[RELEASE_NOTES_v5.3.0.md](docs/releases/RELEASE_NOTES_v5.3.0.md)
+- [全部 Release](https://github.com/weininghui/sdk-forge/releases)
+- 最新：[RELEASE_NOTES_v5.4.0.md](docs/releases/RELEASE_NOTES_v5.4.0.md)
 
 ## 许可证
 

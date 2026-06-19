@@ -1,4 +1,4 @@
-# Install & Update — OpenCode Plugin & CLI
+﻿# Install & Update — OpenCode Plugin & CLI
 
 **English** | [简体中文](INSTALL.zh-CN.md)
 
@@ -10,13 +10,13 @@ This guide separates three topics:
 | [2. OpenCode plugin — first install](#2-opencode-plugin-first-install) | First-time MCP + Agent setup |
 | [3. Update to the latest release](#3-update-to-the-latest-release) | Already installed but version is old |
 
-**Current release:** [v5.3.0](releases/RELEASE_NOTES_v5.3.0.md) — check [GitHub Releases](https://github.com/weininghui/TestAgent/releases) for the latest tag.
+**Current release:** [v5.4.0](releases/RELEASE_NOTES_v5.4.0.md) — check [GitHub Releases](https://github.com/weininghui/sdk-forge/releases) for the latest tag.
 
 ## Easiest workflows (recommended)
 
 | Use case | Approach | When you update |
 |----------|----------|-----------------|
-| **One SDK / dev in this repo** | Open **TestAgent** in OpenCode (Option A) | `git pull` + **restart OpenCode** (`run_mcp.py` auto-pips) |
+| **One SDK / dev in this repo** | Open **SDK Forge** repo in OpenCode (Option A) | `git pull` + **restart OpenCode** (`run_mcp.py` auto-pips) |
 | **forge in every project** | Global plugin dir + one script | Run `scripts/update-opencode-plugin.ps1` + **restart OpenCode** |
 
 `plugin.yaml` uses `python run_mcp.py`: on MCP start it **auto-checks** `mcp`/`pydantic` and `sdk_forge` version, and runs a silent `pip install -e .` if needed.  
@@ -69,7 +69,7 @@ powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
 |--------|---------------|---------------------|
 | `python -c "import sdk_forge; print(sdk_forge.__version__)"` | **Runtime code version** | **Yes** |
 | `plugin.yaml` → `version:` | OpenCode plugin manifest | Yes |
-| `pip show sdk-test-forge` → `Version` | `pyproject.toml` package metadata | Only if `pyproject.toml` was updated with the release |
+| `pip show sdk-forge` → `Version` | `pyproject.toml` package metadata | Only if `pyproject.toml` was updated with the release |
 | GitHub Release tag | Official release | Yes |
 
 If `pip show` says `4.0.0` but `sdk_forge.__version__` says `5.2.0`, your **code is new** but **package metadata is stale** — run `pip install -e .` again after updating files.
@@ -100,14 +100,13 @@ Use this when you only need the `forge` command in a terminal or CI job.
 ### Install
 
 ```bash
-git clone https://github.com/weininghui/TestAgent.git
-cd TestAgent
+git clone https://github.com/weininghui/sdk-forge.git`ncd sdk-forge
 pip install -r requirements.txt
 pip install -e .
 
 # Optional
-pip install "sdk-test-forge[clang]"   # libclang header parsing
-pip install "sdk-test-forge[yaml]"    # .forge.yaml support
+pip install "sdk-forge[clang]"   # libclang header parsing
+pip install "sdk-forge[yaml]"    # .forge.yaml support
 ```
 
 ### Verify
@@ -121,7 +120,7 @@ forge --help
 
 ## 2. OpenCode plugin — first install
 
-OpenCode loads this project as a **Python MCP plugin** (`sdk-test-forge`). It does **not** appear in OpenCode’s npm plugin marketplace.
+OpenCode loads this project as a **Python MCP plugin** (`sdk-forge`). It does **not** appear in OpenCode’s npm plugin marketplace.
 
 Choose **one** of the following:
 
@@ -130,8 +129,7 @@ Choose **one** of the following:
 1. Clone the repo:
 
    ```bash
-   git clone https://github.com/weininghui/TestAgent.git
-   cd TestAgent
+   git clone https://github.com/weininghui/sdk-forge.git`n   cd sdk-forge
    ```
 
 2. Install Python package (editable):
@@ -141,7 +139,7 @@ Choose **one** of the following:
    pip install -e .
    ```
 
-3. Open the **TestAgent folder** in OpenCode.
+3. Open the **SDK Forge folder** in OpenCode.
 
 4. OpenCode auto-loads root `plugin.yaml` → MCP server `python mcp_server.py`.
 
@@ -155,30 +153,30 @@ Choose **one** of the following:
      ~/.config/opencode/agents/          # Linux / macOS
      ```
 
-6. In OpenCode: select Agent **`forge`** in the chat dropdown; confirm MCP **`sdk-test-forge`** is enabled.
+6. In OpenCode: select Agent **`forge`** in the chat dropdown; confirm MCP **`sdk-forge`** is enabled.
 
 ### Option B — Global plugin directory (use forge in any project)
 
 Standard location on Windows:
 
 ```
-%APPDATA%\OpenCode\plugins\sdk-test-forge
+%APPDATA%\OpenCode\plugins\sdk-forge
 ```
 
 Full path example:
 
 ```
-C:\Users\<YOU>\AppData\Roaming\OpenCode\plugins\sdk-test-forge
+C:\Users\<YOU>\AppData\Roaming\OpenCode\plugins\sdk-forge
 ```
 
 **Steps (Windows PowerShell):**
 
 ```powershell
-$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-test-forge"
+$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-forge"
 New-Item -ItemType Directory -Force -Path (Split-Path $PluginDir) | Out-Null
 
 # First install: clone release tag
-git clone --branch v5.1.0 --depth 1 https://github.com/weininghui/TestAgent.git $PluginDir
+git clone --branch v5.1.0 --depth 1 https://github.com/weininghui/sdk-forge.git $PluginDir
 
 cd $PluginDir
 pip install -r requirements.txt
@@ -193,9 +191,9 @@ Copy-Item -Force ".opencode\agents\forge*.md" $AgentsDir
 **Linux / macOS:**
 
 ```bash
-PLUGIN_DIR="$HOME/.config/opencode/plugins/sdk-test-forge"
+PLUGIN_DIR="$HOME/.config/opencode/plugins/sdk-forge"
 mkdir -p "$(dirname "$PLUGIN_DIR")"
-git clone --branch v5.1.0 --depth 1 https://github.com/weininghui/TestAgent.git "$PLUGIN_DIR"
+git clone --branch v5.1.0 --depth 1 https://github.com/weininghui/sdk-forge.git "$PLUGIN_DIR"
 cd "$PLUGIN_DIR"
 pip install -r requirements.txt
 pip install -e .
@@ -208,8 +206,8 @@ cp .opencode/agents/forge*.md "$HOME/.config/opencode/agents/"
 ```json
 {
   "mcp": {
-    "sdk-test-forge": {
-      "command": ["python", "C:/Users/YOU/AppData/Roaming/OpenCode/plugins/sdk-test-forge/mcp_server.py"],
+    "sdk-forge": {
+      "command": ["python", "C:/Users/YOU/AppData/Roaming/OpenCode/plugins/sdk-forge/mcp_server.py"],
       "enabled": true,
       "type": "local"
     }
@@ -225,7 +223,7 @@ cp .opencode/agents/forge*.md "$HOME/.config/opencode/agents/"
 
 ## 3. Update to the latest release
 
-Use this when OpenCode still shows old tools (no `run_forge_autopilot`) or `sdk_forge.__version__` is below the [latest release](https://github.com/weininghui/TestAgent/releases).
+Use this when OpenCode still shows old tools (no `run_forge_autopilot`) or `sdk_forge.__version__` is below the [latest release](https://github.com/weininghui/sdk-forge/releases).
 
 > **Important:** Updating files alone is not enough. You must **`pip install -e .`** again and **restart OpenCode** so the MCP subprocess reloads.
 
@@ -236,7 +234,7 @@ Replace `v5.1.0` with the latest tag from GitHub Releases.
 **Windows PowerShell:**
 
 ```powershell
-$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-test-forge"
+$PluginDir = "$env:APPDATA\OpenCode\plugins\sdk-forge"
 cd $PluginDir
 
 # If directory is a git repo
@@ -257,7 +255,7 @@ Copy-Item -Force ".opencode\agents\forge*.md" "$env:APPDATA\OpenCode\agents\"
 **Linux / macOS:**
 
 ```bash
-PLUGIN_DIR="$HOME/.config/opencode/plugins/sdk-test-forge"
+PLUGIN_DIR="$HOME/.config/opencode/plugins/sdk-forge"
 cd "$PLUGIN_DIR"
 git fetch --tags
 git checkout v5.1.0
@@ -267,10 +265,10 @@ cp .opencode/agents/forge*.md "$HOME/.config/opencode/agents/"
 # Restart OpenCode
 ```
 
-### Path B — You open the TestAgent repo as the project
+### Path B — You open the SDK Forge repo as the project
 
 ```bash
-cd /path/to/TestAgent
+cd /path/to/sdk-forge
 git fetch --tags
 git checkout v5.1.0
 pip install -r requirements.txt
@@ -286,7 +284,7 @@ If you develop in `E:\vs_test\AINew\aiagent-main` (or similar) and want OpenCode
 
 ```powershell
 $Src = "E:\vs_test\AINew\aiagent-main"
-$Dst = "$env:APPDATA\OpenCode\plugins\sdk-test-forge"
+$Dst = "$env:APPDATA\OpenCode\plugins\sdk-forge"
 robocopy $Src $Dst /MIR /XD .git build .forge __pycache__ .pytest_cache
 cd $Dst
 pip install -e . --force-reinstall
@@ -298,7 +296,7 @@ Copy-Item -Force ".opencode\agents\forge*.md" "$env:APPDATA\OpenCode\agents\"
 ```bash
 python -c "import sdk_forge; print(sdk_forge.__version__)"
 forge autopilot --help
-pip show sdk-test-forge
+pip show sdk-forge
 ```
 
 | Check | Expected (v5.2.0) |
