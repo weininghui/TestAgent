@@ -143,6 +143,23 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
             )
         parts.append(_section("Plan Gap", f"<ul>{''.join(items)}</ul>"))
 
+    quality = state.get("scaffold_quality") or (plan_gap.get("scaffold_quality") if plan_gap else None)
+    if quality:
+        ratio = quality.get("placeholder_ratio")
+        body = (
+            f"<p>Placeholder ratio: <strong>{_esc(ratio)}</strong> "
+            f"(total placeholders: {_esc(quality.get('placeholder_total', 0))})</p>"
+        )
+        if quality.get("needs_enrichment"):
+            body += "<p><em>Needs Agent enrichment before relying on results.</em></p>"
+        files = quality.get("files") or []
+        if files:
+            body += "<ul>" + "".join(
+                f"<li><code>{_esc(f.get('file'))}</code> — placeholders: {_esc(f.get('total', 0))}</li>"
+                for f in files[:10]
+            ) + "</ul>"
+        parts.append(_section("用例质量", body))
+
     proposal_items = (state.get("proposals") or {}).get("proposals") or []
     if proposal_items:
         items = []

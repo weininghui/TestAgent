@@ -1,15 +1,14 @@
 ---
 name: test-forge
-description: Scan C/C++ SDK headers, generate GTest code, compile and run tests with SDK linking
+description: Scan C/C++ SDK headers, generate smart GTest code, compile and run tests with SDK linking
 ---
 
-# SDK Test Forge Skill (v3.6)
+# SDK Test Forge Skill (v4.0)
 
 ## Communication / 交流语言
 
 - **Reply in Chinese by default** when talking to the user.
-- Keep CLI commands, tool names, JSON keys, and file paths in English.
-- Switch to English **only** when the user explicitly asks in the chat (e.g. "reply in English", "请用英文").
+- Switch to English only when the user explicitly asks in the chat.
 
 ## Workflow
 
@@ -21,47 +20,51 @@ scan_headers: { sdk_root: /path/to/sdk }
 suggest_test_plan: { scan_json: ..., project_dir: ./my_tests, max_targets: 20 }
 ```
 
-### 2. Scaffold + Gap
+### 2. Smart Scaffold + Enrich
 
 ```
-generate_test_skeleton: { output_dir: ./my_tests/tests, plan_json: ... }
+generate_test_skeleton: {
+  output_dir: ./my_tests/tests,
+  plan_json: ...,
+  fidelity: smart,
+  overwrite: true
+}
+enrich_test_cases: { project_dir: ./my_tests }
+```
+
+Agent fills `// AGENT:` markers using header excerpts from enrich briefs.
+
+```
+analyze_scaffold_quality: { project_dir: ./my_tests }
+```
+
+If `placeholder_ratio > 0.5`, continue editing before build.
+
+### 3. Build + Auto Report
+
+```
+build_tests: { project_dir: ./my_tests, max_retries: 3 }
+```
+
+Tell user to open `html_path`. No manual `forge_report` needed.
+
+### 4. Coverage expand (optional)
+
+```
 analyze_plan_gap: { project_dir: ./my_tests }
+coverage_expand: { project_dir: ./my_tests, threshold_pct: 80 }
+build_tests: { project_dir: ./my_tests }
 ```
 
-### 3. Build — report auto-generated
+### 5. Failures (confirmation gate)
 
 ```
-build_tests: { project_dir: ./my_tests, max_retries: 3, auto_fix_config: true }
+analyze_test_failures → propose_test_fixes → apply_test_fixes(confirm=true)
 ```
 
-**No manual `forge_report` needed.** After `build_tests`, the JSON response includes:
+## CLI equivalents
 
-- `html_path` — open in browser (default `.forge/cache/report.html`)
-- `report.summary` — passed/failed counts
-
-Tell the user to open `html_path`. `get_session_context` also returns `last_report_html`.
-
-Set `auto_report: false` in `.forge.yaml` to disable auto-generation.
-
-### 4. Test failures (confirmation gate)
-
-```
-analyze_test_failures: { build_dir: ./my_tests/build }
-propose_test_fixes: { build_dir: ./my_tests/build, project_dir: ./my_tests }
-apply_test_fixes: { project_dir: ./my_tests, confirm: true }
-```
-
-Then re-run `build_tests` — a fresh HTML report is generated automatically.
-
-### 5. Optional manual report
-
-Only if you need to regenerate or add extra notes:
-
-```
-forge_report: { project_dir: ./my_tests, output_format: html, agent_summary: "..." }
-```
-
-## Optional
-
-- `sanitizer: asan` in `.forge.yaml` (Linux/clang)
-- `get_compile_commands` after compile for libclang/IDE
+- `forge scaffold --fidelity smart`
+- `forge enrich --project-dir .`
+- `forge quality --project-dir .`
+- `forge coverage-expand --project-dir .`

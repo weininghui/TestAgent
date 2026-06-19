@@ -790,6 +790,105 @@ class TestAutoReport:
         assert result["report"]["format"] == "html"
 
 
+class TestCodegen:
+    def test_parse_params(self):
+        from sdk_forge.codegen import parse_params
+
+        params = parse_params("int a, const char* name")
+        assert len(params) == 2
+        assert params[0].type_name == "int"
+        assert params[1].is_pointer
+
+    def test_render_add_normal(self):
+        from sdk_forge.codegen import render_assertion
+
+        target = {
+            "symbol": "calc_add",
+            "return_type": "int",
+            "params": "int a, int b",
+        }
+        body = render_assertion("calc_add", {"name": "normal"}, target, fidelity="smart")
+        assert "EXPECT_EQ" in body
+        assert "calc_add(2, 3)" in body
+
+    def test_render_unknown_type_agent_marker(self):
+        from sdk_forge.codegen import render_assertion
+
+        target = {"symbol": "foo", "return_type": "MyType", "params": "MyType x"}
+        body = render_assertion("foo", {"name": "normal"}, target, fidelity="smart")
+        assert "AGENT:" in body
+
+    def test_skeleton_fidelity(self):
+        from sdk_forge.codegen import render_assertion
+
+        target = {"symbol": "calc_add", "return_type": "int", "params": "int a, int b"}
+        body = render_assertion("calc_add", {"name": "normal"}, target, fidelity="skeleton")
+        assert "TODO" in body
+
+    def test_smart_scaffold_expect_eq(self, tmp_path):
+        from sdk_forge.templates import generate_test_skeleton_impl
+
+        plan = {
+            "status": "ok",
+            "targets": [{
+                "symbol": "calc_add",
+                "kind": "function",
+                "file": "calc.h",
+                "return_type": "int",
+                "params": "int a, int b",
+                "scenarios": [{"name": "normal"}, {"name": "boundary"}],
+            }],
+        }
+        out = tmp_path / "tests"
+        result = generate_test_skeleton_impl(plan_json=plan, output_dir=str(out), fidelity="smart")
+        content = (out / "calc_add_test.cpp").read_text(encoding="utf-8")
+        assert result["fidelity"] == "smart"
+        assert "EXPECT_EQ" in content
+
+    def test_count_placeholders(self):
+        from sdk_forge.codegen import count_placeholders
+
+        text = "// TODO: x\nEXPECT_TRUE(true);\n// AGENT: fill"
+        counts = count_placeholders(text)
+        assert counts["total"] >= 2
+
+
+class TestEnrich:
+    def test_analyze_scaffold_quality(self, tmp_path):
+        from sdk_forge.enrich import analyze_scaffold_quality_impl
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "foo_test.cpp").write_text(
+            "TEST(Foo, A) { EXPECT_TRUE(true); // TODO: fix }\n",
+            encoding="utf-8",
+        )
+        result = analyze_scaffold_quality_impl(project_dir=str(tmp_path))
+        assert result["status"] == "ok"
+        assert result["placeholder_total"] >= 1
+        assert Path(result["saved_to"]).is_file()
+
+    def test_enrich_briefs(self, tmp_path):
+        from sdk_forge.enrich import enrich_test_cases_impl
+
+        cache = tmp_path / ".forge" / "cache"
+        cache.mkdir(parents=True)
+        plan = {"status": "ok", "sdk_root": "", "targets": [{
+            "symbol": "calc_add", "file": "calc.h", "scenarios": [{"name": "normal"}],
+        }]}
+        (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "calc_add_test.cpp").write_text(
+            "TEST(Calc_add, Normal) { // AGENT: fill }\n",
+            encoding="utf-8",
+        )
+        result = enrich_test_cases_impl(project_dir=str(tmp_path))
+        assert result["status"] == "ok"
+        assert result["brief_count"] >= 1
+        assert result["briefs"][0]["markers"]
+
+
 class TestTemplates:
     def test_scaffold_from_plan(self, tmp_path):
         from sdk_forge.templates import generate_test_skeleton_impl
@@ -815,7 +914,7 @@ class TestTemplates:
         assert result["status"] == "ok"
         assert len(result["files_written"]) == 1
         content = (out / "calc_add_test.cpp").read_text(encoding="utf-8")
-        assert "TEST(Calc_add, Normal)" in content
+        assert "TEST(Calc_add, Normal)" in content or "TEST(CalcAdd, Normal)" in content
         assert "calc.h" in content
 
 

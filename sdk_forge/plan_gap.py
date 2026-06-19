@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from sdk_forge.codegen import count_placeholders
 from sdk_forge.plan import suggest_test_plan_impl
 from sdk_forge.templates import _safe_scenario, _safe_test_suite
 
@@ -154,6 +155,36 @@ def analyze_plan_gap_impl(
         if key not in plan_symbols
     ]
 
+    quality_files: list[dict[str, Any]] = []
+    placeholder_total = 0
+    line_total = 0
+    if tests_path.is_dir():
+        for path in sorted(tests_path.glob("*_test.cpp")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            counts = count_placeholders(text)
+            lines = len(text.splitlines()) or 1
+            placeholder_total += counts["total"]
+            line_total += lines
+            sym = _symbol_from_test_file(path).lower()
+            needs_test_p = any(
+                t.get("use_test_p")
+                and re.sub(r"[^a-z0-9_]", "_", str(t.get("symbol", "")).lower()).strip("_") == sym
+                for t in (plan.get("targets") or [])
+            )
+            quality_files.append({
+                "file": path.name,
+                "path": str(path.resolve()),
+                **counts,
+                "has_test_p": "TEST_P" in text,
+                "has_instantiate": "INSTANTIATE_TEST_SUITE_P" in text,
+                "missing_test_p": needs_test_p and "TEST_P" not in text,
+            })
+
+    placeholder_ratio = round(placeholder_total / max(line_total, 1), 4)
+
     build_dir = ""
     from sdk_forge.retry import load_build_state
 
@@ -183,6 +214,11 @@ def analyze_plan_gap_impl(
         "covered_targets": covered_targets,
         "unplanned_tests": unplanned_tests,
         "coverage": coverage_block,
+        "scaffold_quality": {
+            "placeholder_total": placeholder_total,
+            "placeholder_ratio": placeholder_ratio,
+            "files": quality_files,
+        },
     }
 
     cache = root / ".forge" / "cache"

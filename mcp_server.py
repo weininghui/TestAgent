@@ -28,6 +28,8 @@ from sdk_forge.retry import load_build_state
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import CLANG_AVAILABLE, scan_headers_impl
 from sdk_forge.session import get_session_context_impl, save_plan_state
+from sdk_forge.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl, load_scaffold_quality
+from sdk_forge.coverage_expand import coverage_expand_impl
 from sdk_forge.templates import generate_test_skeleton_impl
 from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
 from sdk_forge.workflow import update_workflow_stage
@@ -47,7 +49,10 @@ Tools:
   - forge_doctor        → check cmake, compiler, caches
   - init_forge_project  → scaffold tests + .forge.yaml
   - suggest_test_plan   → structured test scenarios from scan
-  - generate_test_skeleton → GTest .cpp skeleton from plan
+  - generate_test_skeleton → GTest .cpp (smart assertions or skeleton)
+  - enrich_test_cases     → Agent briefs for complex case completion
+  - analyze_scaffold_quality → placeholder/TODO ratio
+  - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
   - analyze_test_failures → parse GTest failure output
   - propose_test_fixes     → suggested assertion edits (confirmation required)
@@ -100,16 +105,60 @@ async def suggest_test_plan(
     return json.dumps(result, indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="Generate compilable GTest skeleton .cpp files from plan or SDK scan.")
+@mcp.tool(description="Generate GTest files with smart assertions (fidelity=smart) or TODO skeleton.")
 async def generate_test_skeleton(
     output_dir: Annotated[str, "Directory for generated *_test.cpp files."],
     plan_json: Annotated[str, "JSON from suggest_test_plan."] = "",
     sdk_root: Annotated[str, "Scan SDK and plan when plan_json empty."] = "",
     project_name: Annotated[str, "Base name fallback."] = "sdk_tests",
     overwrite: Annotated[bool | str, "Overwrite existing test files."] = False,
+    fidelity: Annotated[str, "smart (default) or skeleton."] = "smart",
+    group_by_header: Annotated[bool | str, "Group targets per header into one file with TEST_F."] = False,
 ) -> str:
     return json.dumps(
-        generate_test_skeleton_impl(plan_json or None, output_dir, sdk_root, project_name, overwrite),
+        generate_test_skeleton_impl(
+            plan_json or None, output_dir, sdk_root, project_name, overwrite,
+            fidelity=fidelity, group_by_header=group_by_header,
+        ),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Build Agent enrichment briefs (header excerpts, AGENT markers, scenarios).")
+async def enrich_test_cases(
+    project_dir: Annotated[str, "Project root with plan and tests/."] = "",
+    symbol: Annotated[str, "Optional single symbol filter."] = "",
+    tests_dir: Annotated[str, "Override tests directory."] = "",
+) -> str:
+    return json.dumps(
+        enrich_test_cases_impl(project_dir, symbol=symbol, tests_dir=tests_dir),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Analyze placeholder/TODO ratio in generated test files.")
+async def analyze_scaffold_quality(
+    project_dir: Annotated[str, "Project root with tests/."] = "",
+    tests_dir: Annotated[str, "Override tests directory."] = "",
+) -> str:
+    return json.dumps(
+        analyze_scaffold_quality_impl(project_dir, tests_dir=tests_dir),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Append TEST_P boundary cases for low-coverage plan targets.")
+async def coverage_expand(
+    project_dir: Annotated[str, "Project root with plan, gap, and tests/."] = "",
+    tests_dir: Annotated[str, "Override tests directory."] = "",
+    threshold_pct: Annotated[float | str, "Expand when line coverage below this (default 80)."] = 80.0,
+) -> str:
+    try:
+        threshold = float(threshold_pct)
+    except (TypeError, ValueError):
+        threshold = 80.0
+    return json.dumps(
+        coverage_expand_impl(project_dir, tests_dir=tests_dir, threshold_pct=threshold),
         indent=2, ensure_ascii=False,
     )
 

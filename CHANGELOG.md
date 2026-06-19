@@ -1,5 +1,29 @@
 # Changelog
 
+## [4.0.0] - 2026-06-19
+
+Smart test case generation roadmap (v3.7–v4.0 consolidated).
+
+### Added (v3.7 — param-aware codegen)
+- `sdk_forge/codegen.py` — `parse_params`, `infer_boundary_values`, `render_assertion`
+- `generate_test_skeleton(fidelity=smart|skeleton)` — real `EXPECT_*` for int/float/string ops
+- CLI: `forge scaffold --fidelity smart`
+
+### Added (v3.8 — dimensions)
+- Plan: enum targets, overflow/empty_input/lifecycle scenarios, `use_test_p`
+- Codegen: TEST_P blocks, enum bodies, class construction/copy/destructor
+- `analyze_plan_gap`: `scaffold_quality` + placeholder counts per file
+
+### Added (v3.9 — Agent loop)
+- `enrich_test_cases` / `forge enrich` — Agent briefs with header excerpts + AGENT markers
+- `analyze_scaffold_quality` / `forge quality` — placeholder ratio cache
+- Session: `scaffold_quality` field
+
+### Added (v4.0 — complex scenarios)
+- `coverage_expand` / `forge coverage-expand` — append TEST_P for low-coverage symbols
+- TEST_F fixture grouping (`group_by_header`)
+- HTML/Markdown report **用例质量** section
+
 ## [3.6.2] - 2026-06-19
 
 Conventions: bilingual code comments and Chinese-first Agent replies.

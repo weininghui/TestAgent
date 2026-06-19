@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.6.2** — Chinese-first Agent replies; bilingual code comment conventions ([docs/CONVENTIONS.md](docs/CONVENTIONS.md)).
+**Current release: v4.0.0** — Smart test codegen (`fidelity=smart`), Agent enrich loop, coverage expand.
 
 ## What it does
 
@@ -206,6 +206,10 @@ TestAgent/
 | compile_commands | `get_compile_commands` | `forge compdb` | v3.4 |
 | Sanitizer (ASan/UBSan) | `sanitizer` in compile | `--sanitizer` | v3.4 |
 | Session context | `get_session_context` | `forge session` | v3.4 |
+| Smart test codegen | `generate_test_skeleton(fidelity=smart)` | `forge scaffold --fidelity smart` | v4.0 |
+| Agent enrich briefs | `enrich_test_cases` | `forge enrich` | v4.0 |
+| Scaffold quality | `analyze_scaffold_quality` | `forge quality` | v4.0 |
+| Coverage expand | `coverage_expand` | `forge coverage-expand` | v4.0 |
 | Test skeleton codegen | `generate_test_skeleton` | `forge scaffold` | v3.3 |
 | Failure learning | `get_learned_config` | — | v3.3 |
 | GTest failure analyze | `analyze_test_failures` | `forge analyze` | v3.3 |
@@ -263,7 +267,7 @@ python -m pytest tests/ -v
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
 - [CHANGELOG](CHANGELOG.md)
-- Latest notes: [RELEASE_NOTES_v3.6.2.md](docs/releases/RELEASE_NOTES_v3.6.2.md)
+- Latest notes: [RELEASE_NOTES_v4.0.0.md](docs/releases/RELEASE_NOTES_v4.0.0.md)
 
 ## License
 

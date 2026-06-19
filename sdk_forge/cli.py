@@ -23,6 +23,8 @@ from sdk_forge.report import report_impl
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import scan_headers_impl
 from sdk_forge.session import get_session_context_impl, save_plan_state
+from sdk_forge.coverage_expand import coverage_expand_impl
+from sdk_forge.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl
 from sdk_forge.templates import generate_test_skeleton_impl
 from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
 from sdk_forge.workflow import update_workflow_stage
@@ -178,8 +180,42 @@ def cmd_scaffold(args: argparse.Namespace) -> int:
         sdk_root=args.sdk_root or "",
         project_name=args.name,
         overwrite=args.overwrite,
+        fidelity=args.fidelity,
+        group_by_header=args.group_by_header,
     )
     return _emit(result, args.quiet)
+
+
+def cmd_enrich(args: argparse.Namespace) -> int:
+    return _emit(
+        enrich_test_cases_impl(
+            project_dir=args.project_dir or "",
+            symbol=args.symbol or "",
+            tests_dir=args.tests_dir or "",
+        ),
+        args.quiet,
+    )
+
+
+def cmd_quality(args: argparse.Namespace) -> int:
+    return _emit(
+        analyze_scaffold_quality_impl(
+            project_dir=args.project_dir or "",
+            tests_dir=args.tests_dir or "",
+        ),
+        args.quiet,
+    )
+
+
+def cmd_coverage_expand(args: argparse.Namespace) -> int:
+    return _emit(
+        coverage_expand_impl(
+            project_dir=args.project_dir or "",
+            tests_dir=args.tests_dir or "",
+            threshold_pct=args.threshold,
+        ),
+        args.quiet,
+    )
 
 
 def cmd_analyze(args: argparse.Namespace) -> int:
@@ -357,6 +393,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_scaffold.add_argument("--output", default="tests")
     p_scaffold.add_argument("--name", default="sdk_tests")
     p_scaffold.add_argument("--overwrite", action="store_true")
+    p_scaffold.add_argument("--fidelity", default="smart", choices=["smart", "skeleton"])
+    p_scaffold.add_argument("--group-by-header", action="store_true")
     p_scaffold.set_defaults(func=cmd_scaffold)
 
     p_analyze = sub.add_parser("analyze", help="Analyze GTest failures from build dir")
@@ -383,6 +421,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_gap.add_argument("--tests-dir", default="")
     p_gap.add_argument("--sdk-root", default="")
     p_gap.set_defaults(func=cmd_gap)
+
+    p_enrich = sub.add_parser("enrich", help="Agent enrichment briefs for test files")
+    p_enrich.add_argument("--project-dir", default="")
+    p_enrich.add_argument("--symbol", default="")
+    p_enrich.add_argument("--tests-dir", default="")
+    p_enrich.set_defaults(func=cmd_enrich)
+
+    p_quality = sub.add_parser("quality", help="Analyze scaffold placeholder ratio")
+    p_quality.add_argument("--project-dir", default="")
+    p_quality.add_argument("--tests-dir", default="")
+    p_quality.set_defaults(func=cmd_quality)
+
+    p_cov_expand = sub.add_parser("coverage-expand", help="Append TEST_P for low-coverage symbols")
+    p_cov_expand.add_argument("--project-dir", default="")
+    p_cov_expand.add_argument("--tests-dir", default="")
+    p_cov_expand.add_argument("--threshold", type=float, default=80.0)
+    p_cov_expand.set_defaults(func=cmd_coverage_expand)
 
     p_compdb = sub.add_parser("compdb", help="Export or read compile_commands.json cache")
     p_compdb.add_argument("build_dir", nargs="?", default="")

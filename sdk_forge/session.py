@@ -12,6 +12,7 @@ from sdk_forge.learn import load_learned_config
 from sdk_forge.plan_gap import load_plan_gap
 from sdk_forge.report import report_impl
 from sdk_forge.retry import load_build_state
+from sdk_forge.enrich import load_scaffold_quality
 from sdk_forge.test_fix import load_proposals
 from sdk_forge.workflow import load_workflow_state
 
@@ -57,6 +58,7 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
 
     plan_gap = load_plan_gap(str(root))
     proposals = load_proposals(str(root))
+    scaffold_quality = load_scaffold_quality(str(root))
 
     compdb_path = root / ".forge" / "cache" / "compile_commands.json"
     report_html_path = root / ".forge" / "cache" / "report.html"
@@ -72,6 +74,7 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
         "learned_config": learned if learned.get("found") else None,
         "plan_gap": plan_gap if plan_gap.get("status") == "ok" else None,
         "last_proposals": proposals if proposals.get("status") == "ok" else None,
+        "scaffold_quality": scaffold_quality if scaffold_quality.get("status") == "ok" else None,
         "compile_commands": str(compdb_path) if compdb_path.is_file() else None,
         "last_report_summary": report_summary or None,
     }

@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from sdk_forge.enrich import load_scaffold_quality
 from sdk_forge.plan_gap import load_plan_gap
 from sdk_forge.report_html import format_report_html
 from sdk_forge.retry import load_build_state
@@ -32,6 +33,12 @@ def _enrich_report_state(project_dir: str, state: dict[str, Any]) -> dict[str, A
             enriched["coverage"] = json.loads(cov_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             pass
+
+    quality = load_scaffold_quality(root)
+    if quality.get("status") == "ok":
+        enriched["scaffold_quality"] = quality
+    elif gap.get("scaffold_quality"):
+        enriched["scaffold_quality"] = gap.get("scaffold_quality")
 
     return enriched
 
@@ -86,6 +93,16 @@ def format_report_markdown(state: dict[str, Any]) -> str:
         lines.append(f"- Line coverage: **{coverage_pct}%**")
         if cached_cov.get("html_report_dir"):
             lines.append(f"- HTML report: `{cached_cov['html_report_dir']}`")
+        lines.append("")
+
+    quality = state.get("scaffold_quality") or {}
+    if quality.get("placeholder_ratio") is not None:
+        lines.append("## 用例质量")
+        lines.append("")
+        lines.append(f"- Placeholder ratio: **{quality.get('placeholder_ratio')}**")
+        lines.append(f"- Placeholder total: {quality.get('placeholder_total', 0)}")
+        if quality.get("needs_enrichment"):
+            lines.append("- **Needs Agent enrichment** (ratio > 50%)")
         lines.append("")
 
     run = state.get("run") or {}
