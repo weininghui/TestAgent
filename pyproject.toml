@@ -3,26 +3,20 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "auto_test_agent"
-version = "1.0.0"
-description = "SDK Test Generation Agent — automated C/C++ test case generation"
+name = "sdk-test-forge"
+version = "2.0.0"
+description = "SDK Test Forge — OpenCode plugin for automated C/C++ GTest generation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-keywords = ["sdk", "test-generation", "gtest", "llm", "langchain", "opencode"]
+keywords = ["sdk", "test-generation", "gtest", "opencode"]
 authors = [
-    { name = "auto_test_agent" },
+    { name = "SDK Test Forge" },
 ]
 
 dependencies = [
-    "langchain>=0.3.0",
-    "langchain-openai>=0.2.0",
-    "langchain-community>=0.3.0",
-    "pydantic>=2.0",
-    "pyyaml>=6.0",
-    "tenacity>=8.0.0",
     "mcp>=1.28.0",
-    "tomli>=2.0.0; python_version<'3.11'",
+    "pydantic>=2.0",
 ]
 
 [project.optional-dependencies]
@@ -31,13 +25,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/auto_test_agent"
+Homepage = "https://github.com/your-org/sdk-test-forge"
 
 [project.scripts]
-testgen-mcp = "mcp_server:main"
+forge-mcp = "mcp_server:main"
 
 [tool.setuptools.packages.find]
-include = ["agents*", "schemas*"]
-
-[tool.setuptools.package-data]
-"*" = ["*.yaml", "*.toml", "*.json", "*.md"]
+include = ["mcp_server*"]

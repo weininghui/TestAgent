@@ -13,4 +13,16 @@ test_output_dir/
 model_config.local.yaml
 
 # Test artifacts
-_test_analysis.py 
+_test_analysis.py
+
+# Build artifacts (compiled tests)
+build/
+out/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
