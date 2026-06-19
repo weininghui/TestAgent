@@ -22,6 +22,29 @@ Previous: [v5.0.0](docs/releases/RELEASE_NOTES_v5.0.0.md) — Production quality
 
 Works as an **OpenCode MCP plugin** (`sdk-test-forge`) or a **CLI** for scripts and CI.
 
+## Installation & updates
+
+**Three separate guides** (do not mix CLI install with OpenCode plugin update):
+
+| Guide | Document |
+|-------|----------|
+| CLI only (terminal / CI) | [docs/INSTALL.md §1](docs/INSTALL.md#1-cli-only-no-opencode-plugin) |
+| OpenCode plugin — **first install** | [docs/INSTALL.md §2](docs/INSTALL.md#2-opencode-plugin-first-install) |
+| **Update** to latest release | [docs/INSTALL.md §3](docs/INSTALL.md#3-update-to-the-latest-release) |
+
+简体中文：[docs/INSTALL.zh-CN.md](docs/INSTALL.zh-CN.md)
+
+**Check version (use runtime, not only `pip show`):**
+
+```bash
+python -c "import sdk_forge; print(sdk_forge.__version__)"   # should match latest release
+forge autopilot --help                                       # v5.1+ must list autopilot
+```
+
+OpenCode plugin directory (Windows): `%APPDATA%\OpenCode\plugins\sdk-test-forge`
+
+After any update: `pip install -e .` in that directory, then **restart OpenCode completely**.
+
 ## Quick start (CLI)
 
 ```bash
@@ -29,13 +52,9 @@ git clone https://github.com/weininghui/TestAgent.git
 cd TestAgent
 pip install -r requirements.txt
 pip install -e .
-
-forge doctor
-forge init ./my_tests --sdk-root ./examples/test_sdk_cpp
-forge build --project-dir ./my_tests
 ```
 
-Open `.forge/cache/report.html` after build.
+Full CLI setup: [docs/INSTALL.md §1](docs/INSTALL.md#1-cli-only-no-opencode-plugin).
 
 **Requirements:** Python 3.10+, CMake 3.14+, C++ compiler (g++/clang++/MSVC). `git` recommended for GTest prefetch.
 
@@ -48,9 +67,13 @@ pip install "sdk-test-forge[yaml]"    # .forge.yaml (JSON works without PyYAML)
 
 ## Quick start (OpenCode Agent)
 
-1. Open this repo (or install the plugin globally — see [REGISTER_AGENT.md](docs/REGISTER_AGENT.md)).
+1. **Install the plugin** — [docs/INSTALL.md §2](docs/INSTALL.md#2-opencode-plugin-first-install) (first time) or [§3](docs/INSTALL.md#3-update-to-the-latest-release) (update).
 2. Select Agent **`forge`** in the chat dropdown.
 3. Ask: *"Test `./examples/test_sdk_cpp` and give me the HTML report."*
+
+Or use v5.1 autopilot: *"Run forge autopilot on `./examples/test_sdk_cpp` with production profile."*
+
+Agent registration details: [docs/REGISTER_AGENT.md](docs/REGISTER_AGENT.md).
 
 The orchestrator runs: `forge-env` → `forge-scan` → `forge-scaffold` → parallel `forge-enrich` → `forge-review` → `forge-build`.
 
@@ -260,6 +283,8 @@ python -m pytest tests/ -v
 
 | Doc | Description |
 |-----|-------------|
+| [docs/INSTALL.md](docs/INSTALL.md) | **Install & update** OpenCode plugin + CLI |
+| [docs/INSTALL.zh-CN.md](docs/INSTALL.zh-CN.md) | 安装与更新（中文） |
 | [docs/REGISTER_AGENT.md](docs/REGISTER_AGENT.md) | OpenCode / MCP registration |
 | [docs/AGENTS.md](docs/AGENTS.md) | Agent prompt source |
 | [docs/PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md) | Pre-merge checklist |

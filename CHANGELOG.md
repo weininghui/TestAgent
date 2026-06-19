@@ -18,6 +18,8 @@ Hands-off Autopilot: assertion-driven enrich loop, golden snapshot, single entry
 - Production profile preset includes `max_enrich_rounds: 3` and `auto_golden_snapshot: true`
 - `get_orchestration_context` returns `enrich_round`, `max_enrich_rounds`, `assertion_gate_preview`, `merge_ready`
 - `init_project_impl` normalizes Windows paths in `.forge.yaml` (forward slashes)
+- `pyproject.toml` version aligned with `sdk_forge.__version__` (5.1.0)
+- Docs: [docs/INSTALL.md](docs/INSTALL.md) / [INSTALL.zh-CN.md](docs/INSTALL.zh-CN.md) — CLI install, plugin first install, and update guides
 
 ## [5.0.0] - 2026-06-20
 

@@ -2,6 +2,11 @@
 
 > 以本仓库 (SDK Test Forge) 为例，详细说明如何在 OpenCode 中注册一个自定义 Agent。
 
+**安装与更新（首次安装 / 升级版本）请先阅读：**
+
+- 中文：[INSTALL.zh-CN.md](INSTALL.zh-CN.md)
+- English: [INSTALL.md](INSTALL.md)
+
 ---
 
 ## 目录

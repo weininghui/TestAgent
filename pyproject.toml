@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdk-test-forge"
-version = "4.0.0"
+version = "5.1.0"
 description = "SDK Test Forge — OpenCode plugin and CLI for automated C/C++ GTest generation"
 readme = "README.md"
 requires-python = ">=3.10"
