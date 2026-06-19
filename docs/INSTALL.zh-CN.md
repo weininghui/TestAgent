@@ -12,6 +12,22 @@
 
 **当前 Release：** [v5.1.0](releases/RELEASE_NOTES_v5.1.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/TestAgent/releases)。
 
+## 最省事怎么用（推荐）
+
+| 你的习惯 | 做法 | 更新时要做的事 |
+|----------|------|----------------|
+| **只测某一个 SDK 项目** | OpenCode **直接打开 TestAgent 仓库**（方式 A） | `git pull` + **重启 OpenCode**（`run_mcp.py` 会自动 pip） |
+| **所有项目都要用 forge** | 全局插件目录 + 一键脚本 | 运行 `scripts/update-opencode-plugin.ps1` + **重启 OpenCode** |
+
+`plugin.yaml` 已改为 `python run_mcp.py`：OpenCode 启动 MCP 时会**自动**检查 `mcp`/`pydantic` 依赖和 `sdk_forge` 版本，必要时静默 `pip install -e .`。  
+你仍需要 **重启 OpenCode**（MCP 子进程不会热更新），但通常**不必再手动 pip**。
+
+**Windows 一键更新（全局插件目录）：**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
+```
+
 ---
 
 ## 版本号该看哪里？

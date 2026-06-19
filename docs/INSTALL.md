@@ -12,6 +12,22 @@ This guide separates three topics:
 
 **Current release:** [v5.1.0](releases/RELEASE_NOTES_v5.1.0.md) — check [GitHub Releases](https://github.com/weininghui/TestAgent/releases) for the latest tag.
 
+## Easiest workflows (recommended)
+
+| Use case | Approach | When you update |
+|----------|----------|-----------------|
+| **One SDK / dev in this repo** | Open **TestAgent** in OpenCode (Option A) | `git pull` + **restart OpenCode** (`run_mcp.py` auto-pips) |
+| **forge in every project** | Global plugin dir + one script | Run `scripts/update-opencode-plugin.ps1` + **restart OpenCode** |
+
+`plugin.yaml` uses `python run_mcp.py`: on MCP start it **auto-checks** `mcp`/`pydantic` and `sdk_forge` version, and runs a silent `pip install -e .` if needed.  
+You still must **restart OpenCode** (MCP does not hot-reload), but you usually **do not need manual pip**.
+
+**Windows one-liner (global plugin dir):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
+```
+
 ---
 
 ## Version numbers — read the right file
