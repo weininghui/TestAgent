@@ -1,5 +1,8 @@
 # SDK Test Forge Agent
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/weininghui/TestAgent)](https://github.com/weininghui/TestAgent/releases)
+
 An OpenCode plugin that automatically generates GoogleTest (GTest) test suites
 from C/C++ SDK header files. Uses **OpenCode's built-in model** for all
 intelligence — no external LLM API keys required.
@@ -129,4 +132,4 @@ python -m py_compile mcp_server.py
 
 ## License
 
-This project is provided for internal use.
+MIT License — see [LICENSE](LICENSE) for details.
