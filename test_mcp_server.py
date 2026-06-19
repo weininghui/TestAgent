@@ -14,9 +14,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from mcp_server import (
     HeaderFileInfo,
+    _CLANG_AVAILABLE,
     _generate_cmake_content,
+    _gtest_cache_dir,
     _normalize_str_list,
     _parse_header,
+    _parse_header_clang,
 )
 
 
@@ -158,6 +161,40 @@ class TestGenerateCmakeContent:
         assert "/sdk/lib" in content.replace("\\", "/")
         assert "target_link_libraries(run_tests PRIVATE gtest_main gmock calc)" in content
 
+    def test_gtest_cache_block(self):
+        content = _generate_cmake_content(
+            project_name="demo_tests",
+            test_file_names=["demo_test.cpp"],
+            gtest_source="cached",
+        )
+        cache = str(_gtest_cache_dir()).replace("\\", "/")
+        assert "FETCHCONTENT_BASE_DIR" in content
+        assert cache in content
+        assert "UPDATE_DISCONNECTED TRUE" in content
+
+    def test_gtest_system_block(self):
+        content = _generate_cmake_content(
+            project_name="demo_tests",
+            test_file_names=["demo_test.cpp"],
+            gtest_source="system",
+        )
+        assert "find_package(GTest REQUIRED)" in content
+        assert "FetchContent" not in content
+
+    def test_pkg_config_and_find_package(self):
+        content = _generate_cmake_content(
+            project_name="demo_tests",
+            test_file_names=["demo_test.cpp"],
+            pkg_config_packages=["libcurl"],
+            find_packages=[{"name": "OpenSSL", "components": ["Crypto"], "target": "OpenSSL::Crypto"}],
+            cmake_prefix_path=["/opt/sdk"],
+        )
+        assert "pkg_check_modules(LIBCURL REQUIRED IMPORTED_TARGET libcurl)" in content
+        assert "find_package(OpenSSL REQUIRED COMPONENTS Crypto)" in content
+        assert "PkgConfig::LIBCURL" in content
+        assert "OpenSSL::Crypto" in content
+        assert "/opt/sdk" in content.replace("\\", "/")
+
 
 class TestNormalizeStrList:
     def test_none_and_empty(self):
@@ -216,6 +253,79 @@ public:
         result = json.loads(await scan_headers("/nonexistent/path"))
         assert result["status"] == "error"
         assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_scan_reports_parser_metadata(self, sdk_dir):
+        from mcp_server import scan_headers
+        result = json.loads(await scan_headers(sdk_dir, use_clang=False))
+        assert result["status"] == "ok"
+        assert result["parser"] == "regex"
+        assert "libclang_available" in result
+
+
+class TestParseHeaderClang:
+    @pytest.fixture
+    def cpp_header(self, tmp_path):
+        header = tmp_path / "api.hpp"
+        header.write_text(
+            """
+namespace my_sdk {
+class Widget {
+public:
+    void render();
+    static int count();
+    virtual void update();
+};
+enum class Mode { Read, Write };
+template <typename T> T clamp(T v, T lo, T hi);
+}
+""",
+            encoding="utf-8",
+        )
+        return header
+
+    @pytest.mark.skipif(not _CLANG_AVAILABLE, reason="libclang not installed")
+    def test_clang_parses_namespace_and_class(self, cpp_header):
+        info = _parse_header_clang(str(cpp_header.resolve()), ["-std=c++17", "-x", "c++"])
+        assert info is not None
+        assert info.parser == "libclang"
+        assert "my_sdk" in info.namespaces
+        class_names = [c["name"] for c in info.classes]
+        assert "Widget" in class_names
+        fn_names = [f["name"] for f in info.functions]
+        assert "render" in fn_names or "count" in fn_names
+
+
+class TestProbeSdk:
+    @pytest.fixture
+    def sdk_layout(self, tmp_path):
+        include = tmp_path / "include"
+        lib = tmp_path / "lib"
+        include.mkdir()
+        lib.mkdir()
+        (include / "api.h").write_text("void foo();", encoding="utf-8")
+        (tmp_path / "my_sdk.pc").write_text(
+            "Cflags: -I/opt/include\nLibs: -L/opt/lib -lmy_sdk\n",
+            encoding="utf-8",
+        )
+        return tmp_path
+
+    @pytest.mark.asyncio
+    async def test_probe_sdk_root(self, sdk_layout):
+        from mcp_server import probe_sdk
+        result = json.loads(await probe_sdk(str(sdk_layout)))
+        assert result["status"] == "ok"
+        assert any("include" in p for p in result["sdk_include_dirs"])
+        assert result["pkg_config_packages"] == ["my_sdk"]
+
+    @pytest.mark.asyncio
+    async def test_probe_pc_file(self, sdk_layout):
+        from mcp_server import probe_sdk
+        pc = sdk_layout / "my_sdk.pc"
+        result = json.loads(await probe_sdk(str(pc)))
+        assert result["status"] == "ok"
+        assert result["sdk_include_dirs"] == ["/opt/include"]
+        assert "my_sdk" in result["link_libraries"]
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +407,8 @@ def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
         cwd=str(sdk_build.resolve()),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if configure.returncode != 0:
@@ -306,6 +418,8 @@ def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
         ["cmake", "--build", str(sdk_build.resolve())],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     if build.returncode != 0:
@@ -385,3 +499,129 @@ TEST(MathTest, Subtraction) {
             assert run_result["total"] == 4
             assert run_result["passed"] == 4
             assert run_result["failed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_compile_and_run_with_test_sdk_cpp(self):
+        from mcp_server import compile_tests, run_tests
+
+        repo_root = Path(__file__).resolve().parent
+        sdk_root = repo_root / "test_sdk_cpp"
+        sdk_build = sdk_root / "build"
+        sdk_build.mkdir(parents=True, exist_ok=True)
+
+        configure = subprocess.run(
+            ["cmake", str(sdk_root.resolve())],
+            cwd=str(sdk_build.resolve()),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        assert configure.returncode == 0, configure.stderr or configure.stdout
+
+        build = subprocess.run(
+            ["cmake", "--build", str(sdk_build.resolve())],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        assert build.returncode == 0, build.stderr or build.stdout
+
+        lib_dir = sdk_build
+        for candidate in [sdk_build, sdk_build / "Debug", sdk_build / "Release"]:
+            if list(candidate.glob("my_sdk.lib")) or list(candidate.glob("libmy_sdk.a")):
+                lib_dir = candidate
+                break
+
+        with tempfile.TemporaryDirectory(prefix="sdk_cpp_forge_tests_") as tmp:
+            src = Path(tmp)
+            example = repo_root / "test_sdk_cpp" / "examples" / "api_test.cpp"
+            (src / "api_test.cpp").write_text(example.read_text(encoding="utf-8"))
+            build_dir = str(Path(tempfile.mkdtemp(prefix="sdk_cpp_forge_build_")))
+
+            compile_result = json.loads(
+                await compile_tests(
+                    str(src),
+                    build_dir,
+                    sdk_include_dirs=[str(sdk_root / "include")],
+                    sdk_lib_dirs=[str(lib_dir)],
+                    link_libraries=["my_sdk"],
+                )
+            )
+            assert compile_result["status"] == "ok", compile_result
+            assert compile_result.get("gtest_cache_dir")
+
+            run_result = json.loads(await run_tests(build_dir))
+            assert run_result["status"] == "ok", run_result
+            assert run_result["total"] == 5
+            assert run_result["passed"] == 5
+            assert run_result["failed"] == 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(sys.platform == "win32", reason="pkg-config integration tested on Linux CI")
+    async def test_compile_with_pkg_config(self):
+        from mcp_server import compile_tests, run_tests
+
+        repo_root = Path(__file__).resolve().parent
+        sdk_root = repo_root / "test_sdk_cpp"
+        install_prefix = Path(tempfile.mkdtemp(prefix="my_sdk_install_"))
+        sdk_build = sdk_root / "build_ci"
+        sdk_build.mkdir(parents=True, exist_ok=True)
+
+        configure = subprocess.run(
+            ["cmake", str(sdk_root.resolve()), f"-DCMAKE_INSTALL_PREFIX={install_prefix}"],
+            cwd=str(sdk_build.resolve()),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        assert configure.returncode == 0, configure.stderr or configure.stdout
+
+        build = subprocess.run(
+            ["cmake", "--build", str(sdk_build.resolve())],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        assert build.returncode == 0, build.stderr or build.stdout
+
+        install = subprocess.run(
+            ["cmake", "--install", str(sdk_build.resolve())],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        assert install.returncode == 0, install.stderr or install.stdout
+
+        pc_path = install_prefix / "lib" / "pkgconfig" / "my_sdk.pc"
+        assert pc_path.exists()
+
+        with tempfile.TemporaryDirectory(prefix="sdk_pc_forge_tests_") as tmp:
+            src = Path(tmp)
+            example = repo_root / "test_sdk_cpp" / "examples" / "api_test.cpp"
+            (src / "api_test.cpp").write_text(example.read_text(encoding="utf-8"))
+            build_dir = str(Path(tempfile.mkdtemp(prefix="sdk_pc_forge_build_")))
+
+            os.environ["PKG_CONFIG_PATH"] = str(pc_path.parent)
+
+            compile_result = json.loads(
+                await compile_tests(
+                    str(src),
+                    build_dir,
+                    pkg_config_packages=["my_sdk"],
+                )
+            )
+            assert compile_result["status"] == "ok", compile_result
+
+            run_result = json.loads(await run_tests(build_dir))
+            assert run_result["status"] == "ok", run_result
+            assert run_result["passed"] == 5

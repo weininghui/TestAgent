@@ -15,22 +15,30 @@ Generate GoogleTest (GTest) test suites from C/C++ SDK header files.
 
 ## Workflow
 
-### Step 1: Scan Headers
+### Step 1: Probe SDK
 
-Call the `scan_headers` MCP tool with the SDK root path:
+Call `probe_sdk` to discover suggested compile parameters:
 
 ```
 sdk_root: /path/to/sdk
 ```
 
-This returns a JSON-structured inventory of all `.h` / `.hpp` files with:
-- Functions (name, return type, params)
-- Classes/structs
-- Enums
-- Typedefs
-- Includes
+Or pass a `.pc` file path directly. Use the returned `sdk_include_dirs`, `sdk_lib_dirs`, `pkg_config_packages`, and `cmake_prefix_path` in later steps.
 
-### Step 2: Analyze API (use OpenCode's model)
+### Step 2: Scan Headers
+
+Call `scan_headers` with include context for complex C++ SDKs:
+
+```
+sdk_root: /path/to/sdk
+include_dirs: ["/path/to/sdk/include"]
+compile_args: ["-std=c++17"]
+use_clang: true
+```
+
+Returns JSON with functions (namespace, static/virtual flags), classes, enums, typedefs, and parser metadata.
+
+### Step 3: Analyze API (use OpenCode's model)
 
 Review the scan result and analyze:
 - API surface size and complexity
@@ -40,7 +48,7 @@ Review the scan result and analyze:
 - Resource handle patterns (init/close pairs)
 - Thread safety candidates
 
-### Step 3: Design Test Cases (use OpenCode's model)
+### Step 4: Design Test Cases (use OpenCode's model)
 
 Design targeted test cases covering:
 - **Normal path** — typical valid inputs
@@ -49,68 +57,66 @@ Design targeted test cases covering:
 - **Resource management** — init/close, open/close pairs, double-free prevention
 - **State** — sequence-dependent calls, repeat calls
 
-### Step 4: Write GTest Source Files
+### Step 5: Write GTest Source Files
 
-Write C++ GTest source files using OpenCode's `Write` tool:
+Write C++ GTest source files using OpenCode's `Write` tool.
 
-- One `.cpp` file per SDK module or header
-- Each file follows this structure:
-  ```cpp
-  #include <gtest/gtest.h>
-  #include "sdk_header.h"
+For C libraries linked from C++ tests, wrap includes in `extern "C" { ... }`.
 
-  TEST(SuiteName, TestName) {
-    // Arrange
-    // Act
-    // Assert
-  }
-  ```
+### Step 6: Delete Old Tests
 
-### Step 5: Delete Old Tests
-
-Call `delete_tests` MCP tool:
+Call `delete_tests`:
 
 ```
 test_dir: /path/to/output/tests
 ```
 
-### Step 6: Compile (with SDK linking)
+### Step 7: Compile (with SDK linking)
 
-Call `compile_tests` MCP tool:
+Call `compile_tests` using the strategy from `probe_sdk`:
 
+**Prebuilt library:**
 ```
 source_dir: /path/to/output/tests
 build_dir: /path/to/output/build
 sdk_include_dirs: ["/path/to/sdk/include"]
 sdk_lib_dirs: ["/path/to/sdk/build"]
-link_libraries: ["calc"]
+link_libraries: ["my_sdk"]
+gtest_source: cached
 ```
 
-Parameters can be JSON array strings if your client sends them as text.
+**pkg-config:**
+```
+pkg_config_packages: ["my_sdk"]
+```
 
-### Step 7: Run Tests
+**CMake package:**
+```
+cmake_prefix_path: ["/opt/my_sdk"]
+find_packages: [{"name": "my_sdk", "target": "my_sdk::my_sdk"}]
+```
 
-Call `run_tests` MCP tool:
+### Step 8: Run Tests
+
+Call `run_tests`:
 
 ```
 build_dir: /path/to/output/build
 ```
 
-### Step 8: Report
+### Step 9: Report
 
-Summarize the results:
-- Total tests, passed, failed, skipped
-- List of failed tests (if any)
-- Coverage summary
+Summarize total, passed, failed, skipped, and list any failures.
 
 ## Rules
 
 1. **No external LLM calls** — use only OpenCode's built-in model
-2. **Always scan first** — never guess SDK structure
+2. **Probe and scan first** — never guess SDK structure
 3. **Always compile and run** — generated code must be verified
 4. **Use descriptive test names** — `FunctionName_Scenario_ExpectedResult`
 5. **Write portable C++17** — avoid platform-specific APIs in tests
 
-## Sample SDK
+## Sample SDKs
 
-This repository includes [`test_sdk/`](../../test_sdk/) for end-to-end validation.
+- [`test_sdk/`](../../test_sdk/) — minimal C library
+- [`test_sdk_cpp/`](../../test_sdk_cpp/) — C++ SDK with namespace, templates, pkg-config

@@ -2,6 +2,7 @@ output/
 testhistory/
 test_cache_audit/
 test_sdk/build/
+test_sdk_cpp/build/
 __pycache__/
 *.pyc
 test_output_dir/

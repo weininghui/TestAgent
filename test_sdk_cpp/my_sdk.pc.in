@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: my_sdk
+Description: Sample C++ SDK for TestAgent integration tests
+Version: 1.0.0
+Cflags: -I${includedir}
+Libs: -L${libdir} -lmy_sdk

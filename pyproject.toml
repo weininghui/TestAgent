@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdk-test-forge"
-version = "2.0.0"
+version = "2.5.0"
 description = "SDK Test Forge — OpenCode plugin for automated C/C++ GTest generation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,6 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+clang = ["libclang>=16.0.0"]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",

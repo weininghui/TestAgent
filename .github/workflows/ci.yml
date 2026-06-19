@@ -32,8 +32,8 @@ jobs:
       - name: Run tests
         run: python -m pytest test_mcp_server.py -v -k "not TestCompileAndRun"
 
-  integration:
-    name: C++ integration (test_sdk)
+  integration-linux:
+    name: C++ integration (Linux)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,10 +44,18 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Cache GTest FetchContent
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/sdk-test-forge
+          key: gtest-${{ runner.os }}-v1.14.0-${{ hashFiles('mcp_server.py') }}
+          restore-keys: |
+            gtest-${{ runner.os }}-v1.14.0-
+
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++
+          sudo apt-get install -y cmake g++ pkg-config
 
       - name: Install Python dependencies
         run: |
@@ -56,4 +64,37 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run integration tests
+        env:
+          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest
         run: python -m pytest test_mcp_server.py -v -k TestCompileAndRun
+
+  integration-windows:
+    name: C++ integration (Windows MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Cache GTest FetchContent
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sdk-test-forge-gtest
+          key: gtest-${{ runner.os }}-v1.14.0-${{ hashFiles('mcp_server.py') }}
+          restore-keys: |
+            gtest-${{ runner.os }}-v1.14.0-
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Run integration tests (Windows)
+        env:
+          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest
+        run: python -m pytest test_mcp_server.py -v -k "TestCompileAndRun and not pkg_config"

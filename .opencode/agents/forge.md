@@ -11,27 +11,30 @@ color: "#4CAF50"
 
 ## MCP 工具
 
-本插件自带 4 个 MCP 工具，**优先使用它们**完成文件操作：
+本插件自带 5 个 MCP 工具，**优先使用它们**完成文件操作：
 
 | 工具 | 作用 |
 |------|------|
-| `scan_headers(sdk_root)` | 扫描 `.h` / `.hpp` 文件，返回结构化 API 信息 |
+| `scan_headers(sdk_root, include_dirs, compile_args, use_clang)` | 扫描 `.h` / `.hpp`（libclang 优先，正则为降级） |
+| `probe_sdk(sdk_root)` | 探测 SDK 根目录或 `.pc` 文件，建议 include/lib/pkg-config 参数 |
 | `delete_tests(test_dir)` | 递归删除目录下所有旧 GTest 文件 |
-| `compile_tests(source_dir, build_dir, sdk_include_dirs, sdk_lib_dirs, link_libraries)` | 自动生成 CMakeLists.txt 并编译（可链接 SDK 库） |
+| `compile_tests(...)` | 自动生成 CMakeLists.txt 并编译（支持 SDK/pkg-config/find_package 链接） |
 | `run_tests(build_dir, test_filter="")` | 运行测试，解析结果 |
 
 ## 工作流
 
-1. **扫描头文件** — 调用 `scan_headers(sdk_root)` 获取 API 清单
-2. **分析 API** — 识别需要测试的函数、边界条件、指针参数、资源配对
-3. **清理旧测试** — 调用 `delete_tests(test_dir)` 删除已有测试
-4. **生成测试代码** — 用 Write 工具写 GTest .cpp 文件
-5. **编译** — 调用 `compile_tests`，传入 SDK 头文件/库路径：
-   - `sdk_include_dirs`: SDK 头文件目录列表
-   - `sdk_lib_dirs`: SDK 库文件目录列表
-   - `link_libraries`: 要链接的库名（如 `calc`、`my_sdk`）
-6. **运行** — 调用 `run_tests(build_dir)` 并解析结果
-7. **报告** — 汇总测试总数、通过、失败、跳过
+1. **探测 SDK** — 调用 `probe_sdk(sdk_root)` 获取建议的链接参数
+2. **扫描头文件** — 调用 `scan_headers(sdk_root, include_dirs=[...])` 获取 API 清单
+3. **分析 API** — 识别需要测试的函数、边界条件、指针参数、资源配对
+4. **清理旧测试** — 调用 `delete_tests(test_dir)` 删除已有测试
+5. **生成测试代码** — 用 Write 工具写 GTest .cpp 文件
+6. **编译** — 调用 `compile_tests`，按 SDK 类型选择参数：
+   - 预编译库：`sdk_include_dirs` + `sdk_lib_dirs` + `link_libraries`
+   - pkg-config：`pkg_config_packages`
+   - CMake 包：`cmake_prefix_path` + `find_packages`
+   - GTest 缓存：默认 `gtest_source=cached`（Windows 推荐）
+7. **运行** — 调用 `run_tests(build_dir)` 并解析结果
+8. **报告** — 汇总测试总数、通过、失败、跳过
 
 > 如果 MCP 工具不可用，回退到：Glob+Read 扫描 → Bash 手动编译运行。
 
@@ -40,3 +43,4 @@ color: "#4CAF50"
 - 只测试公开 API（非 static/noncopyable）
 - 不修改任何 SDK 源文件
 - 测试文件输出到独立目录
+- 复杂 C++ SDK 优先用 libclang 扫描（`use_clang=true`）
