@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from sdk_forge.cache import gtest_cache_dir
+from sdk_forge.compdb import export_compile_commands_impl
 from sdk_forge.errors import parse_cmake_error
 from sdk_forge.hint_actions import parse_cmake_error_with_actions
 from sdk_forge.gtest import ensure_gtest, gtest_source_path, normalize_gtest_source, resolve_gtest_tag
@@ -64,6 +65,32 @@ set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-instr-generate")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
 """
+
+
+def sanitizer_cmake_block(sanitizer: str) -> tuple[str, list[str]]:
+    mode = (sanitizer or "none").strip().lower()
+    hints: list[str] = []
+    if mode in ("", "none", "off", "false"):
+        return "", hints
+    if sys.platform == "win32":
+        hints.append("Sanitizers are not supported with MSVC in v3.4 — use Linux/clang or GCC")
+        return "", hints
+    flags = ""
+    if mode in ("asan", "address"):
+        flags = "address"
+    elif mode in ("ubsan", "undefined"):
+        flags = "undefined"
+    elif mode in ("asan+ubsan", "address+undefined", "all"):
+        flags = "address,undefined"
+    else:
+        hints.append(f"Unknown sanitizer '{sanitizer}' — use asan, ubsan, or asan+ubsan")
+        return "", hints
+    block = f"""
+set(CMAKE_CXX_FLAGS "${{CMAKE_CXX_FLAGS}} -fsanitize={flags}")
+set(CMAKE_C_FLAGS "${{CMAKE_C_FLAGS}} -fsanitize={flags}")
+set(CMAKE_EXE_LINKER_FLAGS "${{CMAKE_EXE_LINKER_FLAGS}} -fsanitize={flags}")
+"""
+    return block, hints
 
 
 def sdk_link_cmake_block(
@@ -134,11 +161,13 @@ def generate_cmake_content(
     gtest_version: str = "auto",
     coverage: bool = False,
     coverage_tool: str = "gcov",
+    sanitizer: str = "none",
 ) -> str:
     file_list = "\n    ".join(test_file_names)
     tag = resolve_gtest_tag(gtest_version)
     gtest_block = gtest_cmake_block(gtest_source, tag)
     cov_block = coverage_cmake_block(coverage, coverage_tool)
+    san_block, _ = sanitizer_cmake_block(sanitizer)
     sdk_block = sdk_link_cmake_block(
         sdk_include_dirs or [],
         sdk_lib_dirs or [],
@@ -153,7 +182,8 @@ project({project_name} CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-{cov_block}
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+{cov_block}{san_block}
 {gtest_block}
 add_executable(run_tests
     {file_list}
@@ -202,6 +232,7 @@ def compile_tests_impl(
     gtest_version: str = "auto",
     coverage: bool | str = False,
     coverage_tool: str = "gcov",
+    sanitizer: str = "none",
     use_config: bool | str = True,
     probe_context: dict | None = None,
     force_regenerate_cmake: bool | str = False,
@@ -222,6 +253,7 @@ def compile_tests_impl(
         "gtest_version": gtest_version,
         "coverage": coverage,
         "coverage_tool": coverage_tool,
+        "sanitizer": sanitizer,
     }
     if want_config:
         config = load_forge_config(start=source_dir)
@@ -235,6 +267,8 @@ def compile_tests_impl(
         return {"error": f"Source directory not found: {source_dir}", "status": "error"}
 
     want_coverage = parse_bool(params.get("coverage"), default=False)
+    sanitizer_mode = str(params.get("sanitizer") or "none")
+    _, sanitizer_hints = sanitizer_cmake_block(sanitizer_mode)
     force_cmake = parse_bool(force_regenerate_cmake, default=False)
     gtest_mode = normalize_gtest_source(str(params.get("gtest_source") or "auto"))
     gtest_tag = resolve_gtest_tag(str(params.get("gtest_version") or "auto"))
@@ -286,6 +320,7 @@ def compile_tests_impl(
             gtest_version=gtest_tag,
             coverage=want_coverage,
             coverage_tool=str(params.get("coverage_tool", "gcov") or "gcov"),
+            sanitizer=sanitizer_mode,
         )
         cmake_file.write_text(cmake_content, encoding="utf-8")
 
@@ -329,7 +364,11 @@ def compile_tests_impl(
         }
 
     binary_path = find_test_binary(build_path)
-    return {
+    config = load_forge_config(start=source_dir) if want_config else {}
+    project_dir = config.get("_config_dir", str(src_path.parent))
+
+    compdb_result = export_compile_commands_impl(str(build_path), project_dir)
+    result = {
         "status": "ok",
         "binary_path": str(binary_path) if binary_path else None,
         "gtest_cache_dir": str(gtest_cache_dir()),
@@ -337,7 +376,12 @@ def compile_tests_impl(
         "gtest_source": gtest_mode,
         "gtest": gtest_fetch,
         "coverage_enabled": want_coverage,
+        "sanitizer": sanitizer_mode,
+        "sanitizer_hints": sanitizer_hints,
         "compile_duration_sec": compile_duration_sec,
-        "config_file": load_forge_config(start=source_dir).get("_config_path") if want_config else None,
+        "config_file": config.get("_config_path") if want_config else None,
         "build_output": build_output,
     }
+    if compdb_result.get("status") == "ok":
+        result["compile_commands"] = compdb_result.get("path")
+    return result

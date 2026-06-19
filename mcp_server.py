@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server — thin wrapper over sdk_forge core (v3.3)."""
+"""MCP server — thin wrapper over sdk_forge core (v3.4)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,9 @@ from sdk_forge.init import init_project_impl
 from sdk_forge.mock import generate_mocks_impl
 from sdk_forge.learn import forget_learned_config, load_learned_config
 from sdk_forge.pipeline import build_pipeline_impl
+from sdk_forge.compdb import export_compile_commands_impl, get_compile_commands_impl
 from sdk_forge.plan import suggest_test_plan_impl
+from sdk_forge.plan_gap import analyze_plan_gap_impl
 from sdk_forge.probe import probe_sdk_impl
 from sdk_forge.report import report_impl
 from sdk_forge.retry import load_build_state
@@ -25,7 +27,7 @@ from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import CLANG_AVAILABLE, scan_headers_impl
 from sdk_forge.session import get_session_context_impl, save_plan_state
 from sdk_forge.templates import generate_test_skeleton_impl
-from sdk_forge.test_fix import analyze_test_failures_impl
+from sdk_forge.test_fix import analyze_test_failures_impl, propose_test_fixes_impl
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,6 +47,9 @@ Tools:
   - generate_test_skeleton → GTest .cpp skeleton from plan
   - build_tests         → probe + compile + run with retry/auto-fix
   - analyze_test_failures → parse GTest failure output
+  - propose_test_fixes     → suggested assertion edits (confirmation required)
+  - analyze_plan_gap       → plan vs tests/coverage gap
+  - get_compile_commands   → cached compile_commands.json
   - forge_report        → markdown report from last build
   - get_build_state     → read last build JSON
   - get_session_context → plan + build + learned config
@@ -108,6 +113,49 @@ async def analyze_test_failures(
 ) -> str:
     return json.dumps(
         analyze_test_failures_impl(build_dir, run_json or None),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Propose test assertion fixes from failures; never writes source (requires user confirmation).")
+async def propose_test_fixes(
+    build_dir: Annotated[str, "Build directory to analyze."] = "",
+    analysis_json: Annotated[str, "Optional analyze_test_failures JSON."] = "",
+    project_dir: Annotated[str, "Project root for cache and tests/."] = "",
+) -> str:
+    return json.dumps(
+        propose_test_fixes_impl(build_dir, analysis_json or None, project_dir),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Compare test plan targets against tests/ files and optional coverage cache.")
+async def analyze_plan_gap(
+    project_dir: Annotated[str, "Project root with .forge/cache/."] = "",
+    plan_json: Annotated[str, "Optional plan JSON instead of cached plan."] = "",
+    tests_dir: Annotated[str, "Override tests directory."] = "",
+    sdk_root: Annotated[str, "Scan SDK when no cached plan."] = "",
+) -> str:
+    return json.dumps(
+        analyze_plan_gap_impl(project_dir, plan_json or None, tests_dir, sdk_root),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Read cached compile_commands.json from project .forge/cache/.")
+async def get_compile_commands(
+    project_dir: Annotated[str, "Project root."] = "",
+) -> str:
+    return json.dumps(get_compile_commands_impl(project_dir), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Export compile_commands.json from build dir into project cache.")
+async def export_compile_commands(
+    build_dir: Annotated[str, "CMake build directory."],
+    project_dir: Annotated[str, "Project root for cache."] = "",
+) -> str:
+    return json.dumps(
+        export_compile_commands_impl(build_dir, project_dir),
         indent=2, ensure_ascii=False,
     )
 
@@ -208,13 +256,14 @@ async def compile_tests(
     gtest_version: Annotated[str, "Pin googletest tag, e.g. 1.14.0; auto picks by toolchain."] = "auto",
     coverage: Annotated[bool | str, "Enable gcov coverage flags."] = False,
     coverage_tool: Annotated[str, "Coverage tool: gcov or llvm-cov."] = "gcov",
+    sanitizer: Annotated[str, "Sanitizer: none, asan, ubsan, asan+ubsan."] = "none",
     use_config: Annotated[bool | str, "Load .forge.yaml/.forge.json (default true)."] = True,
 ) -> str:
     return json.dumps(
         compile_tests_impl(
             source_dir, build_dir, sdk_include_dirs, sdk_lib_dirs, link_libraries,
             cmake_prefix_path, find_packages, pkg_config_packages, extra_cmake_snippet,
-            gtest_source, gtest_version, coverage, coverage_tool, use_config,
+            gtest_source, gtest_version, coverage, coverage_tool, sanitizer, use_config,
         ),
         indent=2, ensure_ascii=False,
     )

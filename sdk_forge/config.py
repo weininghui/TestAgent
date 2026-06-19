@@ -97,6 +97,7 @@ def compile_params_from_config(config: dict[str, Any]) -> dict[str, Any]:
         "gtest_version": str(config.get("gtest_version", "auto") or "auto"),
         "coverage": bool(config.get("coverage", False)),
         "coverage_tool": str(config.get("coverage_tool", "gcov") or "gcov"),
+        "sanitizer": str(config.get("sanitizer", "none") or "none"),
     }
 
 
@@ -117,7 +118,7 @@ def merge_compile_params(config_params: dict[str, Any], overrides: dict[str, Any
         else:
             extra_list = list(extra)
         merged[key] = list(dict.fromkeys([*base, *extra_list]))
-    for key in ("extra_cmake_snippet", "gtest_source", "gtest_version", "coverage_tool", "find_packages"):
+    for key in ("extra_cmake_snippet", "gtest_source", "gtest_version", "coverage_tool", "sanitizer", "find_packages"):
         if overrides.get(key) not in (None, "", []):
             merged[key] = overrides[key]
     if overrides.get("coverage") is not None:
@@ -165,7 +166,7 @@ def save_forge_config(config: dict[str, Any]) -> dict[str, Any]:
         "sdk_include_dirs", "sdk_lib_dirs", "link_libraries",
         "cmake_prefix_path", "pkg_config_packages", "find_packages",
         "extra_cmake_snippet", "gtest_source", "gtest_version",
-        "coverage", "coverage_tool",
+        "coverage", "coverage_tool", "sanitizer",
     )
     payload = {k: config[k] for k in keys_to_save if k in config}
 

@@ -13,14 +13,16 @@ from sdk_forge.doctor import doctor_impl
 from sdk_forge.init import init_project_impl
 from sdk_forge.mock import generate_mocks_impl
 from sdk_forge.pipeline import build_pipeline_impl
+from sdk_forge.compdb import export_compile_commands_impl, get_compile_commands_impl
 from sdk_forge.plan import suggest_test_plan_impl
+from sdk_forge.plan_gap import analyze_plan_gap_impl
 from sdk_forge.probe import probe_sdk_impl
 from sdk_forge.report import report_impl
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import scan_headers_impl
 from sdk_forge.session import get_session_context_impl, save_plan_state
 from sdk_forge.templates import generate_test_skeleton_impl
-from sdk_forge.test_fix import analyze_test_failures_impl
+from sdk_forge.test_fix import analyze_test_failures_impl, propose_test_fixes_impl
 from sdk_forge.util import normalize_str_list, parse_bool
 
 
@@ -83,6 +85,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
         gtest_version=args.gtest_version,
         coverage=args.coverage,
         coverage_tool=args.coverage_tool,
+        sanitizer=args.sanitizer,
         use_config=not args.no_config,
     )
     return _emit(result, args.quiet)
@@ -97,10 +100,13 @@ def cmd_clean(args: argparse.Namespace) -> int:
 
 
 def cmd_coverage(args: argparse.Namespace) -> int:
-    return _emit(
-        collect_coverage_impl(args.build_dir, args.source_dir or "", args.coverage_tool),
-        args.quiet,
-    )
+    result = collect_coverage_impl(args.build_dir, args.source_dir or "", args.coverage_tool)
+    if args.project_dir and result.get("status") == "ok":
+        from sdk_forge.coverage import save_coverage_cache
+        path = save_coverage_cache(args.project_dir, result)
+        if path:
+            result["saved_to"] = path
+    return _emit(result, args.quiet)
 
 
 def cmd_mocks(args: argparse.Namespace) -> int:
@@ -181,6 +187,48 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_propose_fix(args: argparse.Namespace) -> int:
+    analysis = None
+    if args.analysis_file:
+        analysis = open(args.analysis_file, encoding="utf-8").read()
+    return _emit(
+        propose_test_fixes_impl(
+            build_dir=args.build_dir or "",
+            analysis_json=analysis,
+            project_dir=args.project_dir or "",
+            tests_dir=args.tests_dir or "",
+        ),
+        args.quiet,
+    )
+
+
+def cmd_gap(args: argparse.Namespace) -> int:
+    plan_data = None
+    if args.plan_file:
+        plan_data = open(args.plan_file, encoding="utf-8").read()
+    return _emit(
+        analyze_plan_gap_impl(
+            project_dir=args.project_dir or "",
+            plan_json=plan_data,
+            tests_dir=args.tests_dir or "",
+            sdk_root=args.sdk_root or "",
+        ),
+        args.quiet,
+    )
+
+
+def cmd_compdb(args: argparse.Namespace) -> int:
+    if args.build_dir:
+        result = export_compile_commands_impl(args.build_dir, args.project_dir or "")
+    else:
+        result = get_compile_commands_impl(args.project_dir or "")
+    return _emit(result, args.quiet)
+
+
+def cmd_session(args: argparse.Namespace) -> int:
+    return _emit(get_session_context_impl(args.project_dir or ""), args.quiet)
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     result = report_impl(
         project_dir=args.project_dir or "",
@@ -224,6 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_compile.add_argument("--gtest-version", default="auto", help="Pin googletest tag, e.g. 1.14.0 or v1.13.0")
     p_compile.add_argument("--coverage", action="store_true")
     p_compile.add_argument("--coverage-tool", default="gcov")
+    p_compile.add_argument("--sanitizer", default="none", help="none, asan, ubsan, asan+ubsan")
     p_compile.add_argument("--no-config", action="store_true", help="Skip .forge.yaml/.forge.json")
     p_compile.set_defaults(func=cmd_compile)
 
@@ -240,6 +289,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_cov.add_argument("build_dir")
     p_cov.add_argument("--source-dir", default="")
     p_cov.add_argument("--coverage-tool", default="gcov")
+    p_cov.add_argument("--project-dir", default="", help="Save coverage summary to .forge/cache/")
     p_cov.set_defaults(func=cmd_coverage)
 
     p_mocks = sub.add_parser("mocks", help="Generate GMock templates")
@@ -288,6 +338,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_analyze.add_argument("build_dir", nargs="?", default="")
     p_analyze.add_argument("--run-file", default="")
     p_analyze.set_defaults(func=cmd_analyze)
+
+    p_propose = sub.add_parser("propose-fix", help="Propose assertion fixes (no auto-edit)")
+    p_propose.add_argument("build_dir", nargs="?", default="")
+    p_propose.add_argument("--analysis-file", default="")
+    p_propose.add_argument("--project-dir", default="")
+    p_propose.add_argument("--tests-dir", default="")
+    p_propose.set_defaults(func=cmd_propose_fix)
+
+    p_gap = sub.add_parser("gap", help="Analyze plan vs tests/coverage gap")
+    p_gap.add_argument("--project-dir", default="")
+    p_gap.add_argument("--plan-file", default="")
+    p_gap.add_argument("--tests-dir", default="")
+    p_gap.add_argument("--sdk-root", default="")
+    p_gap.set_defaults(func=cmd_gap)
+
+    p_compdb = sub.add_parser("compdb", help="Export or read compile_commands.json cache")
+    p_compdb.add_argument("build_dir", nargs="?", default="")
+    p_compdb.add_argument("--project-dir", default="")
+    p_compdb.set_defaults(func=cmd_compdb)
+
+    p_session = sub.add_parser("session", help="Show session context JSON")
+    p_session.add_argument("--project-dir", default="")
+    p_session.set_defaults(func=cmd_session)
 
     p_report = sub.add_parser("report", help="Generate markdown report from last build")
     p_report.add_argument("--project-dir", default="")

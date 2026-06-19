@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.4.0] - 2026-06-19
+
+Plan gap analysis, confirmation-gated fix proposals, sanitizers, compile_commands.
+
+### Added
+- `sdk_forge/plan_gap.py` — `analyze_plan_gap` / `forge gap`
+- `propose_test_fixes` — assertion edit proposals with `requires_confirmation: true`
+- `sdk_forge/compdb.py` — export/read `compile_commands.json` cache
+- MCP: `analyze_plan_gap`, `propose_test_fixes`, `get_compile_commands`, `export_compile_commands`
+- CLI: `forge gap`, `forge propose-fix`, `forge compdb`, `forge session`
+- `sanitizer` compile param (asan/ubsan; graceful degrade on MSVC)
+- Report: coverage, plan gap, proposed fixes sections
+- Session context: `plan_gap`, `last_proposals`, `compile_commands`
+- CI: E2E scaffold→analyze pipeline, ASan smoke on Linux
+
 ## [3.3.1] - 2026-06-19
 
 Project layout cleanup — no functional API changes.

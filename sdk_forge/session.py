@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Any
 
 from sdk_forge.learn import load_learned_config
+from sdk_forge.plan_gap import load_plan_gap
 from sdk_forge.report import report_impl
 from sdk_forge.retry import load_build_state
+from sdk_forge.test_fix import load_proposals
 
 
 def save_plan_state(project_dir: str, plan: dict[str, Any]) -> Path:
@@ -50,11 +52,19 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
         if rep.get("status") == "ok":
             report_summary = rep.get("summary") or {}
 
+    plan_gap = load_plan_gap(str(root))
+    proposals = load_proposals(str(root))
+
+    compdb_path = root / ".forge" / "cache" / "compile_commands.json"
+
     return {
         "status": "ok",
         "project_dir": str(root.resolve()),
         "plan": plan if plan and plan.get("status") != "error" else None,
         "build_state": build_state if build_state.get("status") != "error" else None,
         "learned_config": learned if learned.get("found") else None,
+        "plan_gap": plan_gap if plan_gap.get("status") == "ok" else None,
+        "last_proposals": proposals if proposals.get("status") == "ok" else None,
+        "compile_commands": str(compdb_path) if compdb_path.is_file() else None,
         "last_report_summary": report_summary or None,
     }

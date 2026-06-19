@@ -764,6 +764,103 @@ class TestSessionContext:
         assert ctx["build_state"] is not None
 
 
+class TestPlanGap:
+    def test_analyze_gap_missing_target(self, tmp_path):
+        from sdk_forge.plan_gap import analyze_plan_gap_impl
+        from sdk_forge.session import save_plan_state
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "calc_add_test.cpp").write_text(
+            '#include <gtest/gtest.h>\nTEST(Calc_add, Normal) {}\n',
+            encoding="utf-8",
+        )
+        plan = {
+            "status": "ok",
+            "targets": [
+                {"symbol": "calc_add", "kind": "function", "file": "calc.h", "scenarios": [
+                    {"name": "normal"}, {"name": "error"},
+                ]},
+                {"symbol": "calc_mul", "kind": "function", "file": "calc.h", "scenarios": [
+                    {"name": "normal"},
+                ]},
+            ],
+        }
+        save_plan_state(str(tmp_path), plan)
+        result = analyze_plan_gap_impl(str(tmp_path))
+        assert result["status"] == "ok"
+        assert any(t["symbol"] == "calc_mul" for t in result["missing_targets"])
+        assert any(t["symbol"] == "calc_add" for t in result["partial_targets"])
+
+
+class TestProposeFix:
+    def test_propose_assertion_fix(self, tmp_path):
+        from sdk_forge.test_fix import propose_test_fixes_impl
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        test_file = tests / "calc_add_test.cpp"
+        test_file.write_text(
+            "#include <gtest/gtest.h>\n"
+            "TEST(CalcAdd, Normal) {\n"
+            "    EXPECT_EQ(calc_add(1, 2), 0);\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        analysis = {
+            "status": "ok",
+            "failures": [{
+                "test": "CalcAdd.Normal",
+                "file": str(test_file),
+                "line": 3,
+                "expected": "3",
+                "actual": "0",
+            }],
+        }
+        result = propose_test_fixes_impl(
+            analysis_json=analysis,
+            project_dir=str(tmp_path),
+            tests_dir=str(tests),
+        )
+        assert result["status"] == "ok"
+        assert result["proposal_count"] >= 1
+        prop = result["proposals"][0]
+        assert prop["requires_confirmation"] is True
+        assert "3" in prop["suggested"]
+
+
+class TestCompdb:
+    def test_export_and_get(self, tmp_path):
+        from sdk_forge.compdb import export_compile_commands_impl, get_compile_commands_impl
+
+        build = tmp_path / "build"
+        build.mkdir()
+        (build / "compile_commands.json").write_text("[{}]", encoding="utf-8")
+        exported = export_compile_commands_impl(str(build), str(tmp_path))
+        assert exported["status"] == "ok"
+        loaded = get_compile_commands_impl(str(tmp_path))
+        assert loaded["status"] == "ok"
+        assert loaded["entry_count"] == 1
+
+
+class TestSanitizerCmake:
+    def test_asan_block_linux(self, monkeypatch):
+        from sdk_forge.build import sanitizer_cmake_block
+
+        monkeypatch.setattr("sdk_forge.build.sys.platform", "linux")
+        block, hints = sanitizer_cmake_block("asan")
+        assert "-fsanitize=address" in block
+        assert not hints
+
+    def test_msvc_unsupported(self, monkeypatch):
+        from sdk_forge.build import sanitizer_cmake_block
+
+        monkeypatch.setattr("sdk_forge.build.sys.platform", "win32")
+        block, hints = sanitizer_cmake_block("asan")
+        assert block == ""
+        assert hints
+
+
 class TestCmakeHints:
     def test_undefined_reference_hint(self):
         hints = parse_cmake_error("undefined reference to `calc_add'")
@@ -1067,6 +1164,69 @@ def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
         raise RuntimeError(build.stderr or build.stdout)
 
     return sdk_root / "include", _find_sdk_lib_dir(sdk_build)
+
+
+@pytest.mark.skipif(not _cmake_available(), reason="cmake not found")
+class TestE2EPipeline:
+    def test_scaffold_build_analyze_propose(self):
+        from sdk_forge.build import compile_tests_impl
+        from sdk_forge.plan import suggest_test_plan_impl
+        from sdk_forge.plan_gap import analyze_plan_gap_impl
+        from sdk_forge.run import run_tests_impl
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.templates import generate_test_skeleton_impl
+        from sdk_forge.test_fix import analyze_test_failures_impl, propose_test_fixes_impl
+
+        repo_root = Path(__file__).resolve().parent.parent
+        include_dir, lib_dir = _build_test_sdk(repo_root)
+
+        with tempfile.TemporaryDirectory(prefix="forge_e2e_") as tmp:
+            project = Path(tmp)
+            tests = project / "tests"
+            build = project / "build"
+            tests.mkdir()
+            build.mkdir()
+
+            plan = suggest_test_plan_impl(sdk_root=str(repo_root / "examples" / "test_sdk"))
+            assert plan["status"] == "ok"
+            save_plan_state(str(project), plan)
+
+            scaffold = generate_test_skeleton_impl(plan_json=plan, output_dir=str(tests), overwrite=True)
+            assert scaffold["status"] == "ok"
+
+            test_file = tests / "calc_add_test.cpp"
+            assert test_file.exists()
+            content = test_file.read_text(encoding="utf-8")
+            content = content.replace("EXPECT_TRUE(true)", "EXPECT_EQ(calc_add(1, 2), 0)", 1)
+            test_file.write_text(content, encoding="utf-8")
+
+            compile_result = compile_tests_impl(
+                str(tests),
+                str(build),
+                sdk_include_dirs=[str(include_dir)],
+                sdk_lib_dirs=[str(lib_dir)],
+                link_libraries=["calc"],
+                use_config=False,
+            )
+            assert compile_result["status"] == "ok"
+
+            run_result = run_tests_impl(str(build))
+            assert run_result["status"] == "test_failures"
+
+            analysis = analyze_test_failures_impl(run_json=run_result)
+            assert analysis["failure_count"] >= 1
+            assert analysis["actions"][0]["type"] == "review_assertion"
+
+            proposals = propose_test_fixes_impl(
+                analysis_json=analysis,
+                project_dir=str(project),
+                tests_dir=str(tests),
+            )
+            assert proposals["proposal_count"] >= 1
+            assert proposals["proposals"][0]["requires_confirmation"] is True
+
+            gap = analyze_plan_gap_impl(str(project))
+            assert gap["status"] == "ok"
 
 
 @pytest.mark.skipif(not _cmake_available(), reason="cmake not found in PATH — skip integration")

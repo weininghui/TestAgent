@@ -78,6 +78,17 @@ def doctor_impl() -> dict:
         "hint": "pip install libclang; set LIBCLANG_PATH on Windows" if not CLANG_AVAILABLE else "",
     })
 
+    from sdk_forge.build import sanitizer_cmake_block
+
+    san_block, san_hints = sanitizer_cmake_block("asan")
+    sanitizer_ok = bool(san_block) or sys.platform == "win32"
+    checks.append({
+        "name": "sanitizer",
+        "ok": sanitizer_ok,
+        "supported": bool(san_block),
+        "hint": san_hints[0] if san_hints else ("ASan/UBSan available via sanitizer: asan in .forge.yaml" if san_block else ""),
+    })
+
     if sys.platform == "win32" and not os.environ.get("LIBCLANG_PATH"):
         checks.append({
             "name": "LIBCLANG_PATH",

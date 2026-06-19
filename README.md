@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.3.1** — standardized project layout; v3.3.0 added scaffold, failure learning, GTest analyze, session context.
+**Current release: v3.4.0** — plan gap, propose fixes with confirmation gate, ASan/UBSan, compile_commands.
 
 ## What it does
 
@@ -201,10 +201,14 @@ TestAgent/
 
 | Feature | MCP | CLI | Since |
 |---------|-----|-----|-------|
+| Plan vs tests gap | `analyze_plan_gap` | `forge gap` | v3.4 |
+| Test fix proposals | `propose_test_fixes` | `forge propose-fix` | v3.4 |
+| compile_commands | `get_compile_commands` | `forge compdb` | v3.4 |
+| Sanitizer (ASan/UBSan) | `sanitizer` in compile | `--sanitizer` | v3.4 |
+| Session context | `get_session_context` | `forge session` | v3.4 |
 | Test skeleton codegen | `generate_test_skeleton` | `forge scaffold` | v3.3 |
 | Failure learning | `get_learned_config` | — | v3.3 |
 | GTest failure analyze | `analyze_test_failures` | `forge analyze` | v3.3 |
-| Session context | `get_session_context` | — | v3.3 |
 | Test plan generation | `suggest_test_plan` | `forge plan` | v3.2 |
 | Hint actions (auto-fix) | `actions` in compile JSON | — | v3.2 |
 | Auto-retry build | `build_tests(max_retries)` | `forge build --retry` | v3.2 |
@@ -253,7 +257,7 @@ python -m pytest tests/ -v
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
 - [CHANGELOG](CHANGELOG.md)
-- Latest notes: [RELEASE_NOTES_v3.3.0.md](docs/releases/RELEASE_NOTES_v3.3.0.md)
+- Latest notes: [RELEASE_NOTES_v3.4.0.md](docs/releases/RELEASE_NOTES_v3.4.0.md)
 
 ## License
 

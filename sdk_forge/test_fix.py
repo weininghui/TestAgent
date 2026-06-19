@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 from typing import Any
 
 from sdk_forge.run import run_tests_impl
-
 
 _RE_RUN = re.compile(r"\[ RUN      \]\s+(\S+)")
 _RE_FAIL = re.compile(r"\[  FAILED  \]\s+(\S+)")
@@ -125,3 +126,128 @@ def analyze_test_failures_impl(
     parsed["passed"] = run_result.get("passed", 0)
     parsed["failed"] = run_result.get("failed", 0)
     return parsed
+
+
+_RE_EXPECT_MACRO = re.compile(
+    r"(EXPECT_\w+|ASSERT_\w+)\s*\([^)]+\)",
+)
+
+
+def _read_line_context(file_path: Path, line_no: int, radius: int = 5) -> list[str]:
+    if not file_path.is_file():
+        return []
+    try:
+        lines = file_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    start = max(0, line_no - radius - 1)
+    end = min(len(lines), line_no + radius)
+    return lines[start:end]
+
+
+def _suggest_assertion_line(current_line: str, expected: str, actual: str) -> str | None:
+    if not current_line.strip():
+        return None
+    match = _RE_EXPECT_MACRO.search(current_line)
+    if not match:
+        return None
+    macro = match.group(0)
+    if actual in macro:
+        return current_line.replace(actual, expected, 1)
+    if expected not in macro:
+        return f"{current_line.rstrip()}  // suggested: use expected value {expected}"
+    return None
+
+
+def propose_test_fixes_impl(
+    build_dir: str = "",
+    analysis_json: str | dict[str, Any] | None = None,
+    project_dir: str = "",
+    tests_dir: str = "",
+) -> dict[str, Any]:
+    if analysis_json:
+        if isinstance(analysis_json, str):
+            try:
+                analysis = json.loads(analysis_json)
+            except json.JSONDecodeError as exc:
+                return {"status": "error", "error": f"Invalid analysis JSON: {exc}"}
+        else:
+            analysis = analysis_json
+    elif build_dir:
+        analysis = analyze_test_failures_impl(build_dir)
+    else:
+        return {"status": "error", "error": "Provide build_dir or analysis_json"}
+
+    if analysis.get("status") == "error":
+        return analysis
+
+    root = Path(project_dir or Path.cwd()).resolve()
+    tests_path = Path(tests_dir) if tests_dir else root / "tests"
+    if not tests_path.is_dir():
+        tests_path = root / "tests"
+
+    proposals: list[dict[str, Any]] = []
+    for failure in analysis.get("failures") or []:
+        file_name = failure.get("file") or ""
+        line_no = failure.get("line")
+        expected = failure.get("expected")
+        actual = failure.get("actual")
+        if not file_name or not line_no:
+            continue
+
+        file_path = Path(file_name)
+        if not file_path.is_file():
+            file_path = tests_path / Path(file_name).name
+        if not file_path.is_file():
+            continue
+
+        try:
+            lines = file_path.read_text(encoding="utf-8").splitlines()
+            current = lines[int(line_no) - 1]
+        except (OSError, IndexError, ValueError):
+            continue
+
+        suggested = None
+        reason = "Inspect assertion near failure line"
+        if expected is not None and actual is not None:
+            suggested = _suggest_assertion_line(current, str(expected), str(actual))
+            reason = "Expected/Actual mismatch from GTest"
+
+        proposals.append({
+            "type": "propose_assertion_fix",
+            "requires_confirmation": True,
+            "test": failure.get("test"),
+            "file": str(file_path.name),
+            "path": str(file_path.resolve()),
+            "line": line_no,
+            "current": current.strip(),
+            "suggested": (suggested or current).strip(),
+            "reason": reason,
+            "context": _read_line_context(file_path, int(line_no)),
+        })
+
+    result = {
+        "status": "ok",
+        "proposal_count": len(proposals),
+        "proposals": proposals,
+        "requires_confirmation": True,
+    }
+
+    cache = root / ".forge" / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    path = cache / "last_proposals.json"
+    path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    result["saved_to"] = str(path)
+    return result
+
+
+def load_proposals(project_dir: str = "") -> dict[str, Any]:
+    path = Path(project_dir or Path.cwd()) / ".forge" / "cache" / "last_proposals.json"
+    if not path.exists():
+        return {"status": "error", "error": "No proposals found"}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["status"] = "ok"
+        return data
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"status": "error", "error": str(exc)}

@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
+from sdk_forge.plan_gap import load_plan_gap
 from sdk_forge.retry import load_build_state
-from sdk_forge.test_fix import parse_test_failures
+from sdk_forge.test_fix import load_proposals, parse_test_failures
 
 
 def format_report_markdown(state: dict[str, Any]) -> str:
@@ -35,6 +36,21 @@ def format_report_markdown(state: dict[str, Any]) -> str:
         lines.append(f"| Failed | {run.get('failed', 0)} |")
         lines.append("")
 
+    coverage_pct = run.get("line_coverage_pct")
+    compile_info = state.get("compile") or {}
+    if coverage_pct is None:
+        coverage_pct = state.get("line_coverage_pct") or compile_info.get("line_coverage_pct")
+    cached_cov = state.get("coverage") or {}
+    if coverage_pct is None and cached_cov.get("line_coverage_pct") is not None:
+        coverage_pct = cached_cov.get("line_coverage_pct")
+    if coverage_pct is not None:
+        lines.append("## Coverage")
+        lines.append("")
+        lines.append(f"- Line coverage: **{coverage_pct}%**")
+        if cached_cov.get("html_report_dir"):
+            lines.append(f"- HTML report: `{cached_cov['html_report_dir']}`")
+        lines.append("")
+
     run = state.get("run") or {}
     if run.get("status") == "test_failures":
         analysis = parse_test_failures(run)
@@ -50,6 +66,28 @@ def format_report_markdown(state: dict[str, Any]) -> str:
                 if item.get("suggestion"):
                     lines.append(f"  - {item['suggestion']}")
             lines.append("")
+
+    plan_gap = state.get("plan_gap") or {}
+    if plan_gap.get("missing_targets") or plan_gap.get("partial_targets"):
+        lines.append("## Plan Gap")
+        lines.append("")
+        for item in (plan_gap.get("missing_targets") or [])[:15]:
+            lines.append(f"- Missing tests for **{item.get('symbol')}** ({item.get('kind')})")
+        for item in (plan_gap.get("partial_targets") or [])[:15]:
+            missing = ", ".join(item.get("missing_scenarios") or [])
+            lines.append(f"- Partial **{item.get('symbol')}** — missing scenarios: {missing}")
+        lines.append("")
+
+    proposals = state.get("proposals") or {}
+    proposal_items = proposals.get("proposals") or []
+    if proposal_items:
+        lines.append("## Proposed Fixes (needs confirmation)")
+        lines.append("")
+        for item in proposal_items[:10]:
+            lines.append(f"- **{item.get('test', '?')}** `{item.get('file')}:{item.get('line')}`")
+            lines.append(f"  - current: `{item.get('current', '')}`")
+            lines.append(f"  - suggested: `{item.get('suggested', '')}`")
+        lines.append("")
 
     attempts = state.get("attempts") or []
     if attempts:
@@ -67,7 +105,6 @@ def format_report_markdown(state: dict[str, Any]) -> str:
             lines.append("*Config auto-fixed during retry.*")
         lines.append("")
 
-    compile_info = state.get("compile") or {}
     if compile_info.get("gtest_tag"):
         lines.append("## GTest")
         lines.append("")
@@ -75,6 +112,12 @@ def format_report_markdown(state: dict[str, Any]) -> str:
         gtest = compile_info.get("gtest") or {}
         if gtest.get("method"):
             lines.append(f"- Method: `{gtest['method']}`")
+        lines.append("")
+
+    if compile_info.get("sanitizer") and compile_info.get("sanitizer") not in ("none", ""):
+        lines.append("## Sanitizer")
+        lines.append("")
+        lines.append(f"- Mode: `{compile_info['sanitizer']}`")
         lines.append("")
 
     learned = state.get("learned") or {}
@@ -111,6 +154,25 @@ def report_impl(
         if state.get("status") == "error":
             return state
 
+    root = project_dir or str(Path.cwd())
+    gap = load_plan_gap(root)
+    if gap.get("status") == "ok":
+        state = dict(state)
+        state["plan_gap"] = gap
+
+    props = load_proposals(root)
+    if props.get("status") == "ok":
+        state = dict(state)
+        state["proposals"] = props
+
+    cov_path = Path(root) / ".forge" / "cache" / "coverage.json"
+    if cov_path.exists():
+        try:
+            state = dict(state)
+            state["coverage"] = json.loads(cov_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+
     if output_format == "json":
         return {"status": "ok", "report": state, "format": "json"}
 
@@ -125,5 +187,7 @@ def report_impl(
             "failed": state.get("failed", state.get("run", {}).get("failed", 0)),
             "auto_fixed": state.get("auto_fixed", False),
             "retries_used": state.get("retries_used", 0),
+            "plan_gap_missing": len((state.get("plan_gap") or {}).get("missing_targets") or []),
+            "proposal_count": len((state.get("proposals") or {}).get("proposals") or []),
         },
     }

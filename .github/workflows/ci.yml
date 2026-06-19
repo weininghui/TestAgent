@@ -69,8 +69,21 @@ jobs:
         env:
           FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest
         run: |
-          python -m pytest tests/ -v -k "TestCompileAndRun or TestCliIntegration or TestCoveragePipeline"
+          python -m pytest tests/ -v -k "TestCompileAndRun or TestCliIntegration or TestCoveragePipeline or TestE2EPipeline"
           forge scan examples/test_sdk --no-clang
+
+      - name: Sanitizer smoke (ASan)
+        env:
+          FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest-asan
+        run: |
+          cmake -S examples/test_sdk -B examples/test_sdk/build
+          cmake --build examples/test_sdk/build
+          mkdir -p /tmp/forge_asan/tests /tmp/forge_asan/build
+          cp examples/test_sdk/examples/calc_test.cpp /tmp/forge_asan/tests/
+          forge compile /tmp/forge_asan/tests /tmp/forge_asan/build \
+            --include examples/test_sdk/include \
+            --lib-dir examples/test_sdk/build \
+            --link calc --no-config --sanitizer asan
 
       - name: Upload coverage HTML
         if: always()

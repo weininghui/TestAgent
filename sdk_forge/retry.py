@@ -34,6 +34,7 @@ def _params_to_compile_kwargs(params: dict[str, Any]) -> dict[str, Any]:
         "gtest_version": params.get("gtest_version", "auto"),
         "coverage": params.get("coverage", False),
         "coverage_tool": params.get("coverage_tool", "gcov"),
+        "sanitizer": params.get("sanitizer", "none"),
     }
 
 
@@ -43,7 +44,7 @@ def _sync_params_to_config(config: dict[str, Any], params: dict[str, Any]) -> di
         "sdk_include_dirs", "sdk_lib_dirs", "link_libraries",
         "cmake_prefix_path", "pkg_config_packages", "find_packages",
         "extra_cmake_snippet", "gtest_source", "gtest_version",
-        "coverage", "coverage_tool",
+        "coverage", "coverage_tool", "sanitizer",
     ):
         if key in params:
             updated[key] = params[key]

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from sdk_forge.util import run_subprocess
 
@@ -84,3 +85,15 @@ def collect_coverage_impl(build_dir: str, source_dir: str = "", coverage_tool: s
         "gcov_files": gcov_files,
         "html_report_dir": str(html_dir) if html_dir.exists() else None,
     }
+
+
+def save_coverage_cache(project_dir: str, coverage_result: dict[str, Any]) -> str | None:
+    if coverage_result.get("status") != "ok":
+        return None
+    root = Path(project_dir or Path.cwd())
+    cache = root / ".forge" / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    path = cache / "coverage.json"
+    path.write_text(json.dumps(coverage_result, indent=2, ensure_ascii=False), encoding="utf-8")
+    return str(path)
+
