@@ -240,8 +240,8 @@ class TestCompileAndRun:
     def test_project(self):
         with tempfile.TemporaryDirectory(prefix="gtest_integration_") as tmp:
             src = Path(tmp)
-            # Write a simple GTest file
-            (src / "test_math.cpp").write_text("""
+            # Write a simple GTest file (name must match *_test.cpp or *Test.cpp pattern)
+            (src / "math_test.cpp").write_text("""
 #include <gtest/gtest.h>
 
 TEST(MathTest, Addition) {
@@ -264,7 +264,7 @@ TEST(MathTest, Subtraction) {
         # Compile
         compile_result = json.loads(await compile_tests(src, build))
         assert compile_result["status"] == "ok", (
-            f"Compile failed: {compile_result.get('build_output', '')[:500]}"
+            f"Compile failed: {compile_result.get('error', compile_result.get('build_output', ''))[:1000]}"
         )
 
         # Run

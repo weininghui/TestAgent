@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import sys
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -82,11 +83,18 @@ _RE_FUNCTION = re.compile(
     \s*(?:const\s*)?
     \s*;
     """,
-    re.VERBOSE,
+    re.VERBOSE | re.MULTILINE,
 )
 _RE_CLASS = re.compile(r"^\s*(class|struct)\s+(\w+)\s*", re.MULTILINE)
 _RE_ENUM = re.compile(r"^\s*enum\s+(?:class\s+)?(\w+)\s*", re.MULTILINE)
-_RE_TYPEDEF = re.compile(r"^\s*(?:typedef|using)\s+(.+?)\s+(\w+)\s*;", re.MULTILINE)
+_RE_TYPEDEF = re.compile(
+    r"^\s*(?:"
+    r"typedef\s+(.+?)\s+(\w+)"       # typedef unsigned long long uint64
+    r"|"
+    r"using\s+(\w+)\s*=\s*(.+?)"     # using Handle = void*
+    r")\s*;",
+    re.MULTILINE,
+)
 
 
 @dataclass
@@ -145,7 +153,7 @@ def _parse_header(content: str, filepath: str) -> HeaderFileInfo:
             "name": name,
             "return_type": m.group("return_type").strip(),
             "params": m.group("params").strip(),
-            "line": content[: m.start()].count("\n") + 1,
+            "line": content[: m.start("name")].count("\n") + 1,
         })
 
     # Classes / structs
@@ -165,9 +173,17 @@ def _parse_header(content: str, filepath: str) -> HeaderFileInfo:
 
     # Typedefs / using
     for m in _RE_TYPEDEF.finditer(content):
+        if m.group(1) is not None and m.group(2) is not None:
+            # typedef X alias;
+            type_str = m.group(1).strip()
+            alias = m.group(2).strip()
+        else:
+            # using alias = X;
+            alias = m.group(3).strip()
+            type_str = m.group(4).strip()
         info.typedefs.append({
-            "type": m.group(1).strip(),
-            "alias": m.group(2).strip(),
+            "type": type_str,
+            "alias": alias,
             "line": content[: m.start()].count("\n") + 1,
         })
 
@@ -346,9 +362,11 @@ async def compile_tests(
     cmake_file = src_path / "CMakeLists.txt"
     if not cmake_file.exists():
         # Auto-generate CMakeLists.txt
-        test_files = sorted(src_path.glob("*_test.cpp")) + \
-                     sorted(src_path.glob("*Test.cpp")) + \
+        test_files = list(dict.fromkeys(
+                     sorted(src_path.glob("*_test.cpp")) +
+                     sorted(src_path.glob("*Test.cpp")) +
                      sorted(src_path.glob("*_test.cc"))
+                 ))
         if not test_files:
             return json.dumps({
                 "error": f"No test files (*_test.cpp, *Test.cpp) found in {source_dir}",
@@ -392,23 +410,15 @@ target_include_directories(run_tests PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}})
     logger.info("Configuring CMake in %s ...", build_path)
     try:
         result = subprocess.run(
-            ["cmake", "-G", "Ninja", str(src_path.resolve())],
+            ["cmake", str(src_path.resolve())],
             cwd=str(build_path.resolve()),
             capture_output=True,
             text=True,
-            timeout=120,
+            encoding="utf-8",
+            errors="replace",
+            timeout=240,
         )
-        cmake_output = result.stdout + "\n" + result.stderr
-        if result.returncode != 0:
-            # Try with default generator (Ninja might not be installed)
-            result = subprocess.run(
-                ["cmake", str(src_path.resolve())],
-                cwd=str(build_path.resolve()),
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            cmake_output = result.stdout + "\n" + result.stderr
+        cmake_output = (result.stdout or "") + "\n" + (result.stderr or "")
     except FileNotFoundError:
         return json.dumps({
             "error": "cmake not found. Install CMake and ensure it's in PATH.",
@@ -416,7 +426,7 @@ target_include_directories(run_tests PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}})
         }, indent=2)
     except subprocess.TimeoutExpired:
         return json.dumps({
-            "error": "cmake configure timed out (120s).",
+            "error": "cmake configure timed out (240s).",
             "status": "error",
         }, indent=2)
 
@@ -434,9 +444,11 @@ target_include_directories(run_tests PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}})
             ["cmake", "--build", str(build_path.resolve())],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=300,
         )
-        build_output = build_result.stdout + "\n" + build_result.stderr
+        build_output = (build_result.stdout or "") + "\n" + (build_result.stderr or "")
     except subprocess.TimeoutExpired:
         return json.dumps({
             "error": "cmake build timed out (300s).",
@@ -500,9 +512,11 @@ async def run_tests(
                 binary = candidate
                 break
         if not binary.exists():
-            # Try to find any executable with "test" in name
-            for f in build_path.rglob("*"):
-                if f.is_file() and f.name.startswith("run_") and os.access(f, os.X_OK):
+            # Try to find any executable with "run_" in name
+            # On Windows, executables have .exe extension
+            exe_suffix = ".exe" if sys.platform == "win32" else ""
+            for f in build_path.rglob(f"run_*{exe_suffix}"):
+                if f.is_file() and (sys.platform != "win32" or f.suffix == ".exe"):
                     binary = f
                     break
 
@@ -523,6 +537,8 @@ async def run_tests(
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=600,
         )
     except subprocess.TimeoutExpired:
@@ -531,7 +547,7 @@ async def run_tests(
             "status": "error",
         }, indent=2)
 
-    full_output = result.stdout + "\n" + result.stderr
+    full_output = (result.stdout or "") + "\n" + (result.stderr or "")
 
     # Parse GTest output
     total = 0
