@@ -10,27 +10,42 @@ from pathlib import Path
 
 from sdk_forge.cache import gtest_cache_dir
 from sdk_forge.errors import parse_cmake_error
+from sdk_forge.gtest import ensure_gtest, gtest_source_path, normalize_gtest_source, resolve_gtest_tag
 from sdk_forge.util import cmake_path, normalize_json_list, normalize_str_list, run_subprocess
 
 
-def gtest_cmake_block(gtest_source: str) -> str:
-    source = (gtest_source or "cached").lower()
+def gtest_cmake_block(gtest_source: str, gtest_tag: str = "v1.14.0", local_path: str = "") -> str:
+    source = normalize_gtest_source(gtest_source)
     if source == "system":
         return """
 find_package(GTest REQUIRED)
 """
+    msvc_crt = """
+if(MSVC)
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+endif()
+"""
+    local = local_path or str(gtest_source_path(gtest_tag))
+    local_cmake = Path(local) / "CMakeLists.txt"
+    if local_cmake.exists():
+        cmake_local = cmake_path(local)
+        return f"""{msvc_crt}
+set(FORGE_GTEST_SOURCE_DIR "{cmake_local}")
+add_subdirectory(${{FORGE_GTEST_SOURCE_DIR}} ${{CMAKE_BINARY_DIR}}/googletest EXCLUDE_FROM_ALL)
+"""
+
     cache_dir = cmake_path(str(gtest_cache_dir()))
-    return f"""
+    update_disconnected = "TRUE" if source == "cached" else "FALSE"
+    return f"""{msvc_crt}
 include(FetchContent)
 set(FETCHCONTENT_BASE_DIR "{cache_dir}")
+set(FETCHCONTENT_UPDATES_DISCONNECTED {update_disconnected})
 FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.14.0
+    GIT_TAG {gtest_tag}
     GIT_SHALLOW TRUE
-    UPDATE_DISCONNECTED TRUE
 )
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 """
 
@@ -114,12 +129,14 @@ def generate_cmake_content(
     find_packages: list[dict] | None = None,
     pkg_config_packages: list[str] | None = None,
     extra_cmake_snippet: str = "",
-    gtest_source: str = "cached",
+    gtest_source: str = "auto",
+    gtest_version: str = "auto",
     coverage: bool = False,
     coverage_tool: str = "gcov",
 ) -> str:
     file_list = "\n    ".join(test_file_names)
-    gtest_block = gtest_cmake_block(gtest_source)
+    tag = resolve_gtest_tag(gtest_version)
+    gtest_block = gtest_cmake_block(gtest_source, tag)
     cov_block = coverage_cmake_block(coverage, coverage_tool)
     sdk_block = sdk_link_cmake_block(
         sdk_include_dirs or [],
@@ -180,18 +197,68 @@ def compile_tests_impl(
     find_packages: list[dict] | str | None = "",
     pkg_config_packages: list[str] | str | None = "",
     extra_cmake_snippet: str = "",
-    gtest_source: str = "cached",
+    gtest_source: str = "auto",
+    gtest_version: str = "auto",
     coverage: bool | str = False,
     coverage_tool: str = "gcov",
+    use_config: bool | str = True,
 ) -> dict:
+    from sdk_forge.config import compile_params_from_config, load_forge_config, merge_compile_params
     from sdk_forge.util import parse_bool
+
+    want_config = parse_bool(use_config, default=True)
+    overrides = {
+        "sdk_include_dirs": sdk_include_dirs,
+        "sdk_lib_dirs": sdk_lib_dirs,
+        "link_libraries": link_libraries,
+        "cmake_prefix_path": cmake_prefix_path,
+        "find_packages": find_packages,
+        "pkg_config_packages": pkg_config_packages,
+        "extra_cmake_snippet": extra_cmake_snippet,
+        "gtest_source": gtest_source,
+        "gtest_version": gtest_version,
+        "coverage": coverage,
+        "coverage_tool": coverage_tool,
+    }
+    if want_config:
+        config = load_forge_config(start=source_dir)
+        params = merge_compile_params(compile_params_from_config(config), overrides)
+    else:
+        params = merge_compile_params({}, overrides)
 
     src_path = Path(source_dir)
     build_path = Path(build_dir)
     if not src_path.is_dir():
         return {"error": f"Source directory not found: {source_dir}", "status": "error"}
 
-    want_coverage = parse_bool(coverage, default=False)
+    want_coverage = parse_bool(params.get("coverage"), default=False)
+    gtest_mode = normalize_gtest_source(str(params.get("gtest_source") or "auto"))
+    gtest_tag = resolve_gtest_tag(str(params.get("gtest_version") or "auto"))
+    gtest_fetch: dict = {"status": "skipped", "tag": gtest_tag}
+
+    if gtest_mode != "system":
+        force_fetch = gtest_mode == "fetch"
+        gtest_fetch = ensure_gtest(gtest_tag, force=force_fetch)
+        if gtest_fetch.get("status") == "error":
+            if force_fetch:
+                return {
+                    "status": "error",
+                    "error": gtest_fetch.get("error", "Failed to download googletest"),
+                    "gtest": gtest_fetch,
+                    "hints": [
+                        "Check network and git access to github.com/google/googletest",
+                        f"Pin gtest_version in .forge.yaml (resolved tag: {gtest_tag})",
+                    ],
+                }
+            gtest_fetch = {
+                "status": "ok",
+                "tag": gtest_tag,
+                "path": str(gtest_source_path(gtest_tag)),
+                "downloaded": False,
+                "method": "cmake_fetch",
+                "hint": gtest_fetch.get("error", "git prefetch failed; CMake FetchContent will retry"),
+            }
+
     cmake_file = src_path / "CMakeLists.txt"
     if not cmake_file.exists():
         test_files = discover_test_files(src_path)
@@ -201,16 +268,17 @@ def compile_tests_impl(
         cmake_content = generate_cmake_content(
             project_name=project_name,
             test_file_names=[f.name for f in test_files],
-            sdk_include_dirs=normalize_str_list(sdk_include_dirs),
-            sdk_lib_dirs=normalize_str_list(sdk_lib_dirs),
-            link_libraries=normalize_str_list(link_libraries),
-            cmake_prefix_path=normalize_str_list(cmake_prefix_path),
-            find_packages=[p for p in normalize_json_list(find_packages) if isinstance(p, dict)],
-            pkg_config_packages=normalize_str_list(pkg_config_packages),
-            extra_cmake_snippet=extra_cmake_snippet,
-            gtest_source=gtest_source or "cached",
+            sdk_include_dirs=normalize_str_list(params.get("sdk_include_dirs")),
+            sdk_lib_dirs=normalize_str_list(params.get("sdk_lib_dirs")),
+            link_libraries=normalize_str_list(params.get("link_libraries")),
+            cmake_prefix_path=normalize_str_list(params.get("cmake_prefix_path")),
+            find_packages=[p for p in normalize_json_list(params.get("find_packages")) if isinstance(p, dict)],
+            pkg_config_packages=normalize_str_list(params.get("pkg_config_packages")),
+            extra_cmake_snippet=str(params.get("extra_cmake_snippet", "") or ""),
+            gtest_source=gtest_mode,
+            gtest_version=gtest_tag,
             coverage=want_coverage,
-            coverage_tool=coverage_tool,
+            coverage_tool=str(params.get("coverage_tool", "gcov") or "gcov"),
         )
         cmake_file.write_text(cmake_content, encoding="utf-8")
 
@@ -254,7 +322,11 @@ def compile_tests_impl(
         "status": "ok",
         "binary_path": str(binary_path) if binary_path else None,
         "gtest_cache_dir": str(gtest_cache_dir()),
+        "gtest_tag": gtest_tag,
+        "gtest_source": gtest_mode,
+        "gtest": gtest_fetch,
         "coverage_enabled": want_coverage,
         "compile_duration_sec": compile_duration_sec,
+        "config_file": load_forge_config(start=source_dir).get("_config_path") if want_config else None,
         "build_output": build_output,
     }

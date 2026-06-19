@@ -1,0 +1,10 @@
+{
+  "sdk_root": "../test_sdk",
+  "tests_dir": "tests",
+  "build_dir": "build",
+  "sdk_include_dirs": ["../test_sdk/include"],
+  "sdk_lib_dirs": ["../test_sdk/build"],
+  "link_libraries": ["calc"],
+  "gtest_source": "auto",
+  "gtest_version": "auto"
+}

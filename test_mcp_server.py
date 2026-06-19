@@ -215,16 +215,54 @@ class TestGenerateCmakeContent:
         assert "/sdk/lib" in content.replace("\\", "/")
         assert "target_link_libraries(run_tests PRIVATE gtest_main gmock calc)" in content
 
-    def test_gtest_cache_block(self):
+    def test_gtest_cache_block(self, monkeypatch):
+        from sdk_forge.gtest import gtest_source_path
+
+        monkeypatch.setattr(
+            "sdk_forge.build.gtest_source_path",
+            lambda tag: Path("/nonexistent/forge/gtest"),
+        )
         content = _generate_cmake_content(
             project_name="demo_tests",
             test_file_names=["demo_test.cpp"],
             gtest_source="cached",
+            gtest_version="1.14.0",
         )
         cache = str(_gtest_cache_dir()).replace("\\", "/")
         assert "FETCHCONTENT_BASE_DIR" in content
         assert cache in content
-        assert "UPDATE_DISCONNECTED TRUE" in content
+        assert "GIT_TAG v1.14.0" in content
+        assert "FETCHCONTENT_UPDATES_DISCONNECTED TRUE" in content
+
+    def test_gtest_local_subdirectory(self, tmp_path, monkeypatch):
+        from sdk_forge.gtest import gtest_source_path
+
+        local = tmp_path / "gtest-src"
+        local.mkdir()
+        (local / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.14)\n", encoding="utf-8")
+        monkeypatch.setattr("sdk_forge.build.gtest_source_path", lambda tag: local)
+        content = _generate_cmake_content(
+            project_name="demo_tests",
+            test_file_names=["demo_test.cpp"],
+            gtest_source="auto",
+            gtest_version="1.14.0",
+        )
+        assert "add_subdirectory" in content
+        assert "FetchContent" not in content
+
+    def test_gtest_fetch_block(self, monkeypatch):
+        monkeypatch.setattr(
+            "sdk_forge.build.gtest_source_path",
+            lambda tag: Path("/nonexistent/forge/gtest"),
+        )
+        content = _generate_cmake_content(
+            project_name="demo_tests",
+            test_file_names=["demo_test.cpp"],
+            gtest_source="fetch",
+            gtest_version="1.13.0",
+        )
+        assert "FETCHCONTENT_UPDATES_DISCONNECTED FALSE" in content
+        assert "GIT_TAG v1.13.0" in content
 
     def test_gtest_system_block(self):
         content = _generate_cmake_content(
@@ -378,6 +416,125 @@ class TestCli:
         parser = build_parser()
         args = parser.parse_args(["compile", "./tests", "./build", "--from-probe", "./sdk"])
         assert args.from_probe == "./sdk"
+
+    def test_cli_doctor_init_build_args(self):
+        from sdk_forge.cli import build_parser
+        parser = build_parser()
+        assert parser.parse_args(["doctor"]).command == "doctor"
+        init_args = parser.parse_args(["init", "./proj", "--sdk-root", "../sdk", "--name", "calc"])
+        assert init_args.command == "init"
+        assert init_args.sdk_root == "../sdk"
+        build_args = parser.parse_args(["build", "--project-dir", ".", "--no-run"])
+        assert build_args.no_run is True
+
+
+class TestGtestVersion:
+    def test_resolve_pin_version(self):
+        from sdk_forge.gtest import resolve_gtest_tag
+
+        assert resolve_gtest_tag("1.13.0") == "v1.13.0"
+        assert resolve_gtest_tag("v1.12.0") == "v1.12.0"
+
+    def test_resolve_auto_gcc(self, monkeypatch):
+        from sdk_forge import gtest as gtest_mod
+
+        monkeypatch.setattr(gtest_mod, "detect_compiler", lambda: {"kind": "gcc", "major": 11})
+        monkeypatch.setattr(gtest_mod, "detect_cmake_major", lambda: 3)
+        assert gtest_mod.resolve_gtest_tag("auto") == "v1.13.0"
+
+    def test_resolve_auto_modern_clang(self, monkeypatch):
+        from sdk_forge import gtest as gtest_mod
+
+        monkeypatch.setattr(gtest_mod, "detect_compiler", lambda: {"kind": "clang", "major": 16})
+        monkeypatch.setattr(gtest_mod, "detect_cmake_major", lambda: 3)
+        assert gtest_mod.resolve_gtest_tag("auto") == "v1.14.0"
+
+    def test_doctor_includes_googletest(self):
+        from sdk_forge.doctor import doctor_impl
+
+        result = doctor_impl()
+        names = {c["name"] for c in result["checks"]}
+        assert "googletest" in names
+
+
+class TestForgeConfig:
+    def test_load_forge_json(self, tmp_path):
+        from sdk_forge.config import (
+            compile_params_from_config,
+            find_forge_config,
+            load_forge_config,
+            merge_compile_params,
+            resolve_path,
+        )
+
+        config_file = tmp_path / ".forge.json"
+        config_file.write_text(
+            json.dumps({
+                "sdk_root": "../sdk",
+                "tests_dir": "tests",
+                "build_dir": "build",
+                "sdk_include_dirs": ["include"],
+                "link_libraries": ["calc"],
+            }),
+            encoding="utf-8",
+        )
+        found = find_forge_config(tmp_path / "tests")
+        assert found == config_file
+
+        config = load_forge_config(start=tmp_path)
+        assert config["_config_path"] == str(config_file.resolve())
+        assert resolve_path(config, "tests_dir") == str((tmp_path / "tests").resolve())
+
+        params = compile_params_from_config(config)
+        assert params["link_libraries"] == ["calc"]
+        merged = merge_compile_params(params, {"link_libraries": "extra"})
+        assert "calc" in merged["link_libraries"]
+        assert "extra" in merged["link_libraries"]
+
+
+class TestForgeDoctor:
+    def test_doctor_returns_checks(self):
+        from sdk_forge.doctor import doctor_impl
+
+        result = doctor_impl()
+        assert "checks" in result
+        assert "status" in result
+        names = {c["name"] for c in result["checks"]}
+        assert "cmake" in names
+        assert "python" in names
+
+
+class TestForgeInit:
+    def test_init_scaffold(self, tmp_path):
+        from sdk_forge.init import init_project_impl
+
+        target = tmp_path / "my_forge_proj"
+        result = init_project_impl(str(target), sdk_root="../test_sdk", project_name="calc")
+        assert result["status"] == "ok"
+        assert (target / "tests" / "calc_test.cpp").exists()
+        assert (target / ".forge.yaml").exists()
+        assert (target / "build").is_dir()
+
+
+class TestForgePipeline:
+    def test_build_no_config_dirs(self, tmp_path):
+        from sdk_forge.pipeline import build_pipeline_impl
+
+        tests = tmp_path / "tests"
+        build = tmp_path / "build"
+        tests.mkdir()
+        build.mkdir()
+        (tests / "noop_test.cpp").write_text(
+            "#include <gtest/gtest.h>\nTEST(Noop, Ok) { EXPECT_TRUE(true); }\n",
+            encoding="utf-8",
+        )
+        result = build_pipeline_impl(
+            project_dir=str(tmp_path),
+            run_after_compile=False,
+        )
+        assert result["source_dir"] == str(tests.resolve())
+        assert result["build_dir"] == str(build.resolve())
+        assert "compile" in result
 
 
 class TestCmakeHints:

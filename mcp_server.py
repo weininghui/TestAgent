@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server — thin wrapper over sdk_forge core (v3.0)."""
+"""MCP server — thin wrapper over sdk_forge core (v3.1)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,10 @@ from mcp.server.fastmcp import FastMCP
 from sdk_forge.build import compile_tests_impl
 from sdk_forge.clean import delete_tests_impl
 from sdk_forge.coverage import collect_coverage_impl
+from sdk_forge.doctor import doctor_impl
+from sdk_forge.init import init_project_impl
 from sdk_forge.mock import generate_mocks_impl
+from sdk_forge.pipeline import build_pipeline_impl
 from sdk_forge.probe import probe_sdk_impl
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import CLANG_AVAILABLE, scan_headers_impl
@@ -29,15 +32,46 @@ mcp = FastMCP(
     instructions="""SDK Test Forge Tools — scan, compile, and run GTest suites for C/C++ SDKs.
 
 Tools:
-  - scan_headers       → parse .h/.hpp (libclang with regex fallback)
-  - probe_sdk          → suggest include/lib/pkg-config settings
-  - delete_tests       → remove existing GTest files
-  - compile_tests      → CMake build with SDK linking and GTest cache
-  - run_tests          → execute compiled test binary
-  - collect_coverage   → gcov/lcov coverage summary
-  - generate_mocks     → GMock templates for virtual methods
+  - forge_doctor        → check cmake, compiler, caches
+  - init_forge_project  → scaffold tests + .forge.yaml
+  - build_tests         → probe + compile + run from .forge config
+  - scan_headers        → parse headers (libclang + regex)
+  - probe_sdk           → suggest link settings
+  - compile_tests       → CMake build (reads .forge.yaml/.forge.json)
+  - run_tests           → execute test binary
+  - collect_coverage    → gcov/lcov summary
+  - generate_mocks      → GMock templates
+  - delete_tests        → remove old test files
 """,
 )
+
+
+@mcp.tool(description="Check cmake, compiler, libclang, and forge cache directories.")
+async def forge_doctor() -> str:
+    return json.dumps(doctor_impl(), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Scaffold a forge test project with tests/ and .forge.yaml.")
+async def init_forge_project(
+    target_dir: Annotated[str, "Directory to create the project in."],
+    sdk_root: Annotated[str, "Optional SDK root for .forge.yaml template."] = "",
+    project_name: Annotated[str, "Sample test file base name."] = "sdk_tests",
+) -> str:
+    return json.dumps(init_project_impl(target_dir, sdk_root, project_name), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="One-shot probe + compile + run using .forge config in project_dir.")
+async def build_tests(
+    project_dir: Annotated[str, "Project root containing .forge.yaml or .forge.json."] = "",
+    source_dir: Annotated[str, "Override tests directory."] = "",
+    build_dir: Annotated[str, "Override build directory."] = "",
+    sdk_root: Annotated[str, "Override SDK root for probe."] = "",
+    run_after_compile: Annotated[bool | str, "Run tests after compile (default true)."] = True,
+) -> str:
+    return json.dumps(
+        build_pipeline_impl(project_dir, source_dir, build_dir, sdk_root, run_after_compile),
+        indent=2, ensure_ascii=False,
+    )
 
 
 @mcp.tool(description="Scan .h/.hpp headers using libclang when available, with regex fallback.")
@@ -64,7 +98,7 @@ async def delete_tests(test_dir: Annotated[str, "Directory to scan for existing 
     return json.dumps(delete_tests_impl(test_dir), indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="Compile GTest sources with optional SDK/pkg-config/find_package linking.")
+@mcp.tool(description="Compile GTest sources; auto-loads .forge.yaml/.forge.json from project.")
 async def compile_tests(
     source_dir: Annotated[str, "Directory containing test .cpp files."],
     build_dir: Annotated[str, "Build directory for artifacts."],
@@ -75,15 +109,17 @@ async def compile_tests(
     find_packages: Annotated[list[dict] | str, "find_package specs as JSON list."] = "",
     pkg_config_packages: Annotated[list[str] | str, "pkg-config package names."] = "",
     extra_cmake_snippet: Annotated[str, "Extra CMake snippet appended before link lines."] = "",
-    gtest_source: Annotated[str, "GTest source: fetch, cached (default), or system."] = "cached",
+    gtest_source: Annotated[str, "GTest: auto (default), cached, fetch, or system."] = "auto",
+    gtest_version: Annotated[str, "Pin googletest tag, e.g. 1.14.0; auto picks by toolchain."] = "auto",
     coverage: Annotated[bool | str, "Enable gcov coverage flags."] = False,
     coverage_tool: Annotated[str, "Coverage tool: gcov or llvm-cov."] = "gcov",
+    use_config: Annotated[bool | str, "Load .forge.yaml/.forge.json (default true)."] = True,
 ) -> str:
     return json.dumps(
         compile_tests_impl(
             source_dir, build_dir, sdk_include_dirs, sdk_lib_dirs, link_libraries,
             cmake_prefix_path, find_packages, pkg_config_packages, extra_cmake_snippet,
-            gtest_source, coverage, coverage_tool,
+            gtest_source, gtest_version, coverage, coverage_tool, use_config,
         ),
         indent=2, ensure_ascii=False,
     )
@@ -137,7 +173,6 @@ def main() -> None:
         mcp.run(transport="stdio")
 
 
-# Backward-compatible re-exports for tests
 from sdk_forge.build import generate_cmake_content as _generate_cmake_content
 from sdk_forge.cache import gtest_cache_dir as _gtest_cache_dir
 from sdk_forge.scan import (

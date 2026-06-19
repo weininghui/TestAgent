@@ -9,7 +9,10 @@ import sys
 from sdk_forge.build import compile_tests_impl
 from sdk_forge.clean import delete_tests_impl
 from sdk_forge.coverage import collect_coverage_impl
+from sdk_forge.doctor import doctor_impl
+from sdk_forge.init import init_project_impl
 from sdk_forge.mock import generate_mocks_impl
+from sdk_forge.pipeline import build_pipeline_impl
 from sdk_forge.probe import probe_sdk_impl
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import scan_headers_impl
@@ -72,8 +75,10 @@ def cmd_compile(args: argparse.Namespace) -> int:
         pkg_config_packages=pkg_config,
         extra_cmake_snippet=args.cmake_snippet or "",
         gtest_source=args.gtest_source,
-        coverage=args.coverage,
-        coverage_tool=args.coverage_tool,
+        gtest_version=args.gtest_version,
+        coverage=params.get("coverage", False),
+        coverage_tool=params.get("coverage_tool", "gcov"),
+        use_config=not args.no_config,
     )
     return _emit(result, args.quiet)
 
@@ -105,6 +110,30 @@ def cmd_mocks(args: argparse.Namespace) -> int:
     return _emit(result, args.quiet)
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    return _emit(doctor_impl(), args.quiet)
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    return _emit(
+        init_project_impl(args.target_dir, sdk_root=args.sdk_root or "", project_name=args.name),
+        args.quiet,
+    )
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    return _emit(
+        build_pipeline_impl(
+            project_dir=args.project_dir or "",
+            source_dir=args.source_dir or "",
+            build_dir=args.build_dir or "",
+            sdk_root=args.sdk_root or "",
+            run_after_compile=not args.no_run,
+        ),
+        args.quiet,
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="forge", description="SDK Test Forge CLI")
     parser.add_argument("--quiet", action="store_true", help="Minimal JSON output")
@@ -133,9 +162,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_compile.add_argument("--find-package", action="append", default=[])
     p_compile.add_argument("--cmake-snippet", default="")
     p_compile.add_argument("--from-probe", default="", help="SDK root to probe for auto include/lib/link")
-    p_compile.add_argument("--gtest-source", default="cached", choices=["cached", "fetch", "system"])
+    p_compile.add_argument("--gtest-source", default="auto", choices=["auto", "cached", "fetch", "system"])
+    p_compile.add_argument("--gtest-version", default="auto", help="Pin googletest tag, e.g. 1.14.0 or v1.13.0")
     p_compile.add_argument("--coverage", action="store_true")
     p_compile.add_argument("--coverage-tool", default="gcov")
+    p_compile.add_argument("--no-config", action="store_true", help="Skip .forge.yaml/.forge.json")
     p_compile.set_defaults(func=cmd_compile)
 
     p_run = sub.add_parser("run", help="Run compiled tests")
@@ -159,6 +190,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_mocks.add_argument("--class-name", default="")
     p_mocks.add_argument("--output", default="")
     p_mocks.set_defaults(func=cmd_mocks)
+
+    p_doctor = sub.add_parser("doctor", help="Check toolchain and forge cache")
+    p_doctor.set_defaults(func=cmd_doctor)
+
+    p_init = sub.add_parser("init", help="Scaffold forge test project")
+    p_init.add_argument("target_dir")
+    p_init.add_argument("--sdk-root", default="")
+    p_init.add_argument("--name", default="sdk_tests")
+    p_init.set_defaults(func=cmd_init)
+
+    p_build = sub.add_parser("build", help="Probe + compile + run from .forge config")
+    p_build.add_argument("--project-dir", default="")
+    p_build.add_argument("--source-dir", default="")
+    p_build.add_argument("--build-dir", default="")
+    p_build.add_argument("--sdk-root", default="")
+    p_build.add_argument("--no-run", action="store_true")
+    p_build.set_defaults(func=cmd_build)
 
     return parser
 
