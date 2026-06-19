@@ -22,7 +22,8 @@ from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import scan_headers_impl
 from sdk_forge.session import get_session_context_impl, save_plan_state
 from sdk_forge.templates import generate_test_skeleton_impl
-from sdk_forge.test_fix import analyze_test_failures_impl, propose_test_fixes_impl
+from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
+from sdk_forge.workflow import update_workflow_stage
 from sdk_forge.util import normalize_str_list, parse_bool
 
 
@@ -155,11 +156,13 @@ def cmd_plan(args: argparse.Namespace) -> int:
         sdk_root=args.sdk_root or "",
         scan_json=scan_data,
         include_dirs=args.include or [],
+        max_targets=args.max_targets,
     )
     if args.output:
         open(args.output, "w", encoding="utf-8").write(json.dumps(result, indent=2, ensure_ascii=False))
     if args.project_dir and result.get("status") == "ok":
         save_plan_state(args.project_dir, result)
+        update_workflow_stage(args.project_dir, "plan")
     return _emit(result, args.quiet)
 
 
@@ -197,6 +200,17 @@ def cmd_propose_fix(args: argparse.Namespace) -> int:
             analysis_json=analysis,
             project_dir=args.project_dir or "",
             tests_dir=args.tests_dir or "",
+        ),
+        args.quiet,
+    )
+
+
+def cmd_apply_fix(args: argparse.Namespace) -> int:
+    return _emit(
+        apply_proposed_fixes_impl(
+            project_dir=args.project_dir or "",
+            confirm=args.confirm,
+            indices=args.indices or None,
         ),
         args.quiet,
     )
@@ -324,6 +338,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_plan.add_argument("--include", action="append", default=[])
     p_plan.add_argument("--output", default="")
     p_plan.add_argument("--project-dir", default="", help="Save plan to .forge/cache/last_plan.json")
+    p_plan.add_argument("--max-targets", type=int, default=0, help="Limit plan targets for large SDKs")
     p_plan.set_defaults(func=cmd_plan)
 
     p_scaffold = sub.add_parser("scaffold", help="Generate GTest skeleton from plan or SDK scan")
@@ -345,6 +360,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_propose.add_argument("--project-dir", default="")
     p_propose.add_argument("--tests-dir", default="")
     p_propose.set_defaults(func=cmd_propose_fix)
+
+    p_apply = sub.add_parser("apply-fix", help="Apply cached proposals after --confirm")
+    p_apply.add_argument("--project-dir", default="")
+    p_apply.add_argument("--confirm", action="store_true", help="Required to write source files")
+    p_apply.add_argument("--indices", default="", help="Comma-separated proposal indices")
+    p_apply.set_defaults(func=cmd_apply_fix)
 
     p_gap = sub.add_parser("gap", help="Analyze plan vs tests/coverage gap")
     p_gap.add_argument("--project-dir", default="")

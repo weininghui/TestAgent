@@ -11,6 +11,7 @@ from sdk_forge.plan_gap import load_plan_gap
 from sdk_forge.report import report_impl
 from sdk_forge.retry import load_build_state
 from sdk_forge.test_fix import load_proposals
+from sdk_forge.workflow import load_workflow_state
 
 
 def save_plan_state(project_dir: str, plan: dict[str, Any]) -> Path:
@@ -56,10 +57,12 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
     proposals = load_proposals(str(root))
 
     compdb_path = root / ".forge" / "cache" / "compile_commands.json"
+    workflow = load_workflow_state(str(root))
 
     return {
         "status": "ok",
         "project_dir": str(root.resolve()),
+        "workflow": workflow if workflow.get("stage") else None,
         "plan": plan if plan and plan.get("status") != "error" else None,
         "build_state": build_state if build_state.get("status") != "error" else None,
         "learned_config": learned if learned.get("found") else None,

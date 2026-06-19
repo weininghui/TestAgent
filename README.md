@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.4.0** — plan gap, propose fixes with confirmation gate, ASan/UBSan, compile_commands.
+**Current release: v3.5.0** — CMake probe, plan filtering, apply-after-confirm for real SDKs like yaml-cpp.
 
 ## What it does
 

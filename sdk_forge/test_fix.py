@@ -251,3 +251,84 @@ def load_proposals(project_dir: str = "") -> dict[str, Any]:
         return data
     except (OSError, json.JSONDecodeError) as exc:
         return {"status": "error", "error": str(exc)}
+
+
+def apply_proposed_fixes_impl(
+    project_dir: str = "",
+    confirm: bool | str = False,
+    indices: list[int] | str | None = None,
+) -> dict[str, Any]:
+    """Apply cached proposals to source files. Requires explicit confirm=true."""
+    from sdk_forge.util import parse_bool
+
+    if not parse_bool(confirm, default=False):
+        return {
+            "status": "error",
+            "error": "confirm=true required — proposals never apply without explicit user confirmation",
+        }
+
+    root = Path(project_dir or Path.cwd()).resolve()
+    cached = load_proposals(str(root))
+    if cached.get("status") == "error":
+        return cached
+
+    proposals = cached.get("proposals") or []
+    if indices is not None:
+        if isinstance(indices, str):
+            selected = {int(x.strip()) for x in indices.split(",") if x.strip().isdigit()}
+        else:
+            selected = set(indices)
+        proposals = [p for i, p in enumerate(proposals) if i in selected]
+
+    applied: list[dict[str, Any]] = []
+    errors: list[str] = []
+
+    for idx, prop in enumerate(proposals):
+        file_path = Path(prop.get("path") or prop.get("file") or "")
+        if not file_path.is_file():
+            file_path = root / "tests" / Path(str(prop.get("file", ""))).name
+        if not file_path.is_file():
+            errors.append(f"Missing file for proposal {idx}: {prop.get('file')}")
+            continue
+
+        line_no = int(prop.get("line") or 0)
+        current = str(prop.get("current") or "")
+        suggested = str(prop.get("suggested") or "")
+        if not line_no or not current or not suggested or current == suggested:
+            errors.append(f"Skipped invalid proposal {idx}: {prop.get('test')}")
+            continue
+
+        try:
+            lines = file_path.read_text(encoding="utf-8").splitlines(keepends=True)
+            if line_no < 1 or line_no > len(lines):
+                errors.append(f"Line {line_no} out of range in {file_path.name}")
+                continue
+            if lines[line_no - 1].strip() != current:
+                errors.append(
+                    f"Line {line_no} changed since proposal for {prop.get('test')} — re-run propose_test_fixes"
+                )
+                continue
+            indent = lines[line_no - 1][: len(lines[line_no - 1]) - len(lines[line_no - 1].lstrip())]
+            new_line = suggested if suggested.endswith("\n") else suggested + "\n"
+            if not new_line.startswith(indent) and indent:
+                new_line = indent + new_line.lstrip()
+            lines[line_no - 1] = new_line
+            file_path.write_text("".join(lines), encoding="utf-8")
+            applied.append({
+                "index": idx,
+                "test": prop.get("test"),
+                "file": str(file_path),
+                "line": line_no,
+            })
+        except OSError as exc:
+            errors.append(f"{file_path.name}: {exc}")
+
+    result = {
+        "status": "ok" if applied else "error",
+        "applied_count": len(applied),
+        "applied": applied,
+        "errors": errors,
+    }
+    if not applied:
+        result["error"] = errors[0] if errors else "No proposals applied"
+    return result

@@ -27,7 +27,8 @@ from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import CLANG_AVAILABLE, scan_headers_impl
 from sdk_forge.session import get_session_context_impl, save_plan_state
 from sdk_forge.templates import generate_test_skeleton_impl
-from sdk_forge.test_fix import analyze_test_failures_impl, propose_test_fixes_impl
+from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
+from sdk_forge.workflow import update_workflow_stage
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,6 +49,7 @@ Tools:
   - build_tests         → probe + compile + run with retry/auto-fix
   - analyze_test_failures → parse GTest failure output
   - propose_test_fixes     → suggested assertion edits (confirmation required)
+  - apply_test_fixes       → write proposals after confirm=true
   - analyze_plan_gap       → plan vs tests/coverage gap
   - get_compile_commands   → cached compile_commands.json
   - forge_report        → markdown report from last build
@@ -84,10 +86,14 @@ async def suggest_test_plan(
     sdk_root: Annotated[str, "SDK root to scan when scan_json is empty."] = "",
     scan_json: Annotated[str, "JSON from scan_headers."] = "",
     project_dir: Annotated[str, "Save plan to .forge/cache when set."] = "",
+    max_targets: Annotated[int | str, "Limit targets for large SDKs (0 = all)."] = 0,
 ) -> str:
-    result = suggest_test_plan_impl(sdk_root=sdk_root, scan_json=scan_json or None)
+    result = suggest_test_plan_impl(
+        sdk_root=sdk_root, scan_json=scan_json or None, max_targets=max_targets,
+    )
     if project_dir and result.get("status") == "ok":
         save_plan_state(project_dir, result)
+        update_workflow_stage(project_dir, "plan")
         result["plan_saved"] = str((project_dir or ".") + "/.forge/cache/last_plan.json")
     return json.dumps(result, indent=2, ensure_ascii=False)
 
@@ -127,6 +133,18 @@ async def propose_test_fixes(
         propose_test_fixes_impl(build_dir, analysis_json or None, project_dir),
         indent=2, ensure_ascii=False,
     )
+
+
+@mcp.tool(description="Apply cached test fix proposals after explicit confirm=true.")
+async def apply_test_fixes(
+    project_dir: Annotated[str, "Project root with .forge/cache/last_proposals.json."] = "",
+    confirm: Annotated[bool | str, "Must be true to write files."] = False,
+    indices: Annotated[str, "Comma-separated proposal indices to apply (default all)."] = "",
+) -> str:
+    result = apply_proposed_fixes_impl(project_dir, confirm=confirm, indices=indices or None)
+    if result.get("status") == "ok" and project_dir:
+        update_workflow_stage(project_dir, "apply", {"applied_count": result.get("applied_count")})
+    return json.dumps(result, indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Compare test plan targets against tests/ files and optional coverage cache.")

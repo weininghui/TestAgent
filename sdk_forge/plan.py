@@ -3,10 +3,38 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from sdk_forge.scan import scan_headers_impl
 
+_NOISE_SYMBOL = re.compile(
+    r"^(_)?(YAML_CPP_API|API|EXPORT|IMPORT|DLL|DEPRECATED|nodiscard|fallthrough)$",
+    re.IGNORECASE,
+)
+_MACRO_LIKE = re.compile(r"^[A-Z][A-Z0-9_]*(_API|_EXPORT|_H)$")
+
+
+def _is_noise_symbol(name: str, kind: str = "function") -> bool:
+    if not name or len(name) < 2:
+        return True
+    if _NOISE_SYMBOL.match(name):
+        return True
+    if _MACRO_LIKE.match(name):
+        return True
+    if kind == "class" and name.isupper() and len(name) > 4:
+        return True
+    if name.startswith("__"):
+        return True
+    return False
+
+
+def _target_priority(target: dict[str, Any]) -> tuple[int, str]:
+    """Lower sort key = higher priority."""
+    kind_rank = 0 if target.get("kind") == "function" else 1
+    conditional_rank = 1 if target.get("conditional") else 0
+    mock_rank = 1 if target.get("needs_mock") else 0
+    return (kind_rank, conditional_rank, mock_rank, str(target.get("symbol", "")).lower())
 
 def _has_pointer(params: str) -> bool:
     return "*" in (params or "")
@@ -43,7 +71,15 @@ def suggest_test_plan_impl(
     sdk_root: str = "",
     scan_json: str | dict[str, Any] | None = None,
     include_dirs: list[str] | str | None = None,
+    max_targets: int | str = 0,
 ) -> dict[str, Any]:
+    from sdk_forge.util import parse_bool
+
+    try:
+        limit = int(max_targets) if str(max_targets).strip() not in ("", "0", "none") else 0
+    except (TypeError, ValueError):
+        limit = 0
+
     if scan_json:
         if isinstance(scan_json, str):
             try:
@@ -61,12 +97,15 @@ def suggest_test_plan_impl(
         return scan_data
 
     targets: list[dict[str, Any]] = []
-    summary = {"functions": 0, "classes": 0, "virtual": 0, "conditional": 0}
-
+    summary = {"functions": 0, "classes": 0, "virtual": 0, "conditional": 0, "filtered": 0}
     for file_info in scan_data.get("files", []):
         filename = file_info.get("file", "")
         for fn in file_info.get("functions", []):
             if fn.get("kind") == "method":
+                continue
+            symbol = fn.get("name", "")
+            if _is_noise_symbol(symbol, "function"):
+                summary["filtered"] += 1
                 continue
             conditional = bool(fn.get("conditional"))
             if conditional:
@@ -90,6 +129,9 @@ def suggest_test_plan_impl(
 
         for cls in file_info.get("classes", []):
             name = cls.get("name", "")
+            if _is_noise_symbol(name, "class"):
+                summary["filtered"] += 1
+                continue
             if len(class_names) == 1 and virtual_in_file:
                 methods = virtual_in_file
                 has_virtual = True
@@ -113,10 +155,16 @@ def suggest_test_plan_impl(
             })
             summary["classes"] += 1
 
+    total_before_limit = len(targets)
+    if limit > 0 and len(targets) > limit:
+        targets = sorted(targets, key=_target_priority)[:limit]
+
     return {
         "status": "ok",
         "sdk_root": scan_data.get("sdk_root") or sdk_root or None,
         "targets": targets,
         "summary": summary,
         "target_count": len(targets),
+        "total_candidates": total_before_limit,
+        "max_targets": limit if limit > 0 else None,
     }

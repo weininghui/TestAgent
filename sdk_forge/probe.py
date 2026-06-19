@@ -8,6 +8,46 @@ from pathlib import Path
 _RE_PC_CFLAGS = re.compile(r"^Cflags:\s*(.+)$", re.MULTILINE)
 _RE_PC_LIBS = re.compile(r"^Libs:\s*(.+)$", re.MULTILINE)
 _RE_PC_LIBDIR = re.compile(r"^Libdir:\s*(.+)$", re.MULTILINE)
+_RE_CMAKE_PROJECT = re.compile(r"^\s*project\s*\(\s*([\w.-]+)", re.MULTILINE | re.IGNORECASE)
+_RE_CMAKE_ADD_LIBRARY = re.compile(
+    r"^\s*add_library\s*\(\s*([\w:-]+)",
+    re.MULTILINE | re.IGNORECASE,
+)
+_RE_CMAKE_ALIAS = re.compile(
+    r"^\s*add_library\s*\(\s*([\w:-]+)::[\w:-]+\s+ALIAS\s+([\w:-]+)",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def parse_cmake_link_libraries(cmake_path: Path) -> list[str]:
+    """Extract linkable library targets from CMakeLists.txt."""
+    if not cmake_path.is_file():
+        return []
+    try:
+        text = cmake_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    libraries: list[str] = []
+    for match in _RE_CMAKE_ADD_LIBRARY.finditer(text):
+        name = match.group(1).strip()
+        if name.upper() in ("IMPORTED", "INTERFACE", "UNKNOWN", "OBJECT", "MODULE"):
+            continue
+        if name.endswith("::"):
+            continue
+        if "::" in name:
+            name = name.split("::", 1)[0]
+        if name and name not in libraries:
+            libraries.append(name)
+
+    if not libraries:
+        project = _RE_CMAKE_PROJECT.search(text)
+        if project:
+            raw = project.group(1).strip()
+            if raw.lower() not in ("test", "tests", "example", "examples"):
+                libraries.append(raw.replace("_", "-").lower())
+
+    return libraries
 
 
 def parse_pkg_config(pc_path: Path) -> dict:
@@ -63,8 +103,12 @@ def probe_sdk_impl(sdk_root: str) -> dict:
         pkg_config_packages = parsed["pkg_config_packages"]
 
     link_libraries: list[str] = []
-    if (target / "CMakeLists.txt").exists():
-        link_libraries.append(target.name.replace("-", "_"))
+    cmake_path = target / "CMakeLists.txt"
+    if cmake_path.exists():
+        link_libraries = parse_cmake_link_libraries(cmake_path)
+    if not link_libraries and pkg_config_packages:
+        parsed_libs = parse_pkg_config(pc_files[0]).get("link_libraries", [])
+        link_libraries = list(dict.fromkeys(parsed_libs))
 
     return {
         "status": "ok",

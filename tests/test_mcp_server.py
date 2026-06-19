@@ -843,6 +843,81 @@ class TestCompdb:
         assert loaded["entry_count"] == 1
 
 
+class TestProbeCmake:
+    def test_yaml_cpp_library_name(self):
+        from sdk_forge.probe import parse_cmake_link_libraries
+        from pathlib import Path
+
+        cmake = Path(r"C:\Users\14513\Downloads\test\CMakeLists.txt")
+        if not cmake.is_file():
+            pytest.skip("yaml-cpp clone not present")
+        libs = parse_cmake_link_libraries(cmake)
+        assert "yaml-cpp" in libs
+
+    def test_probe_not_folder_name(self):
+        from sdk_forge.probe import probe_sdk_impl
+        from pathlib import Path
+
+        root = Path(r"C:\Users\14513\Downloads\test")
+        if not root.is_dir():
+            pytest.skip("yaml-cpp clone not present")
+        result = probe_sdk_impl(str(root))
+        assert result["status"] == "ok"
+        assert "test" not in result.get("link_libraries", []) or "yaml-cpp" in result["link_libraries"]
+
+
+class TestPlanFilter:
+    def test_filters_macro_symbols(self):
+        from sdk_forge.plan import _is_noise_symbol
+
+        assert _is_noise_symbol("YAML_CPP_API", "class") is True
+        assert _is_noise_symbol("calc_add", "function") is False
+
+    def test_max_targets_limits(self):
+        from sdk_forge.plan import suggest_test_plan_impl
+
+        scan = {
+            "status": "ok",
+            "files": [{
+                "file": "api.h",
+                "functions": [
+                    {"name": f"fn_{i}", "kind": "function", "params": "int x"}
+                    for i in range(10)
+                ],
+                "classes": [],
+            }],
+        }
+        plan = suggest_test_plan_impl(scan_json=scan, max_targets=3)
+        assert plan["target_count"] == 3
+        assert plan["total_candidates"] == 10
+
+
+class TestApplyFix:
+    def test_requires_confirm(self, tmp_path):
+        from sdk_forge.test_fix import apply_proposed_fixes_impl
+
+        result = apply_proposed_fixes_impl(str(tmp_path), confirm=False)
+        assert result["status"] == "error"
+        assert "confirm" in result["error"].lower()
+
+    def test_apply_line(self, tmp_path):
+        from sdk_forge.test_fix import apply_proposed_fixes_impl, propose_test_fixes_impl
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        test_file = tests / "calc_test.cpp"
+        test_file.write_text("TEST(T, C) {\n    EXPECT_EQ(1, 0);\n}\n", encoding="utf-8")
+
+        analysis = {
+            "status": "ok",
+            "failures": [{"test": "T.C", "file": str(test_file), "line": 2, "expected": "1", "actual": "0"}],
+        }
+        propose_test_fixes_impl(analysis_json=analysis, project_dir=str(tmp_path), tests_dir=str(tests))
+        result = apply_proposed_fixes_impl(str(tmp_path), confirm=True)
+        assert result["status"] == "ok"
+        assert "EXPECT_EQ(1, 1)" in test_file.read_text(encoding="utf-8")
+
+
 class TestSanitizerCmake:
     def test_asan_block_linux(self, monkeypatch):
         from sdk_forge.build import sanitizer_cmake_block

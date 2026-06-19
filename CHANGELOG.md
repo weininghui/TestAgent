@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.5.0] - 2026-06-19
+
+Real SDK adaptations and confirmation-gated apply loop.
+
+### Added
+- CMake `add_library` parsing in `probe_sdk` (fixes wrong link name when clone dir ≠ project name)
+- Plan noise filter (`YAML_CPP_API`, macro-like symbols) and `max_targets` limit
+- `apply_test_fixes` / `forge apply-fix --confirm` — write proposals after explicit confirmation
+- `sdk_forge/workflow.py` — stage tracking in `.forge/cache/workflow.json`
+- MCP: `apply_test_fixes`; `suggest_test_plan(max_targets=...)`
+
+### Fixed
+- Probe no longer suggests `link_libraries: ["test"]` for SDKs cloned into arbitrary folders
+
 ## [3.4.0] - 2026-06-19
 
 Plan gap analysis, confirmation-gated fix proposals, sanitizers, compile_commands.
