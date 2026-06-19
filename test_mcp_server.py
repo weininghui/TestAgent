@@ -21,6 +21,8 @@ from mcp_server import (
     _parse_header,
     _parse_header_clang,
 )
+from sdk_forge.scan import compute_if_depths
+from sdk_forge.mock import generate_mocks_impl
 
 
 # ---------------------------------------------------------------------------
@@ -146,6 +148,28 @@ int compute(int x);
         assert len(info.functions) == 1
         assert info.functions[0]["name"] == "get_items"
 
+    def test_conditional_ifdef_function(self):
+        content = """
+void always_visible();
+
+#ifdef FEATURE_X
+int feature_x_only();
+#endif
+
+void also_visible();
+"""
+        info = _parse_header(content, "/sdk/conditional.h")
+        by_name = {f["name"]: f for f in info.functions}
+        assert by_name["always_visible"]["conditional"] is False
+        assert by_name["feature_x_only"]["conditional"] is True
+        assert by_name["also_visible"]["conditional"] is False
+
+    def test_compute_if_depths(self):
+        content = "#ifdef A\n#ifdef B\nvoid f();\n#endif\n#endif\n"
+        depths = compute_if_depths(content)
+        assert depths[2] == 2
+        assert depths[4] == 1
+
 
 class TestGenerateCmakeContent:
     def test_includes_sdk_paths_and_libraries(self):
@@ -194,6 +218,14 @@ class TestGenerateCmakeContent:
         assert "PkgConfig::LIBCURL" in content
         assert "OpenSSL::Crypto" in content
         assert "/opt/sdk" in content.replace("\\", "/")
+
+    def test_coverage_flags(self):
+        content = _generate_cmake_content(
+            project_name="demo_tests",
+            test_file_names=["demo_test.cpp"],
+            coverage=True,
+        )
+        assert "--coverage" in content
 
 
 class TestNormalizeStrList:
@@ -261,6 +293,55 @@ public:
         assert result["status"] == "ok"
         assert result["parser"] == "regex"
         assert "libclang_available" in result
+
+    @pytest.mark.asyncio
+    async def test_scan_cache_hit(self, sdk_dir, tmp_path, monkeypatch):
+        from mcp_server import scan_headers
+        cache_dir = tmp_path / "scan_cache"
+        cache_dir.mkdir()
+        monkeypatch.setenv("FORGE_SCAN_CACHE", str(cache_dir))
+
+        first = json.loads(await scan_headers(sdk_dir, use_clang=False))
+        assert first["status"] == "ok"
+        assert first.get("cached") is False
+
+        second = json.loads(await scan_headers(sdk_dir, use_clang=False))
+        assert second["status"] == "ok"
+        assert second.get("cached") is True
+        assert second["total_files"] == first["total_files"]
+
+
+class TestGenerateMocks:
+    def test_generates_mock_for_virtual_method(self):
+        scan = {
+            "status": "ok",
+            "files": [{
+                "file": "api.hpp",
+                "classes": [{"name": "Calculator", "kind": "class"}],
+                "functions": [{
+                    "name": "div",
+                    "return_type": "double",
+                    "params": "int a, int b",
+                    "virtual": True,
+                    "kind": "method",
+                }],
+            }],
+        }
+        result = generate_mocks_impl(scan, "Calculator")
+        assert result["status"] == "ok"
+        assert result["mock_count"] == 1
+        assert "MOCK_METHOD" in result["header"]
+        assert "MockCalculator" in result["header"]
+
+
+class TestCli:
+    def test_cli_scan_help(self):
+        from sdk_forge.cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["scan", "/tmp/sdk", "--no-cache"])
+        assert args.command == "scan"
+        assert args.sdk_root == "/tmp/sdk"
+        assert args.no_cache is True
 
 
 class TestParseHeaderClang:

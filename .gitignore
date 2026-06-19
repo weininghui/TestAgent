@@ -5,6 +5,7 @@ test_sdk/build/
 test_sdk_cpp/build/
 __pycache__/
 *.pyc
+*.egg-info/
 test_output_dir/
 
 # Virtual environment

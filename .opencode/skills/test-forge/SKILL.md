@@ -5,118 +5,87 @@ description: Scan C/C++ SDK headers, generate GTest code, compile and run tests 
 
 # SDK Test Forge Skill
 
-Generate GoogleTest (GTest) test suites from C/C++ SDK header files.
-
-## When to Use
-
-- User provides an SDK path and asks to test its APIs
-- User asks to "generate tests" for a C/C++ library
-- User wants to verify SDK API correctness with automated tests
-
 ## Workflow
 
-### Step 1: Probe SDK
-
-Call `probe_sdk` to discover suggested compile parameters:
+### Step 0: Probe SDK (required)
 
 ```
-sdk_root: /path/to/sdk
+probe_sdk: /path/to/sdk
 ```
 
-Or pass a `.pc` file path directly. Use the returned `sdk_include_dirs`, `sdk_lib_dirs`, `pkg_config_packages`, and `cmake_prefix_path` in later steps.
+Or CLI: `forge probe /path/to/sdk`
 
-### Step 2: Scan Headers
-
-Call `scan_headers` with include context for complex C++ SDKs:
+### Step 1: Scan Headers
 
 ```
-sdk_root: /path/to/sdk
-include_dirs: ["/path/to/sdk/include"]
-compile_args: ["-std=c++17"]
-use_clang: true
+scan_headers:
+  sdk_root: /path/to/sdk
+  include_dirs: [...]
+  use_cache: true
 ```
 
-Returns JSON with functions (namespace, static/virtual flags), classes, enums, typedefs, and parser metadata.
+Review `conditional: true` symbols — they may need `-D` flags to test.
 
-### Step 3: Analyze API (use OpenCode's model)
+### Step 2: Mock Generation (optional)
 
-Review the scan result and analyze:
-- API surface size and complexity
-- Functions that need parameter validation tests
-- Functions with pointer parameters (nullptr tests)
-- Error return patterns
-- Resource handle patterns (init/close pairs)
-- Thread safety candidates
-
-### Step 4: Design Test Cases (use OpenCode's model)
-
-Design targeted test cases covering:
-- **Normal path** — typical valid inputs
-- **Boundary** — edge values, empty strings, zero sizes
-- **Error handling** — null pointers, invalid enums, out-of-range values
-- **Resource management** — init/close, open/close pairs, double-free prevention
-- **State** — sequence-dependent calls, repeat calls
-
-### Step 5: Write GTest Source Files
-
-Write C++ GTest source files using OpenCode's `Write` tool.
-
-For C libraries linked from C++ tests, wrap includes in `extern "C" { ... }`.
-
-### Step 6: Delete Old Tests
-
-Call `delete_tests`:
+If scan shows `virtual: true` methods:
 
 ```
-test_dir: /path/to/output/tests
+generate_mocks:
+  sdk_root: /path/to/sdk
+  class_name: Calculator
 ```
 
-### Step 7: Compile (with SDK linking)
+Or: `forge mocks --sdk-root /path/to/sdk --output mocks.hpp`
 
-Call `compile_tests` using the strategy from `probe_sdk`:
+### Step 3–4: Analyze & Design Tests
 
-**Prebuilt library:**
-```
-source_dir: /path/to/output/tests
-build_dir: /path/to/output/build
-sdk_include_dirs: ["/path/to/sdk/include"]
-sdk_lib_dirs: ["/path/to/sdk/build"]
-link_libraries: ["my_sdk"]
-gtest_source: cached
-```
+Cover normal, boundary, error, resource-pairing scenarios.
 
-**pkg-config:**
-```
-pkg_config_packages: ["my_sdk"]
-```
-
-**CMake package:**
-```
-cmake_prefix_path: ["/opt/my_sdk"]
-find_packages: [{"name": "my_sdk", "target": "my_sdk::my_sdk"}]
-```
-
-### Step 8: Run Tests
-
-Call `run_tests`:
+### Step 5: Delete Old Tests
 
 ```
-build_dir: /path/to/output/build
+delete_tests: /path/to/tests
+```
+
+### Step 6: Compile
+
+```
+compile_tests:
+  source_dir: /path/to/tests
+  build_dir: /path/to/build
+  gtest_source: cached
+  coverage: false   # set true if user asks for coverage
+```
+
+**Failure recovery:** read `output` from cmake_error responses; fix include/lib/pkg-config paths from probe_sdk.
+
+### Step 7: Run
+
+```
+run_tests: /path/to/build
+```
+
+### Step 8: Coverage (optional, Linux)
+
+```
+collect_coverage:
+  build_dir: /path/to/build
+  source_dir: /path/to/tests
 ```
 
 ### Step 9: Report
 
-Summarize total, passed, failed, skipped, and list any failures.
+Summarize passed/failed/skipped and coverage percentage if collected.
 
 ## Rules
 
-1. **No external LLM calls** — use only OpenCode's built-in model
-2. **Probe and scan first** — never guess SDK structure
-3. **Always compile and run** — generated code must be verified
-4. **Use descriptive test names** — `FunctionName_Scenario_ExpectedResult`
-5. **Write portable C++17** — avoid platform-specific APIs in tests
+1. Probe and scan before guessing SDK layout
+2. Always compile and run generated tests
+3. Use `forge` CLI when MCP is unavailable
+4. Portable C++17 in tests
 
-## Sample SDKs
+## Samples
 
-- [`test_sdk/`](../../test_sdk/) — minimal C library
-- [`test_sdk_cpp/`](../../test_sdk_cpp/) — C++ SDK with namespace, templates, pkg-config
+- [`test_sdk/`](../../test_sdk/) — C library
+- [`test_sdk_cpp/`](../../test_sdk_cpp/) — C++ with virtual methods and pkg-config

@@ -66,7 +66,10 @@ jobs:
       - name: Run integration tests
         env:
           FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest
-        run: python -m pytest test_mcp_server.py -v -k TestCompileAndRun
+        run: |
+          python -m pytest test_mcp_server.py -v -k TestCompileAndRun
+          pip install -e .
+          forge scan test_sdk --no-clang
 
   integration-windows:
     name: C++ integration (Windows MSVC)
