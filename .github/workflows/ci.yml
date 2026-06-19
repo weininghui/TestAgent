@@ -31,7 +31,7 @@ jobs:
           pip install -e .
 
       - name: Run unit tests
-        run: python -m pytest test_mcp_server.py -v -k "not TestCompileAndRun and not TestCoveragePipeline and not TestCliIntegration"
+        run: python -m pytest tests/ -v -k "not TestCompileAndRun and not TestCoveragePipeline and not TestCliIntegration"
 
   integration-linux:
     name: C++ integration (Linux)
@@ -69,8 +69,8 @@ jobs:
         env:
           FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest
         run: |
-          python -m pytest test_mcp_server.py -v -k "TestCompileAndRun or TestCliIntegration or TestCoveragePipeline"
-          forge scan test_sdk --no-clang
+          python -m pytest tests/ -v -k "TestCompileAndRun or TestCliIntegration or TestCoveragePipeline"
+          forge scan examples/test_sdk --no-clang
 
       - name: Upload coverage HTML
         if: always()
@@ -111,8 +111,8 @@ jobs:
         env:
           FORGE_GTEST_CACHE: ${{ runner.temp }}/sdk-test-forge-gtest
         run: |
-          python -m pytest test_mcp_server.py -v -k "TestCompileAndRun and not pkg_config and not test_medium"
-          python -m pytest test_mcp_server.py -v -k TestCliIntegration
+          python -m pytest tests/ -v -k "TestCompileAndRun and not pkg_config and not test_medium"
+          python -m pytest tests/ -v -k TestCliIntegration
 
   scan-clang:
     name: libclang scan (optional)
@@ -137,5 +137,5 @@ jobs:
 
       - name: Run clang tests
         run: |
-          python -m pytest test_mcp_server.py -v -k TestParseHeaderClang
-          forge scan test_sdk_cpp/include --no-cache
+          python -m pytest tests/ -v -k TestParseHeaderClang
+          forge scan examples/test_sdk_cpp/include --no-cache

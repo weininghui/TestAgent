@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.3.1] - 2026-06-19
+
+Project layout cleanup — no functional API changes.
+
+### Changed
+- Sample SDK fixtures moved to `examples/` (`test_sdk`, `test_sdk_cpp`, `test_sdk_medium`)
+- Release notes moved to `docs/releases/`
+- Agent docs moved to `docs/` (`AGENTS.md`, `REGISTER_AGENT.md`)
+- Tests moved to `tests/`; pytest `testpaths` configured in `pyproject.toml`
+- README: project layout section and updated fixture paths
+
 ## [3.3.0] - 2026-06-19
 
 Agent continuation — test scaffolding, failure learning, GTest analyze, session context.

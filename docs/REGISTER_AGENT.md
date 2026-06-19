@@ -32,7 +32,7 @@
 plugin.yaml 或 opencode.json MCP  → 注册 sdk-test-forge MCP 工具
 oh-my-openagent.json              → 配置 forge 模型（model、fallback）
 .opencode/agents/forge.md         → Agent 出现在下拉选择框（mode: all）
-AGENTS.md                         → Agent 系统提示词源文件
+docs/AGENTS.md                      → Agent 系统提示词源文件
 ```
 
 > **注意**：TestAgent 是 Python MCP 插件，**不会**出现在 OpenCode 的 npm「插件」列表中。请在 MCP 列表中查找 `sdk-test-forge`，在 Agent 下拉框中查找 `forge`。
@@ -343,7 +343,7 @@ C:\Users\<用户名>\.config\opencode\opencode.json
 ### AGENTS.md（Agent 提示词源文件）
 
 ```
-<project-root>/AGENTS.md
+<project-root>/docs/AGENTS.md
 ```
 
 **此文件不是 OpenCode 直接加载的配置文件**，而是 Agent 系统提示词（`developer_instructions`）的源材料。

@@ -14,5 +14,5 @@
 
 ## 示例
 
-- [`test_sdk/`](test_sdk/) — C SDK
-- [`test_sdk_cpp/`](test_sdk_cpp/) — C++ SDK
+- [`examples/test_sdk/`](examples/test_sdk/) — C SDK
+- [`examples/test_sdk_cpp/`](examples/test_sdk_cpp/) — C++ SDK

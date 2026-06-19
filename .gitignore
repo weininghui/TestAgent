@@ -1,9 +1,8 @@
 output/
 testhistory/
 test_cache_audit/
-test_sdk/build/
-test_sdk_cpp/build/
-test_sdk_medium/build/
+examples/*/build/
+.forge/
 __pycache__/
 *.pyc
 *.egg-info/

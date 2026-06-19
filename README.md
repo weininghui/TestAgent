@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.3.0** — scaffold, failure learning, GTest analyze, session context.
+**Current release: v3.3.1** — standardized project layout; v3.3.0 added scaffold, failure learning, GTest analyze, session context.
 
 ## What it does
 
@@ -40,7 +40,7 @@ Requirements: **Python 3.10+**, **CMake 3.14+**, **C++ compiler** (g++/clang++/M
 forge doctor
 
 # 2. Scaffold a test project
-forge init ./my_tests --sdk-root ./test_sdk_cpp
+forge init ./my_tests --sdk-root ./examples/test_sdk_cpp
 
 # 3. Edit my_tests/.forge.yaml and tests/*.cpp, then one-shot build
 forge build --project-dir ./my_tests
@@ -51,14 +51,14 @@ forge build --project-dir ./my_tests
 ### Sample `.forge.yaml`
 
 ```yaml
-sdk_root: ../test_sdk_cpp
+sdk_root: ../examples/test_sdk_cpp
 tests_dir: tests
 build_dir: build
 
 sdk_include_dirs:
-  - ../test_sdk_cpp/include
+  - ../examples/test_sdk_cpp/include
 sdk_lib_dirs:
-  - ../test_sdk_cpp/build
+  - ../examples/test_sdk_cpp/build
 link_libraries:
   - my_sdk
 
@@ -144,7 +144,7 @@ All commands emit JSON to stdout. Exit codes: `0` ok, `1` test failures, `2` err
 | `collect_coverage` | `forge coverage` |
 | `delete_tests` | `forge clean` |
 
-Open this repo in OpenCode — `plugin.yaml` auto-registers MCP + skill. For global use across projects, see [REGISTER_AGENT.md](REGISTER_AGENT.md).
+Open this repo in OpenCode — `plugin.yaml` auto-registers MCP + skill. For global use across projects, see [REGISTER_AGENT.md](docs/REGISTER_AGENT.md).
 
 Agent prompt: [`.opencode/agents/forge.md`](.opencode/agents/forge.md)  
 Skill workflow: [`.opencode/skills/test-forge/SKILL.md`](.opencode/skills/test-forge/SKILL.md)
@@ -152,10 +152,10 @@ Skill workflow: [`.opencode/skills/test-forge/SKILL.md`](.opencode/skills/test-f
 ## Legacy step-by-step workflow
 
 ```bash
-forge probe ./test_sdk_cpp
-forge scan ./test_sdk_cpp/include
+forge probe ./examples/test_sdk_cpp
+forge scan ./examples/test_sdk_cpp/include
 # write tests/*.cpp
-forge compile ./tests ./build --from-probe ./test_sdk_cpp
+forge compile ./tests ./build --from-probe ./examples/test_sdk_cpp
 forge run ./build
 ```
 
@@ -173,10 +173,29 @@ Windows: set `LIBCLANG_PATH` to LLVM `bin`, e.g. `C:\Program Files\LLVM\bin`.
 
 | Directory | Description |
 |-----------|-------------|
-| [`test_sdk/`](test_sdk/) | C library (`calc`) |
-| [`test_sdk_cpp/`](test_sdk_cpp/) | C++ namespace, virtual methods, pkg-config |
-| [`test_sdk_medium/`](test_sdk_medium/) | Multi-module, `#ifdef`, pkg-config |
+| [`examples/test_sdk/`](examples/test_sdk/) | C library (`calc`) |
+| [`examples/test_sdk_cpp/`](examples/test_sdk_cpp/) | C++ namespace, virtual methods, pkg-config |
+| [`examples/test_sdk_medium/`](examples/test_sdk_medium/) | Multi-module, `#ifdef`, pkg-config |
 | [`examples/forge_test_sdk/`](examples/forge_test_sdk/) | Sample `.forge.json` |
+
+## Project layout
+
+```
+TestAgent/
+├── sdk_forge/          # Python package (CLI + core logic)
+├── mcp_server.py       # OpenCode MCP entry point
+├── tests/              # pytest suite
+├── examples/           # Sample SDKs and .forge configs
+├── docs/               # Agent docs and release notes
+│   ├── AGENTS.md
+│   ├── REGISTER_AGENT.md
+│   └── releases/
+├── .opencode/          # Agent prompt + skill (bundled)
+├── .github/workflows/  # CI
+├── plugin.yaml         # OpenCode plugin manifest
+├── pyproject.toml
+└── README.md
+```
 
 ## Capability matrix
 
@@ -212,10 +231,10 @@ Windows: set `LIBCLANG_PATH` to LLVM `bin`, e.g. `C:\Program Files\LLVM\bin`.
 
 ```bash
 # fast unit tests (no cmake required)
-python -m pytest test_mcp_server.py -v -k "not TestCompileAndRun and not TestCliIntegration"
+python -m pytest tests/ -v -k "not TestCompileAndRun and not TestCliIntegration"
 
 # full suite (needs cmake + compiler)
-python -m pytest test_mcp_server.py -v
+python -m pytest tests/ -v
 ```
 
 ## Troubleshooting
@@ -234,7 +253,7 @@ python -m pytest test_mcp_server.py -v
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
 - [CHANGELOG](CHANGELOG.md)
-- Latest notes: [RELEASE_NOTES_v3.3.0.md](RELEASE_NOTES_v3.3.0.md)
+- Latest notes: [RELEASE_NOTES_v3.3.0.md](docs/releases/RELEASE_NOTES_v3.3.0.md)
 
 ## License
 

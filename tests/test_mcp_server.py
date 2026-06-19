@@ -11,8 +11,11 @@ from pathlib import Path
 
 import pytest
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+EXAMPLES = REPO_ROOT / "examples"
+
 # Ensure the project root is in sys.path for importing mcp_server
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(REPO_ROOT))
 
 from mcp_server import (
     HeaderFileInfo,
@@ -862,8 +865,7 @@ class TestScanCacheInvalidation:
 
 class TestMocksE2E:
     def test_scan_test_sdk_cpp_generates_div_mock(self):
-        repo = Path(__file__).resolve().parent
-        scan = scan_headers_impl(str(repo / "test_sdk_cpp" / "include"), use_clang=False, use_cache=False)
+        scan = scan_headers_impl(str(EXAMPLES / "test_sdk_cpp" / "include"), use_clang=False, use_cache=False)
         assert scan["status"] == "ok"
         result = generate_mocks_impl(scan, "Calculator")
         assert result["mock_count"] >= 1
@@ -1037,7 +1039,7 @@ def _find_sdk_lib_dir(sdk_build: Path) -> Path:
 
 
 def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
-    sdk_root = repo_root / "test_sdk"
+    sdk_root = repo_root / "examples" / "test_sdk"
     sdk_build = sdk_root / "build"
     sdk_build.mkdir(parents=True, exist_ok=True)
 
@@ -1113,12 +1115,11 @@ TEST(MathTest, Subtraction) {
     async def test_compile_and_run_with_test_sdk(self):
         from mcp_server import compile_tests, run_tests
 
-        repo_root = Path(__file__).resolve().parent
-        include_dir, lib_dir = _build_test_sdk(repo_root)
+        include_dir, lib_dir = _build_test_sdk(REPO_ROOT)
 
         with tempfile.TemporaryDirectory(prefix="sdk_forge_tests_") as tmp:
             src = Path(tmp)
-            example = repo_root / "test_sdk" / "examples" / "calc_test.cpp"
+            example = EXAMPLES / "test_sdk" / "examples" / "calc_test.cpp"
             (src / "calc_test.cpp").write_text(example.read_text(encoding="utf-8"))
             build = str(Path(tempfile.mkdtemp(prefix="sdk_forge_build_")))
 
@@ -1143,8 +1144,7 @@ TEST(MathTest, Subtraction) {
     async def test_compile_and_run_with_test_sdk_cpp(self):
         from mcp_server import compile_tests, run_tests
 
-        repo_root = Path(__file__).resolve().parent
-        sdk_root = repo_root / "test_sdk_cpp"
+        sdk_root = EXAMPLES / "test_sdk_cpp"
         sdk_build = sdk_root / "build"
         sdk_build.mkdir(parents=True, exist_ok=True)
 
@@ -1177,7 +1177,7 @@ TEST(MathTest, Subtraction) {
 
         with tempfile.TemporaryDirectory(prefix="sdk_cpp_forge_tests_") as tmp:
             src = Path(tmp)
-            example = repo_root / "test_sdk_cpp" / "examples" / "api_test.cpp"
+            example = EXAMPLES / "test_sdk_cpp" / "examples" / "api_test.cpp"
             (src / "api_test.cpp").write_text(example.read_text(encoding="utf-8"))
             build_dir = str(Path(tempfile.mkdtemp(prefix="sdk_cpp_forge_build_")))
 
@@ -1204,8 +1204,7 @@ TEST(MathTest, Subtraction) {
     async def test_compile_with_pkg_config(self):
         from mcp_server import compile_tests, run_tests
 
-        repo_root = Path(__file__).resolve().parent
-        sdk_root = repo_root / "test_sdk_cpp"
+        sdk_root = EXAMPLES / "test_sdk_cpp"
         install_prefix = Path(tempfile.mkdtemp(prefix="my_sdk_install_"))
         sdk_build = sdk_root / "build_ci"
         sdk_build.mkdir(parents=True, exist_ok=True)
@@ -1246,7 +1245,7 @@ TEST(MathTest, Subtraction) {
 
         with tempfile.TemporaryDirectory(prefix="sdk_pc_forge_tests_") as tmp:
             src = Path(tmp)
-            example = repo_root / "test_sdk_cpp" / "examples" / "api_test.cpp"
+            example = EXAMPLES / "test_sdk_cpp" / "examples" / "api_test.cpp"
             (src / "api_test.cpp").write_text(example.read_text(encoding="utf-8"))
             build_dir = str(Path(tempfile.mkdtemp(prefix="sdk_pc_forge_build_")))
 
@@ -1270,8 +1269,7 @@ TEST(MathTest, Subtraction) {
     async def test_medium_sdk_pipeline(self):
         from mcp_server import compile_tests, probe_sdk, run_tests, scan_headers
 
-        repo_root = Path(__file__).resolve().parent
-        sdk_root = repo_root / "test_sdk_medium"
+        sdk_root = EXAMPLES / "test_sdk_medium"
         install_prefix = Path(tempfile.mkdtemp(prefix="medium_install_"))
         sdk_build = sdk_root / "build_ci"
         sdk_build.mkdir(parents=True, exist_ok=True)
