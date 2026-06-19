@@ -213,8 +213,8 @@ class InteractiveSession:
         self._mode: str = MODE_EXECUTE
 
         # Import lazily to avoid circular imports at module level
-        from agent import TestGenAgent
-        self._agent = TestGenAgent(model=model)
+        from agent import ForgeAgent
+        self._agent = ForgeAgent(model=model)
 
     # ──────────────────────────────────────────────────────────────────────────
     # REPL loop

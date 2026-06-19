@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Autonomous SDK Test Generation Agent.
+"""SDK Test Forge Agent — autonomous test generation and quality forging.
 
 A goal-driven agent that wraps the 6-stage LangChain pipeline into an
 autonomous reasoning-and-execution loop.
@@ -13,8 +13,8 @@ Usage
     python agent.py --goal "generate tests for ./my_sdk" --dry-run
 
     # Import
-    from agent import TestGenAgent
-    agent = TestGenAgent(model="longcat")
+    from agent import ForgeAgent
+    agent = ForgeAgent(model="longcat")
     result = agent.run("generate tests for /path/to/sdk")
 
     # OpenCode dispatch
@@ -191,8 +191,8 @@ def _extract_stages(goal: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-class TestGenAgent:
-    """Autonomous SDK Test Generation Agent (Main Agent).
+class ForgeAgent:
+    """SDK Test Forge Agent (Main Agent).
 
     Accepts a high-level goal (natural language), parses the intent,
     selects sub-agents via the :class:`AgentRegistry`, and executes the
@@ -559,7 +559,7 @@ class TestGenAgent:
 
 
 # ---------------------------------------------------------------------------
-# Interactive entry point — invoked by OpenCode when TestGen agent is active
+# Interactive entry point — invoked by OpenCode when Forge agent is active
 #
 # Usage:
 #   python agent.py --goal "generate tests for /path/to/sdk" [--model longcat] [--dry-run]
@@ -569,7 +569,7 @@ class TestGenAgent:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="SDK Test Generation Agent")
+    parser = argparse.ArgumentParser(description="SDK Test Forge Agent")
     parser.add_argument("--goal", type=str, default=None, help="Natural language goal")
     parser.add_argument("--model", type=str, default=None, help="Model preset name")
     parser.add_argument("--dry-run", action="store_true", help="Show plan without executing")
@@ -590,7 +590,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
-        agent = TestGenAgent(model=args.model or "default")
+        agent = ForgeAgent(model=args.model or "default")
 
         if args.dry_run:
             result = agent.plan(goal)

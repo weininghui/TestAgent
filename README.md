@@ -1,6 +1,6 @@
-# SDK Test Generation Agent
+# 🔨 SDK Test Forge Agent
 
-An AI-powered test generation agent that analyses C/C++ SDK header files and
+An AI-powered test-forging agent that analyses C/C++ SDK header files and
 automatically produces comprehensive GoogleTest (GTest) test suites with
 CMake build integration.
 

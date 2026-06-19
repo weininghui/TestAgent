@@ -455,9 +455,9 @@ async def agent_goal(
 ) -> str:
     """Execute a high-level goal via the autonomous agent."""
     try:
-        from agent import TestGenAgent
+        from agent import ForgeAgent
 
-        result = TestGenAgent().run(goal)
+        result = ForgeAgent().run(goal)
     except Exception as exc:
         return f"# Agent Error\n\nAgent execution failed: **{type(exc).__name__}**: {exc}"
 
@@ -491,7 +491,7 @@ def main() -> None:
     """Entry point for the ``testgen-mcp`` console script."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="MCP server for SDK Test Agent")
+    parser = argparse.ArgumentParser(description="MCP server for SDK Test Forge")
     parser.add_argument(
         "--transport",
         choices=["stdio", "sse"],
@@ -525,7 +525,7 @@ def main() -> None:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="MCP server for SDK Test Agent")
+    parser = argparse.ArgumentParser(description="MCP server for SDK Test Forge")
     parser.add_argument(
         "--transport",
         choices=["stdio", "sse"],
