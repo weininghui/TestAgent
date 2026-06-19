@@ -263,7 +263,7 @@ python -m pytest tests/ -v
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
 - [CHANGELOG](CHANGELOG.md)
-- Latest notes: [RELEASE_NOTES_v3.6.0.md](docs/releases/RELEASE_NOTES_v3.6.0.md)
+- Latest notes: [RELEASE_NOTES_v3.6.2.md](docs/releases/RELEASE_NOTES_v3.6.2.md)
 
 ## License
 
