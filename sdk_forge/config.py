@@ -123,3 +123,59 @@ def merge_compile_params(config_params: dict[str, Any], overrides: dict[str, Any
     if overrides.get("coverage") is not None:
         merged["coverage"] = overrides["coverage"]
     return merged
+
+
+_ACTION_TO_PARAM = {
+    "merge_link_libraries": "link_libraries",
+    "merge_sdk_include_dirs": "sdk_include_dirs",
+    "merge_sdk_lib_dirs": "sdk_lib_dirs",
+    "merge_cmake_prefix_path": "cmake_prefix_path",
+    "merge_pkg_config_packages": "pkg_config_packages",
+}
+
+
+def apply_actions_to_params(
+    params: dict[str, Any],
+    actions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Apply hint_actions to compile params (returns new dict)."""
+    overrides: dict[str, Any] = {}
+    for action in actions:
+        action_type = str(action.get("type", ""))
+        param_key = _ACTION_TO_PARAM.get(action_type)
+        if not param_key:
+            continue
+        values = action.get("values") or []
+        if not values:
+            continue
+        existing = overrides.get(param_key, params.get(param_key, []))
+        overrides[param_key] = list(dict.fromkeys([*list(existing or []), *[str(v) for v in values]]))
+    return merge_compile_params(params, overrides)
+
+
+def save_forge_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Write compile-related keys back to the config file."""
+    config_path = config.get("_config_path")
+    if not config_path:
+        return {"status": "error", "error": "No _config_path in config — cannot save"}
+
+    path = Path(config_path)
+    keys_to_save = (
+        "sdk_root", "tests_dir", "build_dir",
+        "sdk_include_dirs", "sdk_lib_dirs", "link_libraries",
+        "cmake_prefix_path", "pkg_config_packages", "find_packages",
+        "extra_cmake_snippet", "gtest_source", "gtest_version",
+        "coverage", "coverage_tool",
+    )
+    payload = {k: config[k] for k in keys_to_save if k in config}
+
+    if path.suffix == ".json":
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    else:
+        try:
+            import yaml  # type: ignore[import-untyped]
+        except ImportError as exc:
+            return {"status": "error", "error": "PyYAML required to save .forge.yaml"}
+        path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
+
+    return {"status": "ok", "config_file": str(path.resolve())}

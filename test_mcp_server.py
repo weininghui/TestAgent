@@ -424,8 +424,11 @@ class TestCli:
         init_args = parser.parse_args(["init", "./proj", "--sdk-root", "../sdk", "--name", "calc"])
         assert init_args.command == "init"
         assert init_args.sdk_root == "../sdk"
-        build_args = parser.parse_args(["build", "--project-dir", ".", "--no-run"])
+        build_args = parser.parse_args(["build", "--project-dir", ".", "--no-run", "--retry", "3"])
         assert build_args.no_run is True
+        assert build_args.retry == 3
+        assert parser.parse_args(["plan", "./sdk"]).command == "plan"
+        assert parser.parse_args(["report", "--project-dir", "."]).command == "report"
 
 
 class TestGtestVersion:
@@ -535,6 +538,145 @@ class TestForgePipeline:
         assert result["source_dir"] == str(tests.resolve())
         assert result["build_dir"] == str(build.resolve())
         assert "compile" in result
+
+
+class TestHintActions:
+    def test_undefined_reference_actions(self):
+        from sdk_forge.hint_actions import parse_cmake_error_with_actions
+
+        parsed = parse_cmake_error_with_actions(
+            "undefined reference to `calc_add'",
+            probe={"status": "ok", "link_libraries": ["calc"]},
+        )
+        assert parsed["hints"]
+        types = {a["type"] for a in parsed["actions"]}
+        assert "merge_link_libraries" in types
+        assert any("calc" in a.get("values", []) for a in parsed["actions"])
+
+    def test_missing_header_actions(self):
+        from sdk_forge.hint_actions import parse_cmake_error_with_actions
+
+        parsed = parse_cmake_error_with_actions(
+            "fatal error: api.h: No such file or directory",
+            probe={"status": "ok", "sdk_include_dirs": ["/sdk/include"]},
+        )
+        assert any(a["type"] == "merge_sdk_include_dirs" for a in parsed["actions"])
+
+    def test_apply_actions_to_params(self):
+        from sdk_forge.config import apply_actions_to_params
+
+        params = {"link_libraries": ["a"], "sdk_include_dirs": []}
+        updated = apply_actions_to_params(params, [
+            {"type": "merge_link_libraries", "values": ["calc"]},
+            {"type": "merge_sdk_include_dirs", "values": ["/inc"]},
+        ])
+        assert "calc" in updated["link_libraries"]
+        assert "/inc" in updated["sdk_include_dirs"]
+
+
+class TestSuggestPlan:
+    def test_plan_from_scan_json(self):
+        from sdk_forge.plan import suggest_test_plan_impl
+
+        scan = {
+            "status": "ok",
+            "sdk_root": "/sdk",
+            "files": [{
+                "file": "calc.h",
+                "functions": [{
+                    "name": "calc_add",
+                    "return_type": "int",
+                    "params": "int a, int b",
+                    "kind": "function",
+                    "conditional": False,
+                }],
+                "classes": [],
+            }],
+        }
+        plan = suggest_test_plan_impl(scan_json=scan)
+        assert plan["status"] == "ok"
+        assert plan["target_count"] == 1
+        target = plan["targets"][0]
+        assert target["symbol"] == "calc_add"
+        assert len(target["scenarios"]) >= 2
+
+    def test_plan_marks_virtual_class(self):
+        from sdk_forge.plan import suggest_test_plan_impl
+
+        scan = {
+            "status": "ok",
+            "files": [{
+                "file": "api.hpp",
+                "functions": [{
+                    "name": "run",
+                    "kind": "method",
+                    "virtual": True,
+                    "return_type": "void",
+                    "params": "",
+                }],
+                "classes": [{"name": "Worker", "kind": "class"}],
+            }],
+        }
+        plan = suggest_test_plan_impl(scan_json=scan)
+        worker = next(t for t in plan["targets"] if t["symbol"] == "Worker")
+        assert worker["needs_mock"] is True
+
+
+class TestBuildRetry:
+    def test_retry_applies_actions(self, tmp_path, monkeypatch):
+        from sdk_forge import retry as retry_mod
+
+        calls = {"n": 0}
+
+        def fake_compile(source_dir, build_dir, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return {
+                    "status": "cmake_error",
+                    "stage": "build",
+                    "output": "undefined reference to `calc_add'",
+                    "hints": ["link"],
+                    "actions": [{"type": "merge_link_libraries", "values": ["calc"]}],
+                }
+            return {"status": "ok", "binary_path": str(tmp_path / "run_tests")}
+
+        monkeypatch.setattr(retry_mod, "compile_tests_impl", fake_compile)
+        monkeypatch.setattr(retry_mod, "run_tests_impl", lambda b: {"status": "ok", "total": 1, "passed": 1, "failed": 0})
+
+        tests = tmp_path / "tests"
+        build = tmp_path / "build"
+        tests.mkdir()
+        build.mkdir()
+        (tests / "t_test.cpp").write_text("#include <gtest/gtest.h>\nTEST(T,T){}\n")
+
+        result = retry_mod.build_with_retry_impl(
+            project_dir=str(tmp_path),
+            max_retries=3,
+            run_after_compile=True,
+        )
+        assert result["status"] == "ok"
+        assert result["auto_fixed"] is True
+        assert len(result["attempts"]) == 2
+        assert calls["n"] == 2
+
+
+class TestReport:
+    def test_report_markdown(self):
+        from sdk_forge.report import report_impl
+
+        state = {
+            "status": "ok",
+            "passed": 5,
+            "failed": 0,
+            "auto_fixed": True,
+            "attempts": [{"attempt": 1, "result": "cmake_error", "actions_applied": []}],
+            "run": {"total": 5, "passed": 5, "failed": 0},
+            "compile": {"gtest_tag": "v1.14.0"},
+        }
+        result = report_impl(build_state_json=json.dumps(state))
+        assert result["status"] == "ok"
+        assert "SDK Test Forge Report" in result["markdown"]
+        assert "v1.14.0" in result["markdown"]
 
 
 class TestCmakeHints:

@@ -13,7 +13,9 @@ from sdk_forge.doctor import doctor_impl
 from sdk_forge.init import init_project_impl
 from sdk_forge.mock import generate_mocks_impl
 from sdk_forge.pipeline import build_pipeline_impl
+from sdk_forge.plan import suggest_test_plan_impl
 from sdk_forge.probe import probe_sdk_impl
+from sdk_forge.report import report_impl
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import scan_headers_impl
 from sdk_forge.util import normalize_str_list, parse_bool
@@ -76,8 +78,8 @@ def cmd_compile(args: argparse.Namespace) -> int:
         extra_cmake_snippet=args.cmake_snippet or "",
         gtest_source=args.gtest_source,
         gtest_version=args.gtest_version,
-        coverage=params.get("coverage", False),
-        coverage_tool=params.get("coverage_tool", "gcov"),
+        coverage=args.coverage,
+        coverage_tool=args.coverage_tool,
         use_config=not args.no_config,
     )
     return _emit(result, args.quiet)
@@ -129,9 +131,36 @@ def cmd_build(args: argparse.Namespace) -> int:
             build_dir=args.build_dir or "",
             sdk_root=args.sdk_root or "",
             run_after_compile=not args.no_run,
+            max_retries=args.retry,
+            auto_fix_config=args.auto_fix_config,
         ),
         args.quiet,
     )
+
+
+def cmd_plan(args: argparse.Namespace) -> int:
+    scan_data = None
+    if args.scan_file:
+        scan_data = open(args.scan_file, encoding="utf-8").read()
+    result = suggest_test_plan_impl(
+        sdk_root=args.sdk_root or "",
+        scan_json=scan_data,
+        include_dirs=args.include or [],
+    )
+    if args.output:
+        open(args.output, "w", encoding="utf-8").write(json.dumps(result, indent=2, ensure_ascii=False))
+    return _emit(result, args.quiet)
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    result = report_impl(
+        project_dir=args.project_dir or "",
+        build_state_json=args.state_file and open(args.state_file, encoding="utf-8").read() or "",
+        output_format=args.format,
+    )
+    if args.output and result.get("markdown"):
+        open(args.output, "w", encoding="utf-8").write(result["markdown"])
+    return _emit(result, args.quiet)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -206,7 +235,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("--build-dir", default="")
     p_build.add_argument("--sdk-root", default="")
     p_build.add_argument("--no-run", action="store_true")
+    p_build.add_argument("--retry", type=int, default=1, help="Max compile attempts with auto-fix (default 1)")
+    p_build.add_argument("--auto-fix-config", action="store_true", help="Write applied fixes back to .forge config")
     p_build.set_defaults(func=cmd_build)
+
+    p_plan = sub.add_parser("plan", help="Suggest structured test plan from SDK scan")
+    p_plan.add_argument("sdk_root", nargs="?", default="")
+    p_plan.add_argument("--scan-file", default="", help="Use existing scan JSON instead of scanning")
+    p_plan.add_argument("--include", action="append", default=[])
+    p_plan.add_argument("--output", default="")
+    p_plan.set_defaults(func=cmd_plan)
+
+    p_report = sub.add_parser("report", help="Generate markdown report from last build")
+    p_report.add_argument("--project-dir", default="")
+    p_report.add_argument("--state-file", default="")
+    p_report.add_argument("--format", default="markdown", choices=["markdown", "json"])
+    p_report.add_argument("--output", default="")
+    p_report.set_defaults(func=cmd_report)
 
     return parser
 

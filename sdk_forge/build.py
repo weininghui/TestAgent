@@ -10,6 +10,7 @@ from pathlib import Path
 
 from sdk_forge.cache import gtest_cache_dir
 from sdk_forge.errors import parse_cmake_error
+from sdk_forge.hint_actions import parse_cmake_error_with_actions
 from sdk_forge.gtest import ensure_gtest, gtest_source_path, normalize_gtest_source, resolve_gtest_tag
 from sdk_forge.util import cmake_path, normalize_json_list, normalize_str_list, run_subprocess
 
@@ -202,6 +203,8 @@ def compile_tests_impl(
     coverage: bool | str = False,
     coverage_tool: str = "gcov",
     use_config: bool | str = True,
+    probe_context: dict | None = None,
+    force_regenerate_cmake: bool | str = False,
 ) -> dict:
     from sdk_forge.config import compile_params_from_config, load_forge_config, merge_compile_params
     from sdk_forge.util import parse_bool
@@ -232,6 +235,7 @@ def compile_tests_impl(
         return {"error": f"Source directory not found: {source_dir}", "status": "error"}
 
     want_coverage = parse_bool(params.get("coverage"), default=False)
+    force_cmake = parse_bool(force_regenerate_cmake, default=False)
     gtest_mode = normalize_gtest_source(str(params.get("gtest_source") or "auto"))
     gtest_tag = resolve_gtest_tag(str(params.get("gtest_version") or "auto"))
     gtest_fetch: dict = {"status": "skipped", "tag": gtest_tag}
@@ -260,6 +264,9 @@ def compile_tests_impl(
             }
 
     cmake_file = src_path / "CMakeLists.txt"
+    if force_cmake and cmake_file.exists():
+        cmake_file.unlink(missing_ok=True)
+
     if not cmake_file.exists():
         test_files = discover_test_files(src_path)
         if not test_files:
@@ -293,11 +300,13 @@ def compile_tests_impl(
 
     cmake_output = (result.stdout or "") + "\n" + (result.stderr or "")
     if result.returncode != 0:
+        parsed = parse_cmake_error_with_actions(cmake_output, probe_context)
         return {
             "status": "cmake_error",
             "stage": "configure",
             "output": cmake_output,
-            "hints": parse_cmake_error(cmake_output),
+            "hints": parsed["hints"],
+            "actions": parsed["actions"],
         }
 
     try:
@@ -309,11 +318,13 @@ def compile_tests_impl(
     compile_duration_sec = round(time.monotonic() - compile_start, 2)
     if build_result.returncode != 0:
         combined = cmake_output + "\n" + build_output
+        parsed = parse_cmake_error_with_actions(combined, probe_context)
         return {
             "status": "cmake_error",
             "stage": "build",
             "output": build_output,
-            "hints": parse_cmake_error(combined),
+            "hints": parsed["hints"],
+            "actions": parsed["actions"],
             "compile_duration_sec": compile_duration_sec,
         }
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.2.0] - 2026-06-19
+
+Agent intelligence — structured test plans, executable hint actions, and auto-retry build.
+
+### Added
+- `sdk_forge/hint_actions.py` — CMake errors → machine-readable `actions`
+- `sdk_forge/plan.py` — `suggest_test_plan` with per-symbol scenarios
+- `sdk_forge/retry.py` — `build_with_retry_impl` with auto-fix loop
+- `sdk_forge/report.py` — `forge report` Markdown summaries
+- MCP: `suggest_test_plan`, `forge_report`, `get_build_state`
+- CLI: `forge plan`, `forge report`, `forge build --retry N --auto-fix-config`
+- `compile_tests` cmake_error responses include `actions`
+- `apply_actions_to_params` / `save_forge_config` in config.py
+- Build state cache at `.forge/cache/last_build.json`
+
 ## [3.1.1] - 2026-06-19
 
 ### Added

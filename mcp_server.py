@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server — thin wrapper over sdk_forge core (v3.1)."""
+"""MCP server — thin wrapper over sdk_forge core (v3.2)."""
 
 from __future__ import annotations
 
@@ -16,7 +16,10 @@ from sdk_forge.doctor import doctor_impl
 from sdk_forge.init import init_project_impl
 from sdk_forge.mock import generate_mocks_impl
 from sdk_forge.pipeline import build_pipeline_impl
+from sdk_forge.plan import suggest_test_plan_impl
 from sdk_forge.probe import probe_sdk_impl
+from sdk_forge.report import report_impl
+from sdk_forge.retry import load_build_state
 from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import CLANG_AVAILABLE, scan_headers_impl
 
@@ -29,12 +32,15 @@ logger = logging.getLogger("mcp_server")
 
 mcp = FastMCP(
     "SDK Test Forge Tools",
-    instructions="""SDK Test Forge Tools — scan, compile, and run GTest suites for C/C++ SDKs.
+    instructions="""SDK Test Forge Tools — scan, plan, compile, and run GTest suites for C/C++ SDKs.
 
 Tools:
   - forge_doctor        → check cmake, compiler, caches
   - init_forge_project  → scaffold tests + .forge.yaml
-  - build_tests         → probe + compile + run from .forge config
+  - suggest_test_plan   → structured test scenarios from scan
+  - build_tests         → probe + compile + run with retry/auto-fix
+  - forge_report        → markdown report from last build
+  - get_build_state     → read last build JSON
   - scan_headers        → parse headers (libclang + regex)
   - probe_sdk           → suggest link settings
   - compile_tests       → CMake build (reads .forge.yaml/.forge.json)
@@ -60,18 +66,49 @@ async def init_forge_project(
     return json.dumps(init_project_impl(target_dir, sdk_root, project_name), indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="One-shot probe + compile + run using .forge config in project_dir.")
+@mcp.tool(description="Generate structured test plan with scenarios from scan_headers JSON or SDK root.")
+async def suggest_test_plan(
+    sdk_root: Annotated[str, "SDK root to scan when scan_json is empty."] = "",
+    scan_json: Annotated[str, "JSON from scan_headers."] = "",
+) -> str:
+    return json.dumps(
+        suggest_test_plan_impl(sdk_root=sdk_root, scan_json=scan_json or None),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Probe + compile + run with retry and optional auto-fix from CMake hints.")
 async def build_tests(
     project_dir: Annotated[str, "Project root containing .forge.yaml or .forge.json."] = "",
     source_dir: Annotated[str, "Override tests directory."] = "",
     build_dir: Annotated[str, "Override build directory."] = "",
     sdk_root: Annotated[str, "Override SDK root for probe."] = "",
     run_after_compile: Annotated[bool | str, "Run tests after compile (default true)."] = True,
+    max_retries: Annotated[int | str, "Max compile attempts with hint-based auto-fix (default 3)."] = 3,
+    auto_fix_config: Annotated[bool | str, "Write applied fixes back to .forge config."] = False,
 ) -> str:
     return json.dumps(
-        build_pipeline_impl(project_dir, source_dir, build_dir, sdk_root, run_after_compile),
+        build_pipeline_impl(
+            project_dir, source_dir, build_dir, sdk_root,
+            run_after_compile, max_retries, auto_fix_config,
+        ),
         indent=2, ensure_ascii=False,
     )
+
+
+@mcp.tool(description="Generate markdown or JSON report from last build state.")
+async def forge_report(
+    project_dir: Annotated[str, "Project directory with .forge/cache/last_build.json."] = "",
+    output_format: Annotated[str, "markdown (default) or json."] = "markdown",
+) -> str:
+    return json.dumps(report_impl(project_dir, output_format=output_format), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Read last build state JSON from project cache.")
+async def get_build_state(
+    project_dir: Annotated[str, "Project directory."] = "",
+) -> str:
+    return json.dumps(load_build_state(project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Scan .h/.hpp headers using libclang when available, with regex fallback.")

@@ -5,111 +5,90 @@ description: Scan C/C++ SDK headers, generate GTest code, compile and run tests 
 
 # SDK Test Forge Skill
 
-## Workflow (v3.1)
+## Workflow (v3.2 — Agent Autonomy)
 
-### Step 0: Doctor (recommended)
+### Step 0: Doctor
 
 ```
 forge_doctor
 ```
 
-Or CLI: `forge doctor` — verify cmake, compiler, caches before long compile loops.
-
-### Step 1: Init project (new SDKs)
+### Step 1: Scan + Plan
 
 ```
-init_forge_project:
-  target_dir: /path/to/my_sdk_tests
-  sdk_root: /path/to/sdk
+scan_headers: { sdk_root: /path/to/sdk }
+suggest_test_plan: { scan_json: <scan result> }
 ```
 
-Creates `tests/`, `build/`, `.forge.yaml`. Edit config with probe results.
+Review `targets[].scenarios` and `needs_mock` / `conditional` flags.
 
-### Step 2: Probe SDK
-
-```
-probe_sdk: /path/to/sdk
-```
-
-Or CLI: `forge probe /path/to/sdk`
-
-### Step 3: Scan Headers
+### Step 2: Probe + Init (if new project)
 
 ```
-scan_headers:
-  sdk_root: /path/to/sdk
-  include_dirs: [...]
-  use_cache: true
+init_forge_project: { target_dir: ./my_tests, sdk_root: /path/to/sdk }
+probe_sdk: { sdk_root: /path/to/sdk }
 ```
 
-Review `conditional: true` symbols — they may need `-D` flags to test.
+Merge probe suggestions into `.forge.yaml`.
 
-### Step 4: Mock Generation (optional)
-
-If scan shows `virtual: true` methods:
+### Step 3: Mocks (if plan shows needs_mock)
 
 ```
-generate_mocks:
-  sdk_root: /path/to/sdk
-  class_name: Calculator
+generate_mocks: { sdk_root: /path/to/sdk, class_name: MyClass }
 ```
 
-### Step 5–6: Analyze, Design, Write Tests
+### Step 4: Write Tests
 
-Cover normal, boundary, error, resource-pairing scenarios. Write `.cpp` under `tests/`.
+Use plan scenarios as checklist. Write `.cpp` under `tests/`.
 
-### Step 7: Build (one-shot)
+### Step 5: Smart Build (with retry)
 
 ```
 build_tests:
-  project_dir: /path/to/my_sdk_tests
+  project_dir: ./my_tests
+  max_retries: 3
+  auto_fix_config: true
 ```
 
-Or step-by-step:
+On failure inspect `attempts[].actions_applied` and `compile.actions`.
+
+### Step 6: Report
 
 ```
-compile_tests:
-  source_dir: /path/to/tests
-  build_dir: /path/to/build
-  use_config: true
+forge_report: { project_dir: ./my_tests }
 ```
 
-`compile_tests` auto-loads `.forge.yaml` / `.forge.json` from project root.
+Paste `markdown` into PR or chat summary.
 
-**Failure recovery:** read `hints` first, then `output`.
+## compile_tests actions reference
 
-### Step 8: Run (if not using build_tests)
+When not using `build_tests`, read `actions` from `compile_tests` errors:
 
-```
-run_tests: /path/to/build
-```
+| type | Config key |
+|------|------------|
+| merge_link_libraries | link_libraries |
+| merge_sdk_include_dirs | sdk_include_dirs |
+| merge_sdk_lib_dirs | sdk_lib_dirs |
+| merge_cmake_prefix_path | cmake_prefix_path |
+| merge_pkg_config_packages | pkg_config_packages |
 
-### Step 9: Coverage (optional, Linux)
+## CLI equivalents
 
-Set `coverage: true` in `.forge.yaml`, then `collect_coverage`.
-
-### Step 10: Report
-
-Summarize passed/failed/skipped and coverage percentage if collected.
-
-## `.forge.yaml` keys
-
-- `sdk_root`, `tests_dir`, `build_dir`
-- `sdk_include_dirs`, `sdk_lib_dirs`, `link_libraries`
-- `pkg_config_packages`, `cmake_prefix_path`, `find_packages`
-- `gtest_source`, `coverage`, `coverage_tool`
-
-See `examples/forge_test_sdk/.forge.json`.
+| MCP | CLI |
+|-----|-----|
+| suggest_test_plan | `forge plan <sdk>` |
+| build_tests | `forge build --retry 3 --auto-fix-config` |
+| forge_report | `forge report --project-dir .` |
 
 ## Rules
 
-1. Run `forge_doctor` on unfamiliar machines
-2. Probe and scan before guessing SDK layout
-3. Prefer `build_tests` when `.forge.yaml` exists
+1. Always `suggest_test_plan` before writing tests
+2. Prefer `build_tests(max_retries=3)` over manual compile loops
+3. Read `actions` before `hints` on compile failure
 4. Portable C++17 in tests
 
 ## Samples
 
 - [`test_sdk/`](../../test_sdk/) — C library
-- [`test_sdk_cpp/`](../../test_sdk_cpp/) — C++ with virtual methods and pkg-config
-- [`examples/forge_test_sdk/`](../../examples/forge_test_sdk/) — sample `.forge.json`
+- [`test_sdk_cpp/`](../../test_sdk_cpp/) — C++ virtual + pkg-config
+- [`examples/forge_test_sdk/`](../../examples/forge_test_sdk/) — `.forge.json`

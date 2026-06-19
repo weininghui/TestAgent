@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.1.1** — project workflow (`.forge` config, doctor/init/build) + toolchain-aware GTest auto-download.
+**Current release: v3.2.0** — agent intelligence: test plans, executable hint actions, auto-retry build.
 
 ## What it does
 
@@ -110,8 +110,10 @@ forge compile ./tests ./build --gtest-source system    # use system GTest
 | Command | Description |
 |---------|-------------|
 | `forge doctor` | Check cmake, compiler, pkg-config, caches, GTest |
+| `forge plan <sdk>` | Structured test plan from header scan |
 | `forge init <dir>` | Create `tests/`, `build/`, `.forge.yaml`, sample test |
-| `forge build` | Probe + compile + run from `.forge` config |
+| `forge build` | Probe + compile + run (`--retry 3`, `--auto-fix-config`) |
+| `forge report` | Markdown report from last build |
 | `forge probe <sdk>` | Suggest include/lib/link settings |
 | `forge scan <sdk>` | Parse headers (`--no-cache`, `--no-clang`) |
 | `forge mocks` | Generate GMock templates (`--sdk-root`, `--output`) |
@@ -127,8 +129,11 @@ All commands emit JSON to stdout. Exit codes: `0` ok, `1` test failures, `2` err
 | MCP tool | CLI equivalent |
 |----------|----------------|
 | `forge_doctor` | `forge doctor` |
+| `suggest_test_plan` | `forge plan` |
 | `init_forge_project` | `forge init` |
 | `build_tests` | `forge build` |
+| `forge_report` | `forge report` |
+| `get_build_state` | `.forge/cache/last_build.json` |
 | `probe_sdk` | `forge probe` |
 | `scan_headers` | `forge scan` |
 | `generate_mocks` | `forge mocks` |
@@ -175,6 +180,10 @@ Windows: set `LIBCLANG_PATH` to LLVM `bin`, e.g. `C:\Program Files\LLVM\bin`.
 
 | Feature | MCP | CLI | Since |
 |---------|-----|-----|-------|
+| Test plan generation | `suggest_test_plan` | `forge plan` | v3.2 |
+| Hint actions (auto-fix) | `actions` in compile JSON | — | v3.2 |
+| Auto-retry build | `build_tests(max_retries)` | `forge build --retry` | v3.2 |
+| Build report | `forge_report` | `forge report` | v3.2 |
 | Environment doctor | `forge_doctor` | `forge doctor` | v3.1 |
 | Project scaffold | `init_forge_project` | `forge init` | v3.1 |
 | One-shot build | `build_tests` | `forge build` | v3.1 |
@@ -219,7 +228,7 @@ python -m pytest test_mcp_server.py -v
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
 - [CHANGELOG](CHANGELOG.md)
-- Latest notes: [RELEASE_NOTES_v3.1.1.md](RELEASE_NOTES_v3.1.1.md)
+- Latest notes: [RELEASE_NOTES_v3.2.0.md](RELEASE_NOTES_v3.2.0.md)
 
 ## License
 
