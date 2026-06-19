@@ -30,6 +30,18 @@
         "opencode/deepseek-v4-flash-free"
       ]
     },
+    "forge-oracle": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "fallback_models": [
+        "opencode/north-mini-code-free"
+      ]
+    },
+    "forge-review": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "fallback_models": [
+        "opencode/nemotron-3-ultra-free"
+      ]
+    },
     "forge-build": {
       "model": "opencode/nemotron-3-ultra-free",
       "fallback_models": [

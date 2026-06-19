@@ -31,6 +31,7 @@ multi_agent_batch_size: 4
 
 # Autopilot (v5.1) — closed-loop enrich + golden snapshot
 # max_enrich_rounds: 3
+# max_agent_retries: 2
 # autopilot_profile: production
 # auto_golden_snapshot: true
 

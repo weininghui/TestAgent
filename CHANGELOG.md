@@ -1,5 +1,22 @@
 # Changelog
 
+## [5.2.0] - 2026-06-20
+
+Multi-agent maturity: agent error retry, review hard gate, build→enrich loop, forge-oracle.
+
+### Added
+- **`max_agent_retries`** config (default 2) — orchestration retries failed sub-agents before blocking
+- **`review_verdict`** (`pass`|`block`) in `workflow.json` — build blocked until review passes
+- **Build→enrich redispatch** — `assertion_quality_blocked` / `scaffold_quality_blocked` clears enrich and re-dispatch weak files
+- **`forge-oracle`** subagent + **`draft_golden_cases`** MCP / `sdk_forge/oracle.py` — golden drafts from plan scenarios
+- **`TestOrchestrationV52`** E2E tests: retry, review gate, build redispatch, merge_ready
+
+### Changed
+- `record_agent_run` accepts `review_verdict` for forge-review
+- `get_orchestration_context` returns `review_verdict`, `build_blocked_status`, `max_agent_retries`
+- [docs/AGENTS.md](docs/AGENTS.md) v5.2; [oh-my-openagent.multi-agent.json](docs/examples/oh-my-openagent.multi-agent.json) includes forge-review + forge-oracle
+- Serial enrich dispatches one batch at a time (regression fix)
+
 ## [5.1.0] - 2026-06-20
 
 Hands-off Autopilot: assertion-driven enrich loop, golden snapshot, single entry.

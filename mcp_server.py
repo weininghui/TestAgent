@@ -56,7 +56,7 @@ Tools:
   - enrich_test_cases     → Agent briefs for complex case completion
   - analyze_scaffold_quality → placeholder/TODO ratio
   - analyze_assertion_quality → semantic weak/tautology/AGENT gate
-  - load_golden_cases / verify_golden_coverage / snapshot_golden_cases → golden oracle
+  - load_golden_cases / verify_golden_coverage / snapshot_golden_cases / draft_golden_cases → golden oracle
   - run_forge_autopilot   → hands-off init→orchestration next_actions (v5.1)
   - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
@@ -242,6 +242,25 @@ async def snapshot_golden_cases(
     )
 
 
+@mcp.tool(description="Draft golden.yaml cases from plan scenarios (forge-oracle heuristic).")
+async def draft_golden_cases(
+    project_dir: Annotated[str, "Project root with last_plan.json."] = "",
+    merge: Annotated[bool | str, "Merge with existing golden.yaml (default true)."] = True,
+    confirm: Annotated[bool | str, "Write golden.yaml (default false = dry-run)."] = False,
+) -> str:
+    from sdk_forge.oracle import draft_golden_from_plan_impl
+    from sdk_forge.util import parse_bool
+    return json.dumps(
+        draft_golden_from_plan_impl(
+            project_dir,
+            merge=parse_bool(merge, default=True),
+            confirm=parse_bool(confirm, default=False),
+        ),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
 @mcp.tool(description="Hands-off autopilot: init/env/scan/scaffold then return orchestration next_actions.")
 async def run_forge_autopilot(
     sdk_root: Annotated[str, "SDK root to scan and test."] = "",
@@ -361,6 +380,7 @@ async def record_agent_run(
     status: Annotated[str, "ok or error."] = "ok",
     batch_id: Annotated[int | str, "Enrich batch id when applicable."] = "",
     detail_json: Annotated[str, "Optional JSON detail object."] = "",
+    review_verdict: Annotated[str, "forge-review only: pass or block."] = "",
 ) -> str:
     bid: int | None = None
     if batch_id not in ("", None):
@@ -374,6 +394,9 @@ async def record_agent_run(
             detail = json.loads(detail_json)
         except json.JSONDecodeError:
             detail = {"raw": detail_json}
+    if review_verdict:
+        detail = dict(detail or {})
+        detail["review_verdict"] = review_verdict.strip().lower()
     result = record_agent_completion(project_dir, agent, status=status, batch_id=bid, detail=detail)
     return json.dumps(result, indent=2, ensure_ascii=False)
 

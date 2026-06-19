@@ -30,9 +30,12 @@ color: "#795548"
    - golden 缺口
    - 覆盖率 / plan gap
    - 建议：**可 merge** 或 **需继续 enrich**
-7. `record_agent_run(agent="forge-review", project_dir=..., status="ok"|"error")`
+7. **必须**调用 `record_agent_run` 并设置 **`review_verdict`**：
+   - 可 merge：`record_agent_run(agent="forge-review", status="ok", review_verdict="pass")`
+   - 需修复：`record_agent_run(agent="forge-review", status="ok", review_verdict="block")`
 
 ## 规则
 
-- score < 80 或存在 AGENT 标记 → 建议 block，不要 dispatch forge-build
+- score < 80 或存在 AGENT 标记 → `review_verdict=block`
+- **`review_verdict=pass`** 是 forge-build 的硬门禁；未 pass 时 orchestration 不会 dispatch build
 - 禁止调用 build_tests（由 forge-build 负责）

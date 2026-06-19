@@ -13,17 +13,19 @@
 
 ---
 
-## 角色（v4.6 Multi-Agent）
+## 角色（v5.2 Multi-Agent）
 
-**forge** 是 **primary 编排器**：通过 `get_session_context` 读 `orchestration.next_actions`，用 `task()` 调度子 agent。
+**forge** 是 **primary 编排器**：优先 `run_forge_autopilot`，再读 `get_session_context` → `orchestration.next_actions`，用 `task()` 调度子 agent。
 
 | 子 agent | 职责 |
 |----------|------|
 | `forge-env` | `ensure_forge_environment` |
 | `forge-scan` | `scan_headers` + `suggest_test_plan` |
 | `forge-scaffold` | `generate_test_skeleton(smart)` |
-| `forge-enrich` | 按 batch 补全 `// AGENT:`（可并行） |
-| `forge-build` | `build_tests` + 失败修复 |
+| `forge-enrich` | 按 batch 补全 `// AGENT:`（可并行；断言失败自动多轮） |
+| `forge-oracle` | `draft_golden_cases` — golden 草稿（可选） |
+| `forge-review` | 生产审查 + **`review_verdict=pass|block`** 硬门禁 |
+| `forge-build` | `build_tests(profile=production)` + 失败修复 |
 
 子 agent 定义见 `.opencode/agents/forge-*.md`（`mode: subagent`）。
 
@@ -31,8 +33,9 @@
 
 | 工具 | 作用 |
 |------|------|
-| `get_session_context` | 含 `orchestration.enrich_batches` / `next_actions` |
-| `record_agent_run` | 标记子 agent 完成 |
+| `run_forge_autopilot` | 一键 init + 返回 next_actions |
+| `get_session_context` | 含 `orchestration`（enrich_round、review_verdict、merge_ready） |
+| `record_agent_run` | 标记子 agent 完成；`review_verdict` 用于 review |
 
 ## 配置
 
@@ -40,7 +43,15 @@
 
 ```yaml
 multi_agent_batch_size: 4   # enrich 并行批大小；1 = 串行
+max_enrich_rounds: 3        # 断言/enrich 闭环最大轮次
+max_agent_retries: 2        # 子 agent 失败后编排器重试次数
 ```
+
+## v5.2 编排行为
+
+- 子 agent `status=error` → orchestration 自动 **retry**（最多 `max_agent_retries`）
+- build 因 assertion/scaffold 阻塞 → 自动 **re-dispatch enrich**
+- `forge-review` 必须 `review_verdict=pass` 才会进入 `forge-build`
 
 ## 单 Agent Fallback
 
@@ -48,11 +59,5 @@ multi_agent_batch_size: 4   # enrich 并行批大小；1 = 串行
 
 ## 规则
 
-- 禁止无 `build_tests status=ok` 时声称 PASS
-- 禁止无 confirm 自动改 SDK 源码
-- 大 SDK 用 `max_targets` 分批
-
-## 示例项目
-
-- [`examples/test_sdk/`](../examples/test_sdk/) — C SDK
-- [`examples/test_sdk_cpp/`](../examples/test_sdk_cpp/) — C++ SDK
+- 无 `build_tests status=ok` 且 `run.passed` 时禁止声称全部通过
+- 用户问版本时调用 `forge_doctor`，读 `forge_version`

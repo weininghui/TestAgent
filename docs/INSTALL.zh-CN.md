@@ -10,7 +10,7 @@
 | [2. OpenCode 插件 — 首次安装](#2-opencode-插件--首次安装) | 第一次配置 MCP + Agent |
 | [3. 更新到最新版本](#3-更新到最新版本) | 已安装但版本过旧 |
 
-**当前 Release：** [v5.1.0](releases/RELEASE_NOTES_v5.1.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/TestAgent/releases)。
+**当前 Release：** [v5.2.0](releases/RELEASE_NOTES_v5.2.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/TestAgent/releases)。
 
 ## 最省事怎么用（推荐）
 
@@ -89,14 +89,17 @@ powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
 | `pip show sdk-test-forge` → `Version` | `pyproject.toml` 包元数据 | 仅当发布时同步更新了 `pyproject.toml` |
 | GitHub Release tag | 官方发布版本 | 是 |
 
-若 `pip show` 仍是 `4.0.0`，但 `sdk_forge.__version__` 已是 `5.1.0`，说明 **代码已更新、pip 元数据未重装** — 在插件目录再执行一次 `pip install -e .`。
+若 `pip show` 仍是 `4.0.0`，但 `sdk_forge.__version__` 已是 `5.2.0`，说明 **代码已更新、pip 元数据未重装** — 在插件目录再执行一次 `pip install -e .`。
 
-**v5.1+ 安装自检：**
+**v5.2+ 安装自检：**
 
 ```bash
-python -c "import sdk_forge; print(sdk_forge.__version__)"   # 应为 5.1.0
+python -c "import sdk_forge; print(sdk_forge.__version__)"   # 应为 5.2.0
 forge autopilot --help                                         # 必须有 autopilot 子命令
 python -c "import sdk_forge.autopilot"                           # 模块应能导入
+```
+
+OpenCode MCP 工具列表中应有 **`run_forge_autopilot`**、**`draft_golden_cases`**、**`record_agent_run`**（含 `review_verdict`）。
 ```
 
 OpenCode MCP 工具列表中应能看到 **`run_forge_autopilot`**、**`snapshot_golden_cases`**。
@@ -317,12 +320,12 @@ forge autopilot --help
 pip show sdk-test-forge
 ```
 
-| 检查项 | v5.1.0 预期 |
+| 检查项 | v5.2.0 预期 |
 |--------|-------------|
-| `sdk_forge.__version__` | `5.1.0` |
+| `sdk_forge.__version__` | `5.2.0` |
 | `forge autopilot --help` | 有 `autopilot` 子命令 |
-| MCP 工具 | `run_forge_autopilot`、`snapshot_golden_cases` |
-| `pip show` Version | `5.1.0`（`pip install -e .` 之后） |
+| MCP 工具 | `run_forge_autopilot`、`draft_golden_cases`、`record_agent_run` + `review_verdict` |
+| `pip show` Version | `5.2.0`（`pip install -e .` 之后） |
 
 若版本仍不对：
 

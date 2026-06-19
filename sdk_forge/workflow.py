@@ -92,6 +92,11 @@ def record_agent_completion(
         entry.update(detail)
 
     state.setdefault("agent_runs", []).append(entry)
+    if agent == "forge-review" and detail and detail.get("review_verdict"):
+        v = str(detail["review_verdict"]).strip().lower()
+        if v in ("pass", "block"):
+            state["review_verdict"] = v
+            state["review_detail"] = detail
     state["updated_at"] = datetime.now(timezone.utc).isoformat()
     path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
     return {"status": "ok", "recorded": entry, "path": str(path)}
@@ -145,3 +150,29 @@ def clear_agent_runs(project_dir: str = "", agent: str = "") -> dict[str, Any]:
         state["agent_runs"] = []
     _save_state_raw(project_dir, state)
     return {"status": "ok", "cleared_agent": agent or "all", "remaining_runs": len(state["agent_runs"])}
+
+
+def set_review_verdict(project_dir: str, verdict: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Store forge-review outcome: pass | block."""
+    v = verdict.strip().lower()
+    if v not in ("pass", "block"):
+        return {"status": "error", "error": f"Invalid review_verdict: {verdict}"}
+    state = _load_state_raw(project_dir)
+    state["review_verdict"] = v
+    if detail:
+        state["review_detail"] = detail
+    _save_state_raw(project_dir, state)
+    return {"status": "ok", "review_verdict": v}
+
+
+def get_review_verdict(project_dir: str = "") -> str | None:
+    state = _load_state_raw(project_dir)
+    v = state.get("review_verdict")
+    return str(v).lower() if v else None
+
+
+def clear_review_verdict(project_dir: str = "") -> None:
+    state = _load_state_raw(project_dir)
+    state.pop("review_verdict", None)
+    state.pop("review_detail", None)
+    _save_state_raw(project_dir, state)

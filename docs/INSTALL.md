@@ -10,7 +10,7 @@ This guide separates three topics:
 | [2. OpenCode plugin — first install](#2-opencode-plugin-first-install) | First-time MCP + Agent setup |
 | [3. Update to the latest release](#3-update-to-the-latest-release) | Already installed but version is old |
 
-**Current release:** [v5.1.0](releases/RELEASE_NOTES_v5.1.0.md) — check [GitHub Releases](https://github.com/weininghui/TestAgent/releases) for the latest tag.
+**Current release:** [v5.2.0](releases/RELEASE_NOTES_v5.2.0.md) — check [GitHub Releases](https://github.com/weininghui/TestAgent/releases) for the latest tag.
 
 ## Easiest workflows (recommended)
 
@@ -72,17 +72,17 @@ powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
 | `pip show sdk-test-forge` → `Version` | `pyproject.toml` package metadata | Only if `pyproject.toml` was updated with the release |
 | GitHub Release tag | Official release | Yes |
 
-If `pip show` says `4.0.0` but `sdk_forge.__version__` says `5.1.0`, your **code is new** but **package metadata is stale** — run `pip install -e .` again after updating files.
+If `pip show` says `4.0.0` but `sdk_forge.__version__` says `5.2.0`, your **code is new** but **package metadata is stale** — run `pip install -e .` again after updating files.
 
-**v5.1+ smoke check:** these should exist after a correct install:
+**v5.2+ smoke check:** these should exist after a correct install:
 
 ```bash
-python -c "import sdk_forge; print(sdk_forge.__version__)"   # expect 5.1.0
+python -c "import sdk_forge; print(sdk_forge.__version__)"   # expect 5.2.0
 forge autopilot --help                                         # subcommand must appear
 python -c "import sdk_forge.autopilot"                           # module must import
 ```
 
-In OpenCode MCP tool list, look for **`run_forge_autopilot`** and **`snapshot_golden_cases`**.
+In OpenCode MCP tool list, look for **`run_forge_autopilot`**, **`advance_forge_workflow`** (v5.3+), **`draft_golden_cases`**, and **`record_agent_run`** with `review_verdict`.
 
 ---
 
@@ -301,12 +301,12 @@ forge autopilot --help
 pip show sdk-test-forge
 ```
 
-| Check | Expected (v5.1.0) |
+| Check | Expected (v5.2.0) |
 |-------|-------------------|
-| `sdk_forge.__version__` | `5.1.0` |
+| `sdk_forge.__version__` | `5.2.0` |
 | `forge autopilot --help` | Shows `autopilot` subcommand |
-| MCP tools | `run_forge_autopilot`, `snapshot_golden_cases` |
-| `pip show` Version | `5.1.0` (after `pip install -e .`) |
+| MCP tools | `run_forge_autopilot`, `draft_golden_cases`, `record_agent_run` + `review_verdict` |
+| `pip show` Version | `5.2.0` (after `pip install -e .`) |
 
 If version is still wrong:
 

@@ -1148,6 +1148,139 @@ class TestAutopilotLoop:
         assert "weak_test.cpp" in files
 
 
+class TestOrchestrationV52:
+    def _base_project(self, tmp_path):
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "x_test.cpp").write_text("TEST(X, Ok) { EXPECT_EQ(1, 1); }\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text(
+            "max_agent_retries: 2\nmax_enrich_rounds: 3\n",
+            encoding="utf-8",
+        )
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+        return tmp_path
+
+    def test_agent_error_retry(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.workflow import record_agent_completion
+
+        self._base_project(tmp_path)
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="error")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        enrich = [a for a in ctx["next_actions"] if a["agent"] == "forge-enrich"]
+        assert enrich
+        assert enrich[0].get("retry") is True
+
+    def test_agent_error_blocked_after_max_retries(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.workflow import record_agent_completion
+
+        self._base_project(tmp_path)
+        for _ in range(3):
+            record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="error")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        blocked = [a for a in ctx["next_actions"] if a.get("blocked")]
+        assert blocked
+
+    def test_review_verdict_blocks_build(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.workflow import record_agent_completion, set_review_verdict
+
+        self._base_project(tmp_path)
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
+        record_agent_completion(str(tmp_path), "forge-review", status="ok")
+        set_review_verdict(str(tmp_path), "block")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        assert not any(a["agent"] == "forge-build" for a in ctx["next_actions"])
+        assert ctx["review_verdict"] == "block"
+
+    def test_review_pass_allows_build(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.workflow import record_agent_completion
+
+        self._base_project(tmp_path)
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
+        record_agent_completion(
+            str(tmp_path), "forge-review", status="ok",
+            detail={"review_verdict": "pass"},
+        )
+
+        ctx = get_orchestration_context(str(tmp_path))
+        build = [a for a in ctx["next_actions"] if a["agent"] == "forge-build"]
+        assert build
+
+    def test_build_blocked_redispatch_enrich(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.retry import save_build_state
+        from sdk_forge.workflow import record_agent_completion
+
+        self._base_project(tmp_path)
+        (tmp_path / "tests" / "x_test.cpp").write_text(
+            "TEST(X, Bad) { SUCCEED(); }\n", encoding="utf-8",
+        )
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
+        record_agent_completion(
+            str(tmp_path), "forge-review", status="ok",
+            detail={"review_verdict": "pass"},
+        )
+        record_agent_completion(str(tmp_path), "forge-build", status="error")
+        save_build_state(str(tmp_path), {"status": "assertion_quality_blocked"})
+
+        ctx = get_orchestration_context(str(tmp_path))
+        enrich = [a for a in ctx["next_actions"] if a["agent"] == "forge-enrich"]
+        assert enrich
+        assert ctx["enrich_round"] >= 1
+
+    def test_merge_ready_when_complete(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.retry import save_build_state
+        from sdk_forge.workflow import record_agent_completion
+
+        self._base_project(tmp_path)
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
+        record_agent_completion(
+            str(tmp_path), "forge-review", status="ok",
+            detail={"review_verdict": "pass"},
+        )
+        record_agent_completion(str(tmp_path), "forge-build", status="ok")
+        save_build_state(str(tmp_path), {"status": "ok", "run": {"passed": 1}})
+
+        ctx = get_orchestration_context(str(tmp_path))
+        assert ctx["merge_ready"] is True
+        assert ctx["next_actions"] == []
+
+
+class TestForgeOracle:
+    def test_draft_golden_from_plan(self, tmp_path):
+        from sdk_forge.oracle import draft_golden_from_plan_impl
+        from sdk_forge.session import save_plan_state
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok",
+            "targets": [{
+                "symbol": "add",
+                "scenarios": [{"name": "Normal", "args": [1, 2]}],
+            }],
+        })
+        dry = draft_golden_from_plan_impl(str(tmp_path), confirm=False)
+        assert dry["status"] == "ok"
+        assert dry["added_count"] >= 1
+
+        written = draft_golden_from_plan_impl(str(tmp_path), confirm=True)
+        assert (tmp_path / ".forge" / "golden.yaml").is_file()
+        assert written["added_count"] >= 0
+
+
 class TestGoldenSnapshot:
     def test_extract_expect_eq_to_golden(self, tmp_path):
         from sdk_forge.golden import load_golden_cases, snapshot_golden_from_plan_impl

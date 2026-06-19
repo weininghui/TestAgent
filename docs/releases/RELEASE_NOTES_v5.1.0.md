@@ -33,8 +33,7 @@ auto_golden_snapshot: true
 - Existing MCP/CLI tools unchanged; autopilot is additive
 - `golden snapshot` defaults to merge mode; existing cases are not overwritten
 
-## v5.2 (planned)
+## v5.2 (future)
 
-- `forge-oracle` subagent for golden drafts from headers
 - Runtime golden capture (test harness instrumentation)
 - Windows coverage gate alternative
