@@ -60,7 +60,7 @@ def _agent_analysis_html(agent_summary: str) -> str:
         paragraphs.append("<p>" + "<br>".join(_esc(ln) for ln in lines) + "</p>")
     if not paragraphs:
         return ""
-    return _section("Agent Analysis", f'<div class="agent-analysis">{"".join(paragraphs)}</div>')
+    return _section("测试摘要", f'<div class="agent-analysis">{"".join(paragraphs)}</div>')
 
 
 def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:

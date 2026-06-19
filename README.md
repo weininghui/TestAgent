@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v3.6.0** — HTML test reports with Agent analysis section; open in browser via `html_path`.
+**Current release: v3.6.1** — `build_tests` / `forge build` auto-generates HTML report; open `html_path` when done.
 
 ## What it does
 
@@ -114,7 +114,7 @@ forge compile ./tests ./build --gtest-source system    # use system GTest
 | `forge scaffold <sdk>` | Generate GTest skeleton from plan/scan |
 | `forge analyze <build>` | Parse GTest failures into fix suggestions |
 | `forge init <dir>` | Create `tests/`, `build/`, `.forge.yaml`, sample test |
-| `forge build` | Probe + compile + run (`--retry 3`, `--auto-fix-config`) |
+| `forge build` | Probe + compile + run + **auto HTML report** (`--retry 3`, `--auto-fix-config`) |
 | `forge report` | Markdown/HTML/JSON report from last build |
 | `forge probe <sdk>` | Suggest include/lib/link settings |
 | `forge scan <sdk>` | Parse headers (`--no-cache`, `--no-clang`) |

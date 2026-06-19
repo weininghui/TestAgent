@@ -174,6 +174,64 @@ def format_report_markdown(state: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def build_auto_summary(state: dict[str, Any]) -> str:
+    """Generate a plain-text summary for testers (no Agent required)."""
+    lines: list[str] = []
+    status = state.get("status", "unknown")
+    run = state.get("run") or {}
+    passed = state.get("passed", run.get("passed", 0))
+    failed = state.get("failed", run.get("failed", 0))
+    total = run.get("total", passed + failed)
+
+    if status == "ok" and run:
+        lines.append(f"全部 {total} 个测试通过。")
+    elif status == "test_failures":
+        lines.append(f"共 {total} 个测试：通过 {passed}，失败 {failed}。")
+        analysis = parse_test_failures(run)
+        for item in (analysis.get("failures") or [])[:10]:
+            name = item.get("test", "?")
+            lines.append(f"- 失败：{name}")
+            if item.get("expected") is not None:
+                lines.append(f"  期望 {item.get('expected')}，实际 {item.get('actual', '?')}")
+    elif status != "ok":
+        stage = (state.get("compile") or {}).get("stage", "build")
+        lines.append(f"构建未成功（阶段：{stage}）。")
+        for hint in ((state.get("compile") or {}).get("hints") or [])[:5]:
+            lines.append(f"- {hint}")
+
+    proposals = (state.get("proposals") or {}).get("proposals") or []
+    if proposals:
+        lines.append(f"有 {len(proposals)} 条修复建议，需确认后再 apply。")
+
+    gap = state.get("plan_gap") or {}
+    missing = len(gap.get("missing_targets") or [])
+    if missing:
+        lines.append(f"测试计划缺口：{missing} 个 API 尚未覆盖。")
+
+    if not lines:
+        lines.append("构建已完成，详见下方各章节。")
+    return "\n".join(lines)
+
+
+def auto_generate_report(project_dir: str, state: dict[str, Any]) -> dict[str, Any]:
+    """Write HTML report after build; uses auto summary when agent_summary is omitted."""
+    summary_text = build_auto_summary(state)
+    enriched = _enrich_report_state(project_dir, state)
+    html_content = format_report_html(enriched, agent_summary=summary_text)
+    root = project_dir or str(Path.cwd())
+    html_path = Path(root) / ".forge" / "cache" / "report.html"
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+    html_path.write_text(html_content, encoding="utf-8")
+    return {
+        "status": "ok",
+        "format": "html",
+        "html_path": str(html_path.resolve()),
+        "html": html_content,
+        "summary": _build_summary(enriched),
+        "auto_summary": summary_text,
+    }
+
+
 def report_impl(
     project_dir: str = "",
     build_state_json: str = "",

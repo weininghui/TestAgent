@@ -22,43 +22,38 @@ generate_test_skeleton: { output_dir: ./my_tests/tests, plan_json: ... }
 analyze_plan_gap: { project_dir: ./my_tests }
 ```
 
-Fill missing targets/scenarios reported by gap analysis.
-
-### 3. Smart Build + Learn
+### 3. Build — report auto-generated
 
 ```
 build_tests: { project_dir: ./my_tests, max_retries: 3, auto_fix_config: true }
 ```
+
+**No manual `forge_report` needed.** After `build_tests`, the JSON response includes:
+
+- `html_path` — open in browser (default `.forge/cache/report.html`)
+- `report.summary` — passed/failed counts
+
+Tell the user to open `html_path`. `get_session_context` also returns `last_report_html`.
+
+Set `auto_report: false` in `.forge.yaml` to disable auto-generation.
 
 ### 4. Test failures (confirmation gate)
 
 ```
 analyze_test_failures: { build_dir: ./my_tests/build }
 propose_test_fixes: { build_dir: ./my_tests/build, project_dir: ./my_tests }
-```
-
-Show proposals to user; apply with Edit only after confirmation. Never auto-edit source.
-
-```
 apply_test_fixes: { project_dir: ./my_tests, confirm: true }
 ```
 
-### 5. HTML Report + Session
+Then re-run `build_tests` — a fresh HTML report is generated automatically.
 
-After build/analyze, write a short Agent analysis (2–3 paragraphs), then:
+### 5. Optional manual report
+
+Only if you need to regenerate or add extra notes:
 
 ```
-forge_report: {
-  project_dir: ./my_tests,
-  output_format: html,
-  agent_summary: "## Summary\n- key failures\n- recommended fixes\n- next steps"
-}
-get_session_context: { project_dir: ./my_tests }
+forge_report: { project_dir: ./my_tests, output_format: html, agent_summary: "..." }
 ```
-
-Tell the user to open `html_path` (default `.forge/cache/report.html`) in a browser. Session context includes `last_report_html` when the file exists.
-
-Markdown/JSON reports still work: `output_format: markdown` (default) or `json`.
 
 ## Optional
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.6.1] - 2026-06-19
+
+Auto-generate HTML test report after `build_tests` — no manual `forge_report` for testers.
+
+### Added
+- `build_auto_summary` / `auto_generate_report` — tester-friendly Chinese summary
+- `build_pipeline_impl` attaches `html_path` and `report` after every build (default on)
+- `.forge.yaml` `auto_report: false` to disable
+
+### Changed
+- HTML summary section title: **测试摘要** (was Agent Analysis)
+- Agent docs: testers only need `build_tests` → open `html_path`
+
 ## [3.6.0] - 2026-06-19
 
 HTML test reports with Agent analysis section.

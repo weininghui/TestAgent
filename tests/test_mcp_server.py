@@ -711,7 +711,7 @@ class TestReport:
         assert Path(result["html_path"]).is_file()
         html = result["html"]
         assert "SDK Test Forge Report" in html
-        assert "Agent Analysis" in html
+        assert "测试摘要" in html
         assert "Conclusion" in html
         assert "<script>" not in html
         assert "&lt;script&gt;" not in html or "Conclusion" in html
@@ -732,7 +732,62 @@ class TestHtmlReport:
         from sdk_forge.report_html import format_report_html
 
         html_out = format_report_html({"status": "ok"}, agent_summary="")
-        assert "Agent Analysis" not in html_out
+        assert "测试摘要" not in html_out
+
+
+class TestAutoReport:
+    def test_build_auto_summary_failures(self):
+        from sdk_forge.report import build_auto_summary
+
+        state = {
+            "status": "test_failures",
+            "passed": 2,
+            "failed": 1,
+            "run": {
+                "status": "test_failures",
+                "total": 3,
+                "passed": 2,
+                "failed": 1,
+                "output": (
+                    "[ RUN      ] Calc.Add\n"
+                    "calc_test.cpp:10: Failure\n"
+                    "Expected: 1\n"
+                    "Actual: 2\n"
+                    "[  FAILED  ] Calc.Add\n"
+                ),
+            },
+        }
+        text = build_auto_summary(state)
+        assert "失败" in text
+        assert "Calc.Add" in text
+
+    def test_auto_generate_report_writes_html(self, tmp_path):
+        from sdk_forge.report import auto_generate_report
+
+        state = {"status": "ok", "run": {"total": 1, "passed": 1, "failed": 0, "status": "ok"}}
+        result = auto_generate_report(str(tmp_path), state)
+        assert result["status"] == "ok"
+        assert Path(result["html_path"]).is_file()
+        assert "测试摘要" in result["html"]
+
+    def test_pipeline_attaches_html_path(self, tmp_path, monkeypatch):
+        from sdk_forge import pipeline
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+
+        def fake_build(**_kwargs):
+            return {
+                "status": "ok",
+                "source_dir": str(tests.resolve()),
+                "build_dir": str((tmp_path / "build").resolve()),
+                "run": {"total": 1, "passed": 1, "failed": 0, "status": "ok"},
+            }
+
+        monkeypatch.setattr(pipeline, "build_with_retry_impl", fake_build)
+        result = pipeline.build_pipeline_impl(project_dir=str(tmp_path))
+        assert result.get("html_path")
+        assert result["report"]["format"] == "html"
 
 
 class TestTemplates:

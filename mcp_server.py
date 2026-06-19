@@ -201,7 +201,7 @@ async def forget_learned_config(
     return json.dumps(forget_learned_config(sdk_root, project_dir), indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="Probe + compile + run with retry and optional auto-fix from CMake hints.")
+@mcp.tool(description="Probe + compile + run with retry; auto-generates HTML report at .forge/cache/report.html.")
 async def build_tests(
     project_dir: Annotated[str, "Project root containing .forge.yaml or .forge.json."] = "",
     source_dir: Annotated[str, "Override tests directory."] = "",
