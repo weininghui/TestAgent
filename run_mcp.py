@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -32,6 +33,55 @@ def _pip_install(args: list[str]) -> None:
 
 def _auto_update_enabled() -> bool:
     return os.environ.get("FORGE_AUTO_UPDATE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _opencode_config_root() -> Path | None:
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA", "")
+        if not base:
+            return None
+        return Path(base) / "OpenCode"
+    config = os.environ.get("XDG_CONFIG_HOME")
+    root = Path(config) if config else Path.home() / ".config"
+    return root / "opencode"
+
+
+def _sync_opencode_assets() -> None:
+    """Copy forge agents + test-forge skill into OpenCode user config."""
+    agents_src = ROOT / ".opencode" / "agents"
+    skill_src = ROOT / ".opencode" / "skills" / "test-forge" / "SKILL.md"
+    base = _opencode_config_root()
+    if not base:
+        return
+    agents_dst = base / "agents"
+    agents_dst.mkdir(parents=True, exist_ok=True)
+    if agents_src.is_dir():
+        for path in agents_src.glob("forge*.md"):
+            try:
+                shutil.copy2(path, agents_dst / path.name)
+            except OSError:
+                pass
+    if skill_src.is_file():
+        skill_dst = base / "skills" / "test-forge"
+        skill_dst.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(skill_src, skill_dst / "SKILL.md")
+        except OSError:
+            pass
+
+
+def _mark_pending_restart(pulled_commits: int) -> None:
+    cache_dir = ROOT / ".forge" / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "pulled_commits": pulled_commits,
+        "forge_version": _read_project_version(),
+        "message": "Plugin updated from GitHub — fully quit and reopen OpenCode to load new MCP code.",
+    }
+    (cache_dir / "pending_opencode_restart.json").write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
 
 
 def _maybe_git_auto_update() -> None:
@@ -78,6 +128,8 @@ def _maybe_git_auto_update() -> None:
                 timeout=30,
                 check=False,
             )
+            _sync_opencode_assets()
+            _mark_pending_restart(count)
         cache_dir.mkdir(parents=True, exist_ok=True)
         cache_file.write_text(
             json.dumps({"last_check": now, "pulled_commits": count}, indent=2),

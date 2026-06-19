@@ -22,7 +22,23 @@ This guide separates three topics:
 `plugin.yaml` uses `python run_mcp.py`: on MCP start it **auto-checks** `mcp`/`pydantic` and `sdk_forge` version, and runs a silent `pip install -e .` if needed.  
 You still must **restart OpenCode** (MCP does not hot-reload), but you usually **do not need manual pip**.
 
-### Near-automatic GitHub updates
+### Near-automatic GitHub fallback
+
+**One command (recommended):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/enable-auto-update.ps1
+```
+
+| Mechanism | When | What |
+|-----------|------|------|
+| `FORGE_AUTO_UPDATE=1` | Each OpenCode MCP start | `git pull` if behind (max every 6h) + pip + sync agents/skill |
+| Scheduled task `SDKTestForge-PluginAutoUpdate` | Daily 03:00 (default) | Updates even if OpenCode was not opened |
+| `run_mcp.py` pip check | MCP start | Reinstall if version mismatch |
+
+Requires a **git clone** of the plugin directory. After a pull, **fully restart OpenCode** to load new MCP code.
+
+### Near-automatic GitHub updates (manual env var)
 
 Set **`FORGE_AUTO_UPDATE=1`** so each MCP start (`run_mcp.py`) will:
 
