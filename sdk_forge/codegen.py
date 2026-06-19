@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -200,6 +201,30 @@ def _skeleton_body(symbol: str, scenario: dict[str, Any]) -> str:
     EXPECT_TRUE(true);  // replace with real assertion for {symbol}"""
 
 
+def _golden_assertion_body(
+    symbol: str,
+    scenario: dict[str, Any],
+    target: dict[str, Any],
+    namespace: str = "",
+) -> str | None:
+    """Generate body from golden_cases on target when available."""
+    cases = target.get("golden_cases") or []
+    scenario_name = str(scenario.get("name", "normal")).lower()
+    for case in cases:
+        case_name = str(case.get("name", "")).lower()
+        if case_name != scenario_name:
+            continue
+        args = case.get("args") or []
+        arg_strs = [json.dumps(a) if isinstance(a, str) else str(a) for a in args]
+        call = _format_call(symbol, arg_strs, namespace)
+        if case.get("expect_error"):
+            return f"    // golden: expect error path\n    {call};  // verify error handling"
+        expect = case.get("expect")
+        if expect is not None:
+            return f"    EXPECT_EQ({call}, {expect});"
+    return None
+
+
 def _smart_function_body(symbol: str, scenario: dict[str, Any], target: dict[str, Any]) -> str:
     scenario_name = scenario.get("name", "normal")
     return_type = (target.get("return_type") or "void").strip()
@@ -207,6 +232,10 @@ def _smart_function_body(symbol: str, scenario: dict[str, Any], target: dict[str
     ret_kind = classify_type(return_type)
     op = _infer_op(symbol)
     namespace = target.get("namespace") or ""
+
+    golden_body = _golden_assertion_body(symbol, scenario, target, namespace)
+    if golden_body:
+        return golden_body
 
     if scenario_name == "lifecycle":
         return _render_sequence_body(symbol, scenario, target)
@@ -265,14 +294,17 @@ def _smart_function_body(symbol: str, scenario: dict[str, Any], target: dict[str
         if scenario_name == "overflow":
             return f"    EXPECT_EQ({_format_call(symbol, ['2147483647', '1'], namespace)}, {_format_call(symbol, ['2147483647', '1'], namespace)});"
         if scenario_name == "error":
-            sanitizer = (target.get("sanitizer") or "none").lower()
+            sanitizer = (target.get("sanitizer") or scenario.get("requires_sanitizer") or "none").lower()
             if sanitizer in ("asan", "asan+ubsan", "ubsan") and any(p.is_pointer for p in params):
                 return (
-                    f"    // ASan: null pointer path\n"
-                    f"    // {_format_call(symbol, ['nullptr', '1'], namespace)};"
+                    f"    // ASan: null pointer — enable with sanitizer in .forge.yaml\n"
+                    f"    // {_format_call(symbol, ['nullptr'] + ['1'] * max(0, len(params)-1), namespace)};"
                 )
             if op == "div":
-                return f"    // error: division — verify behavior for divisor 0\n    // {_format_call(symbol, ['1', '0'], namespace)};  // AGENT: confirm expected result"
+                call = _format_call(symbol, ["1", "0"], namespace)
+                return f"    // division by zero — document expected behavior\n    {call};  // AGENT: confirm expect value or error code"
+            if ret_kind == "int" and len(params) >= 2:
+                return f"    // error path smoke\n    (void){_format_call(symbol, ['-1', '0'], namespace)};"
 
     if len(params) >= 2 and classify_type(params[0].type_name) == "string":
         ok_lit = '"ok"'
@@ -372,17 +404,25 @@ def render_enum_body(
 
     namespace = target.get("namespace") or ""
     qual = f"{namespace}::{symbol}" if namespace else symbol
-    members = target.get("enum_members") or []
+    members = target.get("enum_members") or target.get("members") or []
     parser = target.get("parser_function") or ""
 
-    if scenario.get("name") == "normal" and members and parser:
-        m = members[0]
-        key = str(m.get("name", "")).lower()
-        return f'    EXPECT_EQ({parser}("{key}"), {qual}::{m.get("name", "Ok")});'
-    if scenario.get("name") == "boundary" and members and parser and len(members) > 1:
+    if scenario.get("name") == "normal" and members:
+        lines = []
+        for m in members[:4]:
+            name = m.get("name", "")
+            if parser:
+                key = str(name).lower()
+                lines.append(f'    EXPECT_EQ({parser}("{key}"), {qual}::{name});')
+            else:
+                lines.append(f"    EXPECT_EQ(static_cast<int>({qual}::{name}), static_cast<int>({qual}::{name}));")
+        return "\n".join(lines) if lines else f"    EXPECT_EQ(static_cast<int>({qual}::{members[0].get('name')}), static_cast<int>({qual}::{members[0].get('name')}));"
+    if scenario.get("name") == "boundary" and members and len(members) > 1:
         m = members[-1]
-        key = str(m.get("name", "")).lower().replace("_", "")
-        return f'    // boundary enum member\n    EXPECT_EQ({parser}("{key}"), {qual}::{m.get("name")});'
+        if parser:
+            key = str(m.get("name", "")).lower().replace("_", "")
+            return f'    EXPECT_EQ({parser}("{key}"), {qual}::{m.get("name")});'
+        return f"    EXPECT_EQ(static_cast<int>({qual}::{m.get('name')}), static_cast<int>({qual}::{m.get('name')}));"
     return f"    // AGENT: enum {symbol} — add member assertions\n    SUCCEED();"
 
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## [5.0.0] - 2026-06-20
+
+Production quality roadmap (v4.7–v5.0 consolidated).
+
+### Added (v4.7)
+- `sdk_forge/assertion_quality.py` — semantic weak/tautology/AGENT analysis, score 0–100
+- `sdk_forge/profile.py` — `forge_profile: production` presets
+- MCP `analyze_assertion_quality`; CLI `forge assert-quality`
+- `forge build --profile production` — assertion gate before compile
+- HTML report **断言质量** section
+
+### Added (v4.8)
+- `sdk_forge/golden.py` — `.forge/golden.yaml` oracle cases
+- MCP `load_golden_cases`, `verify_golden_coverage`
+- CLI `forge golden init|verify`
+- enrich briefs: `golden_cases`, `oracle_hints`
+
+### Changed (v4.9)
+- codegen: golden-first smart assertions, enum member tests, error path hints
+- plan: `requires_sanitizer` on pointer error scenarios
+
+### Added (v5.0)
+- **`forge-review`** subagent — production readiness checklist
+- Production pipeline: coverage expand + coverage gate
+- CI: `forge assert-quality` smoke
+- [PRODUCTION_CHECKLIST.md](docs/PRODUCTION_CHECKLIST.md)
+
 ## [4.6.0] - 2026-06-19
 
 Multi-agent orchestration: primary forge + 5 subagents, parallel enrich batches.

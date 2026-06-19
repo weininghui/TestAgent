@@ -108,9 +108,18 @@ def _function_scenarios(fn: dict[str, Any]) -> list[dict[str, Any]]:
     if parsed and classify_type(parsed[0].type_name) == "string":
         scenarios.append({"name": "empty_input", "description": "empty string input", "priority": "medium"})
     if _has_pointer(params):
-        scenarios.append({"name": "error", "description": "null pointer / invalid buffer", "priority": "high"})
+        scenarios.append({
+            "name": "error",
+            "description": "null pointer / invalid buffer",
+            "priority": "high",
+            "requires_sanitizer": True,
+        })
     else:
-        scenarios.append({"name": "error", "description": "invalid input / error return path", "priority": "low"})
+        scenarios.append({
+            "name": "error",
+            "description": "invalid input / error return path",
+            "priority": "low",
+        })
     return scenarios
 
 

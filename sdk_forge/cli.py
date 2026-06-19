@@ -158,9 +158,33 @@ def cmd_build(args: argparse.Namespace) -> int:
             max_retries=args.retry,
             auto_fix_config=args.auto_fix_config,
             skip_quality_gate=args.skip_quality_gate,
+            profile=getattr(args, "profile", "") or "",
         ),
         args.quiet,
     )
+
+
+def cmd_assert_quality(args: argparse.Namespace) -> int:
+    from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+    return _emit(
+        analyze_assertion_quality_impl(
+            project_dir=args.project_dir or "",
+            tests_dir=args.tests_dir or "",
+            test_files=args.test_files or "",
+        ),
+        args.quiet,
+    )
+
+
+def cmd_golden_verify(args: argparse.Namespace) -> int:
+    from sdk_forge.golden import verify_golden_in_tests
+    return _emit(verify_golden_in_tests(args.project_dir or ""), args.quiet)
+
+
+def cmd_golden_init(args: argparse.Namespace) -> int:
+    from sdk_forge.golden import init_golden_template
+    path = init_golden_template(args.project_dir or ".")
+    return _emit({"status": "ok", "golden_file": str(path)}, args.quiet)
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
@@ -424,7 +448,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("--retry", type=int, default=1, help="Max compile attempts with auto-fix (default 1)")
     p_build.add_argument("--auto-fix-config", action="store_true", help="Write applied fixes back to .forge config")
     p_build.add_argument("--skip-quality-gate", action="store_true", help="Skip scaffold quality gate check")
+    p_build.add_argument("--profile", default="", choices=["", "default", "production"], help="Forge profile preset")
     p_build.set_defaults(func=cmd_build)
+
+    p_assert = sub.add_parser("assert-quality", help="Analyze semantic assertion quality in tests")
+    p_assert.add_argument("--project-dir", default="")
+    p_assert.add_argument("--tests-dir", default="")
+    p_assert.add_argument("--test-files", default="", help="Comma-separated test basenames or paths")
+    p_assert.set_defaults(func=cmd_assert_quality)
+
+    p_golden = sub.add_parser("golden", help="Golden oracle cases")
+    g_sub = p_golden.add_subparsers(dest="golden_cmd", required=True)
+    p_gv = g_sub.add_parser("verify", help="Verify golden cases referenced in tests")
+    p_gv.add_argument("--project-dir", default="")
+    p_gv.set_defaults(func=cmd_golden_verify)
+    p_gi = g_sub.add_parser("init", help="Create .forge/golden.yaml template")
+    p_gi.add_argument("--project-dir", default="")
+    p_gi.set_defaults(func=cmd_golden_init)
 
     p_plan = sub.add_parser("plan", help="Suggest structured test plan from SDK scan")
     p_plan.add_argument("sdk_root", nargs="?", default="")

@@ -206,6 +206,22 @@ def generate_test_skeleton_impl(
     written: list[str] = []
     skipped: list[str] = []
     targets = plan.get("targets") or []
+    project_root = str(out.parent.resolve())
+    from sdk_forge.golden import load_golden_cases
+
+    golden_loaded = load_golden_cases(project_root)
+    golden_map = golden_loaded.get("golden") or {}
+
+    def _attach_golden(target: dict[str, Any]) -> dict[str, Any]:
+        sym = str(target.get("symbol", ""))
+        t = dict(target)
+        for key, val in golden_map.items():
+            if key.lower().replace("-", "_") == sym.lower().replace("-", "_"):
+                t["golden_cases"] = (val.get("cases") if isinstance(val, dict) else val) or []
+                break
+        return t
+
+    targets = [_attach_golden(t) for t in targets]
 
     def _should_skip(path: Path) -> bool:
         return path.exists() and not do_overwrite

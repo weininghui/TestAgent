@@ -107,20 +107,30 @@ def enrich_test_cases_impl(
         for suite, case in _RE_TEST.findall(content):
             suites.setdefault(suite, []).append(case)
 
+        sym_name = target.get("symbol") if target else sym_key
+        from sdk_forge.golden import golden_to_enrich_hints, load_golden_cases
+        golden = load_golden_cases(str(root), symbol=sym_name or sym_key)
+        golden_cases = golden.get("cases") or []
+        oracle_hints = golden_to_enrich_hints(sym_name or sym_key, golden_cases)
+
         briefs.append({
-            "symbol": target.get("symbol") if target else sym_key,
+            "symbol": sym_name,
             "test_file": str(path.resolve()),
             "header_file": target.get("file") if target else None,
             "header_excerpt": _read_header_excerpt(sdk_root, target.get("file", "") if target else ""),
             "scenarios": target.get("scenarios") if target else [],
+            "golden_cases": golden_cases,
+            "oracle_hints": oracle_hints,
+            "missing_golden": not golden_cases and bool(markers),
             "compile_macros": compile_macros[:10],
             "markers": markers,
             "placeholder_counts": counts,
             "suites": suites,
             "suggestions": [
                 "Replace // AGENT: lines with real EXPECT_* assertions",
+                "Use golden_cases / oracle_hints when present",
                 "Use header excerpt for valid inputs and return values",
-                "Re-run build_tests after edits",
+                "Re-run analyze_assertion_quality after edits",
             ],
         })
 

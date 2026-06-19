@@ -1086,6 +1086,125 @@ class TestOrchestration:
         assert state["agent_runs"][0]["agent"] == "forge-enrich"
 
 
+class TestAssertionQuality:
+    def test_detects_weak_succeed(self, tmp_path):
+        from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "foo_test.cpp").write_text(
+            'TEST(Foo, Weak) { SUCCEED(); }\n',
+            encoding="utf-8",
+        )
+        result = analyze_assertion_quality_impl(project_dir=str(tmp_path))
+        assert result["status"] == "ok"
+        assert result["weak_test_count"] >= 1
+        assert result["score"] < 100
+
+    def test_detects_tautology(self, tmp_path):
+        from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "bar_test.cpp").write_text(
+            "TEST(Bar, Taut) { EXPECT_EQ(1, 1); }\n",
+            encoding="utf-8",
+        )
+        result = analyze_assertion_quality_impl(project_dir=str(tmp_path))
+        assert any("tautology" in (t.get("issues") or []) for t in result["weak_tests"])
+
+    def test_real_assertion_scores_high(self, tmp_path):
+        from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "ok_test.cpp").write_text(
+            "TEST(Ok, Good) { EXPECT_EQ(2 + 3, 5); }\n",
+            encoding="utf-8",
+        )
+        result = analyze_assertion_quality_impl(project_dir=str(tmp_path))
+        assert result["score"] >= 80
+
+
+class TestProductionProfile:
+    def test_production_profile_presets(self):
+        from sdk_forge.profile import resolve_forge_config
+
+        cfg = resolve_forge_config({}, "production")
+        assert cfg["forge_profile"] == "production"
+        assert cfg["min_assertion_score"] == 80
+
+    def test_assertion_gate_blocks_agent(self, tmp_path):
+        from sdk_forge.quality_gate import run_assertion_quality_gate
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "bad_test.cpp").write_text(
+            "TEST(Bad, A) { // AGENT: fill\n SUCCEED(); }\n",
+            encoding="utf-8",
+        )
+        gate = run_assertion_quality_gate(str(tmp_path), {"forge_profile": "production"})
+        assert gate["passed"] is False
+        assert gate["block_reasons"]
+
+    def test_pipeline_blocks_weak_production(self, tmp_path):
+        from sdk_forge.pipeline import build_pipeline_impl
+
+        tests = tmp_path / "tests"
+        build = tmp_path / "build"
+        tests.mkdir()
+        build.mkdir()
+        (tests / "weak_test.cpp").write_text(
+            "#include <gtest/gtest.h>\nTEST(W, A) { SUCCEED(); }\n",
+            encoding="utf-8",
+        )
+        (tmp_path / ".forge.yaml").write_text("forge_profile: production\n", encoding="utf-8")
+        result = build_pipeline_impl(project_dir=str(tmp_path), run_after_compile=False, profile="production")
+        assert result["status"] == "assertion_quality_blocked"
+
+
+class TestGolden:
+    def test_load_golden_cases(self, tmp_path):
+        from sdk_forge.golden import init_golden_template, load_golden_cases
+
+        init_golden_template(str(tmp_path))
+        loaded = load_golden_cases(str(tmp_path), symbol="calc_add")
+        assert loaded["status"] == "ok"
+        assert len(loaded.get("cases") or []) >= 1
+
+    def test_golden_codegen_body(self):
+        from sdk_forge.codegen import _smart_function_body
+
+        target = {
+            "return_type": "int",
+            "params": "int a, int b",
+            "golden_cases": [{"name": "normal", "args": [2, 3], "expect": 5}],
+        }
+        body = _smart_function_body("add", {"name": "normal"}, target)
+        assert "EXPECT_EQ" in body
+        assert "5" in body
+
+    def test_golden_enrich_hints(self, tmp_path):
+        from sdk_forge.enrich import enrich_test_cases_impl
+        from sdk_forge.golden import init_golden_template
+        from sdk_forge.session import save_plan_state
+
+        init_golden_template(str(tmp_path))
+        cache = tmp_path / ".forge" / "cache"
+        cache.mkdir(parents=True, exist_ok=True)
+        plan = {"status": "ok", "sdk_root": "", "targets": [{
+            "symbol": "calc_add", "file": "calc.h", "scenarios": [{"name": "normal"}],
+        }]}
+        (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "calc_add_test.cpp").write_text(
+            "TEST(Calc_add, Normal) { // AGENT: fill }\n", encoding="utf-8",
+        )
+        result = enrich_test_cases_impl(project_dir=str(tmp_path))
+        assert result["briefs"][0].get("oracle_hints")
+
+
 class TestQualityGate:
     def test_gate_settings_defaults(self):
         from sdk_forge.quality_gate import quality_gate_settings

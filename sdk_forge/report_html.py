@@ -181,6 +181,31 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
             ) + "</ul>"
         parts.append(_section("用例质量", body))
 
+    assertion_q = state.get("assertion_quality") or state.get("assertion_gate")
+    if isinstance(assertion_q, dict) and assertion_q.get("quality"):
+        assertion_q = assertion_q.get("quality")
+    elif state.get("assertion_gate") and not assertion_q:
+        assertion_q = state.get("assertion_gate")
+    if isinstance(assertion_q, dict) and (assertion_q.get("score") is not None or assertion_q.get("weak_tests")):
+        score = assertion_q.get("score", assertion_q.get("quality", {}).get("score") if isinstance(assertion_q.get("quality"), dict) else None)
+        body = f"<p>Assertion quality score: <strong>{_esc(score)}</strong>/100</p>"
+        weak = assertion_q.get("weak_tests") or (assertion_q.get("quality") or {}).get("weak_tests") or []
+        if weak:
+            body += "<ul>" + "".join(
+                f"<li><code>{_esc(w.get('file', '?'))}</code> {_esc(w.get('name', '?'))} "
+                f"— {_esc(', '.join(w.get('issues') or []))}</li>"
+                for w in weak[:15]
+            ) + "</ul>"
+            body += "<p><em>Enrich prompt: fix weak/tautology tests before production merge.</em></p>"
+        parts.append(_section("断言质量", body))
+
+    ag = state.get("assertion_gate") or {}
+    if ag and not ag.get("skipped") and ag.get("passed") is False:
+        parts.append(_section(
+            "Assertion Gate",
+            f"<p class='badge badge-fail'>BLOCKED</p><p>{_esc('; '.join(ag.get('block_reasons') or []))}</p>",
+        ))
+
     proposal_items = (state.get("proposals") or {}).get("proposals") or []
     if proposal_items:
         items = []

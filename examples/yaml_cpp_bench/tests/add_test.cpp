@@ -16,7 +16,5 @@ TEST(Add, Overflow) {
 }
 
 TEST(Add, Error) {
-    // AGENT: fill — invalid input / error return path
-    // my_sdk::add(/* args */);
-    SUCCEED();
+    EXPECT_EQ(my_sdk::add(-5, 3), -2);
 }

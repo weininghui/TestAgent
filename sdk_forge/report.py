@@ -41,6 +41,11 @@ def _enrich_report_state(project_dir: str, state: dict[str, Any]) -> dict[str, A
     elif gap.get("scaffold_quality"):
         enriched["scaffold_quality"] = gap.get("scaffold_quality")
 
+    from sdk_forge.assertion_quality import load_assertion_quality
+    aq = load_assertion_quality(root)
+    if aq.get("status") == "ok":
+        enriched["assertion_quality"] = aq
+
     if enriched.get("quality_gate"):
         pass
     elif state.get("quality_gate"):

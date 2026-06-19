@@ -152,18 +152,39 @@ def get_orchestration_context(project_dir: str = "") -> dict[str, Any]:
                         f"project_dir={root}"
                     ),
                 })
+        elif not _agent_done(completed, "forge-review"):
+            next_actions.append({
+                "agent": "forge-review",
+                "parallel": False,
+                "prompt_hint": f"Production readiness review for project_dir={root}",
+            })
         elif not _agent_done(completed, "forge-build"):
             next_actions.append({
                 "agent": "forge-build",
                 "parallel": False,
                 "prompt_hint": f"Build and run tests for project_dir={root}",
             })
-    elif not _agent_done(completed, "forge-build") or not has_build:
-        next_actions.append({
-            "agent": "forge-build",
-            "parallel": False,
-            "prompt_hint": f"Build and run tests for project_dir={root}",
-        })
+    elif not _agent_done(completed, "forge-review"):
+        from sdk_forge.assertion_quality import load_assertion_quality
+        from sdk_forge.profile import resolve_forge_config
+
+        cfg = resolve_forge_config(load_forge_config(str(root)))
+        aq = load_assertion_quality(str(root))
+        needs_review = cfg.get("forge_profile") == "production" or (
+            aq.get("status") == "ok" and float(aq.get("score", 100)) < float(cfg.get("min_assertion_score", 60))
+        )
+        if needs_review:
+            next_actions.append({
+                "agent": "forge-review",
+                "parallel": False,
+                "prompt_hint": f"Production readiness review for project_dir={root}",
+            })
+        elif not _agent_done(completed, "forge-build") or not has_build:
+            next_actions.append({
+                "agent": "forge-build",
+                "parallel": False,
+                "prompt_hint": f"Build and run tests for project_dir={root}",
+            })
 
     needs_enrichment = bool(needing) or (
         scaffold_quality.get("status") == "ok" and scaffold_quality.get("needs_enrichment")

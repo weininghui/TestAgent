@@ -28,6 +28,15 @@ auto_report: true
 
 # Multi-agent orchestration (v4.6)
 multi_agent_batch_size: 4
+
+# Production profile (v4.7+) — use: forge build --profile production
+# forge_profile: production
+# min_assertion_score: 80
+# block_weak_tests: true
+# block_agent_markers: true
+# assertion_quality_gate: true
+# coverage_gate: true
+# min_line_coverage_pct: 80
 """
 
 
@@ -74,11 +83,15 @@ def init_project_impl(
             encoding="utf-8",
         )
 
+    from sdk_forge.golden import init_golden_template
+    golden_path = init_golden_template(str(root))
+
     return {
         "status": "ok",
         "project_root": str(root),
         "tests_dir": str(tests_dir),
         "build_dir": str(build_dir),
         "config_file": str(config_path),
+        "golden_file": str(golden_path),
         "sample_test": str(sample),
     }

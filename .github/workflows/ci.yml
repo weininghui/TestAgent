@@ -36,6 +36,9 @@ jobs:
       - name: Bench metrics (no build)
         run: forge bench --project-dir examples/yaml_cpp_bench --no-build --no-clean
 
+      - name: Assertion quality smoke
+        run: forge assert-quality --project-dir examples/yaml_cpp_bench
+
   integration-linux:
     name: C++ integration (Linux)
     runs-on: ubuntu-latest

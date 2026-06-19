@@ -55,6 +55,8 @@ Tools:
   - generate_test_skeleton → GTest .cpp (smart assertions or skeleton)
   - enrich_test_cases     → Agent briefs for complex case completion
   - analyze_scaffold_quality → placeholder/TODO ratio
+  - analyze_assertion_quality → semantic weak/tautology/AGENT gate
+  - load_golden_cases / verify_golden_coverage → golden oracle
   - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
   - analyze_test_failures → parse GTest failure output
@@ -188,6 +190,36 @@ async def analyze_scaffold_quality(
         analyze_scaffold_quality_impl(project_dir, tests_dir=tests_dir, test_files=test_files),
         indent=2, ensure_ascii=False,
     )
+
+
+@mcp.tool(description="Analyze semantic assertion quality (weak, tautology, AGENT markers).")
+async def analyze_assertion_quality(
+    project_dir: Annotated[str, "Project root with tests/."] = "",
+    tests_dir: Annotated[str, "Override tests directory."] = "",
+    test_files: Annotated[str, "Comma-separated test basenames or paths."] = "",
+) -> str:
+    from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+    return json.dumps(
+        analyze_assertion_quality_impl(project_dir, tests_dir=tests_dir, test_files=test_files),
+        indent=2, ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Load golden oracle cases from .forge/golden.yaml.")
+async def load_golden_cases(
+    project_dir: Annotated[str, "Project root."] = "",
+    symbol: Annotated[str, "Optional symbol filter."] = "",
+) -> str:
+    from sdk_forge.golden import load_golden_cases as load_golden_impl
+    return json.dumps(load_golden_impl(project_dir, symbol=symbol), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Verify golden cases are referenced in generated tests.")
+async def verify_golden_coverage(
+    project_dir: Annotated[str, "Project root with tests/."] = "",
+) -> str:
+    from sdk_forge.golden import verify_golden_in_tests
+    return json.dumps(verify_golden_in_tests(project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Append TEST_P boundary cases for low-coverage plan targets.")
@@ -330,12 +362,13 @@ async def build_tests(
     auto_fix_config: Annotated[bool | str, "Write applied fixes back to .forge config."] = False,
     skip_quality_gate: Annotated[bool | str, "Skip scaffold quality gate (default false)."] = False,
     auto_setup_toolchain: Annotated[bool | str, "Auto-install compiler if missing (default true)."] = True,
+    profile: Annotated[str, "Forge profile: default or production."] = "",
 ) -> str:
     return json.dumps(
         build_pipeline_impl(
             project_dir, source_dir, build_dir, sdk_root,
             run_after_compile, max_retries, auto_fix_config, skip_quality_gate,
-            auto_setup_toolchain,
+            auto_setup_toolchain, profile=profile,
         ),
         indent=2, ensure_ascii=False,
     )

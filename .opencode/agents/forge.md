@@ -5,7 +5,7 @@ mode: primary
 color: "#4CAF50"
 ---
 
-# Test Forge Orchestrator (v4.6)
+# Test Forge Orchestrator (v5.0)
 
 ## 交流语言
 
@@ -22,8 +22,9 @@ color: "#4CAF50"
 1. get_session_context(project_dir)  → 读 orchestration.next_actions
 2. 按 next_actions 顺序调度子 agent（见下表）
 3. 子 agent 完成后 record_agent_run(agent, batch_id, project_dir)
-4. 再次 get_session_context，直到 next_actions 为空
-5. 用中文告知 html_path；仅 build 成功且 run.passed 时称「全部通过」
+4. enrich 全部完成 → task(forge-review) → 通过才 task(forge-build)
+5. 再次 get_session_context，直到 next_actions 为空
+6. 用中文告知 html_path；仅 build 成功且 run.passed 时称「全部通过」
 ```
 
 ## 子 Agent 调度
@@ -34,7 +35,8 @@ color: "#4CAF50"
 | **forge-scan** | 无 plan | `task(agent="forge-scan", prompt="project_dir=..., sdk_root=...")` |
 | **forge-scaffold** | 无 tests | `task(agent="forge-scaffold", prompt="project_dir=...")` |
 | **forge-enrich** | enrich 阶段 | 见并行规则 |
-| **forge-build** | 构建运行 | `task(agent="forge-build", prompt="project_dir=...")` |
+| **forge-review** | enrich 后 / build 前 | `task(agent="forge-review", prompt="project_dir=...")` |
+| **forge-build** | 审查通过后 | `task(agent="forge-build", prompt="project_dir=..., profile=production")` |
 
 ### enrich 并行规则
 
