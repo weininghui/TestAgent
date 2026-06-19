@@ -22,13 +22,19 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/sdk-test-forge"
+Homepage = "https://github.com/weininghui/TestAgent"
+Repository = "https://github.com/weininghui/TestAgent"
 
 [project.scripts]
 forge-mcp = "mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["mcp_server*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

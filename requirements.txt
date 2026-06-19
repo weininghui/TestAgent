@@ -1,5 +1,2 @@
 mcp>=1.28.0
 pydantic>=2.0
-
-# Development / Testing
-pytest>=8.0.0

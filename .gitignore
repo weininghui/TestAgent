@@ -1,7 +1,7 @@
 output/
 testhistory/
 test_cache_audit/
-test_sdk/
+test_sdk/build/
 __pycache__/
 *.pyc
 test_output_dir/
@@ -19,7 +19,10 @@ _test_analysis.py
 build/
 out/
 
-# IDE
+# Development / IDE
+.omo/
+.pytest_cache/
+.opencode/node_modules/
 .vscode/
 .idea/
 

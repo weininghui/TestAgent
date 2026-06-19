@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -11,7 +12,12 @@ import pytest
 # Ensure the project root is in sys.path for importing mcp_server
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from mcp_server import _parse_header, HeaderFileInfo
+from mcp_server import (
+    HeaderFileInfo,
+    _generate_cmake_content,
+    _normalize_str_list,
+    _parse_header,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +144,34 @@ int compute(int x);
         assert info.functions[0]["name"] == "get_items"
 
 
+class TestGenerateCmakeContent:
+    def test_includes_sdk_paths_and_libraries(self):
+        content = _generate_cmake_content(
+            project_name="demo_tests",
+            test_file_names=["calc_test.cpp"],
+            sdk_include_dirs=["/sdk/include"],
+            sdk_lib_dirs=["/sdk/lib"],
+            link_libraries=["calc"],
+        )
+        assert "calc_test.cpp" in content
+        assert "/sdk/include" in content.replace("\\", "/")
+        assert "/sdk/lib" in content.replace("\\", "/")
+        assert "target_link_libraries(run_tests PRIVATE gtest_main gmock calc)" in content
+
+
+class TestNormalizeStrList:
+    def test_none_and_empty(self):
+        assert _normalize_str_list(None) == []
+        assert _normalize_str_list("") == []
+        assert _normalize_str_list("   ") == []
+
+    def test_json_array_string(self):
+        assert _normalize_str_list('["/a/include", "/b/lib"]') == ["/a/include", "/b/lib"]
+
+    def test_python_list(self):
+        assert _normalize_str_list(["calc", "my_sdk"]) == ["calc", "my_sdk"]
+
+
 # ---------------------------------------------------------------------------
 # scan_headers — integration tests with temp directories
 # ---------------------------------------------------------------------------
@@ -158,6 +192,12 @@ void close(int32_t fd);
             (Path(tmp) / "sub" / "types.h").write_text("""
 enum Mode { READ, WRITE };
 """)
+            (Path(tmp) / "sub" / "modern.hpp").write_text("""
+class Widget {
+public:
+    void render();
+};
+""")
             yield tmp
 
     @pytest.mark.asyncio
@@ -165,9 +205,9 @@ enum Mode { READ, WRITE };
         from mcp_server import scan_headers
         result = json.loads(await scan_headers(sdk_dir))
         assert result["status"] == "ok"
-        assert result["total_files"] == 2
-        assert result["total_functions"] == 2
-        assert result["total_classes"] == 0
+        assert result["total_files"] == 3
+        assert result["total_functions"] == 3
+        assert result["total_classes"] == 1
         assert result["total_enums"] == 1
 
     @pytest.mark.asyncio
@@ -194,6 +234,9 @@ class TestDeleteTests:
             (Path(tmp) / "test_baz.cpp").write_text("// test")
             (Path(tmp) / "readme.txt").write_text("not a test")
             (Path(tmp) / "main.cpp").write_text("not a test")
+            nested = Path(tmp) / "nested"
+            nested.mkdir()
+            (nested / "deep_test.cpp").write_text("// nested test")
             yield tmp
 
     @pytest.mark.asyncio
@@ -201,10 +244,10 @@ class TestDeleteTests:
         from mcp_server import delete_tests
         result = json.loads(await delete_tests(test_dir))
         assert result["status"] == "ok"
-        assert result["deleted_count"] == 3
-        # Non-test files should remain
-        remaining = list(Path(test_dir).iterdir())
-        assert len(remaining) == 2
+        assert result["deleted_count"] == 4
+        remaining_files = [p for p in Path(test_dir).rglob("*") if p.is_file()]
+        assert len(remaining_files) == 2
+        assert not (Path(test_dir) / "nested" / "deep_test.cpp").exists()
 
     @pytest.mark.asyncio
     async def test_delete_empty_dir(self):
@@ -225,14 +268,53 @@ class TestDeleteTests:
 # compile_tests + run_tests — integration (skip if cmake unavailable)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(
-    not any(
+def _cmake_available() -> bool:
+    return any(
         os.access(os.path.join(p, "cmake"), os.X_OK)
         or os.access(os.path.join(p, "cmake.exe"), os.X_OK)
         for p in os.environ.get("PATH", "").split(os.pathsep)
-    ),
-    reason="cmake not found in PATH — skip integration",
-)
+    )
+
+
+def _find_sdk_lib_dir(sdk_build: Path) -> Path:
+    for candidate in [sdk_build, sdk_build / "Debug", sdk_build / "Release"]:
+        if candidate.exists() and (
+            list(candidate.glob("calc.lib"))
+            or list(candidate.glob("libcalc.a"))
+            or list(candidate.glob("libcalc.lib"))
+        ):
+            return candidate
+    return sdk_build
+
+
+def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
+    sdk_root = repo_root / "test_sdk"
+    sdk_build = sdk_root / "build"
+    sdk_build.mkdir(parents=True, exist_ok=True)
+
+    configure = subprocess.run(
+        ["cmake", str(sdk_root.resolve())],
+        cwd=str(sdk_build.resolve()),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if configure.returncode != 0:
+        raise RuntimeError(configure.stderr or configure.stdout)
+
+    build = subprocess.run(
+        ["cmake", "--build", str(sdk_build.resolve())],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if build.returncode != 0:
+        raise RuntimeError(build.stderr or build.stdout)
+
+    return sdk_root / "include", _find_sdk_lib_dir(sdk_build)
+
+
+@pytest.mark.skipif(not _cmake_available(), reason="cmake not found in PATH — skip integration")
 class TestCompileAndRun:
     """Full compile → run pipeline. Requires cmake + C++ compiler."""
 
@@ -273,3 +355,33 @@ TEST(MathTest, Subtraction) {
         assert run_result["total"] == 2
         assert run_result["passed"] == 2
         assert run_result["failed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_compile_and_run_with_test_sdk(self):
+        from mcp_server import compile_tests, run_tests
+
+        repo_root = Path(__file__).resolve().parent
+        include_dir, lib_dir = _build_test_sdk(repo_root)
+
+        with tempfile.TemporaryDirectory(prefix="sdk_forge_tests_") as tmp:
+            src = Path(tmp)
+            example = repo_root / "test_sdk" / "examples" / "calc_test.cpp"
+            (src / "calc_test.cpp").write_text(example.read_text(encoding="utf-8"))
+            build = str(Path(tempfile.mkdtemp(prefix="sdk_forge_build_")))
+
+            compile_result = json.loads(
+                await compile_tests(
+                    str(src),
+                    build,
+                    sdk_include_dirs=[str(include_dir)],
+                    sdk_lib_dirs=[str(lib_dir)],
+                    link_libraries=["calc"],
+                )
+            )
+            assert compile_result["status"] == "ok", compile_result
+
+            run_result = json.loads(await run_tests(build))
+            assert run_result["status"] == "ok", run_result
+            assert run_result["total"] == 4
+            assert run_result["passed"] == 4
+            assert run_result["failed"] == 0

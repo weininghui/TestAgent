@@ -7,6 +7,15 @@ An OpenCode plugin that automatically generates GoogleTest (GTest) test suites
 from C/C++ SDK header files. Uses **OpenCode's built-in model** for all
 intelligence — no external LLM API keys required.
 
+## What's New in v2.0
+
+- **`compile_tests` SDK linking** — pass `sdk_include_dirs`, `sdk_lib_dirs`, `link_libraries`
+- **`scan_headers` scans `.hpp`** in addition to `.h`
+- **`delete_tests` recursive** — cleans nested test directories
+- **`test_sdk/` sample** — minimal C library for end-to-end validation
+- **Fixed CI** — pytest on `test_mcp_server.py`, no broken `cli.py` references
+- **OpenCode config** — `mode: all` for forge agent (not `edit`)
+
 ## Architecture
 
 ```
@@ -23,12 +32,10 @@ User provides SDK path
 ```
 
 The plugin is a hybrid architecture:
-- **MCP server** (`mcp_server.py`) — pure Python tools for file operations:
-  scanning headers, deleting tests, compiling with CMake, running tests
-- **OpenCode Agent** (`AGENTS.md`) — uses OpenCode's built-in model for
-  API analysis, test case design, and C++ GTest code generation
+- **MCP server** (`mcp_server.py`) — file operations: scan, delete, compile, run
+- **OpenCode Agent (`forge`)** — API analysis, test design, C++ code generation
 
-**No LangChain, no ChatOpenAI, no OPENAI_API_KEY needed.**
+**No external LLM API keys needed.**
 
 ## Quick Start
 
@@ -36,7 +43,7 @@ The plugin is a hybrid architecture:
 
 - Python 3.10+
 - OpenCode (with built-in model)
-- CMake 3.14+ (for compiling tests)
+- CMake 3.14+
 - C++ compiler with C++17 support
 
 ### Install
@@ -45,90 +52,102 @@ The plugin is a hybrid architecture:
 pip install -r requirements.txt
 ```
 
-### Usage in OpenCode
+### Global registration (recommended)
 
-Simply tell the agent:
+TestAgent is a **Python MCP plugin**, not an npm package — it will **not** appear in OpenCode's npm plugin list.
+
+Add to `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "mcp": {
+    "sdk-test-forge": {
+      "command": ["python", "/path/to/TestAgent/mcp_server.py"],
+      "enabled": true,
+      "type": "local"
+    }
+  }
+}
+```
+
+Copy agent definition to `~/.config/opencode/agents/forge.md` (from `.opencode/agents/forge.md`).
+
+Optionally configure model in `oh-my-openagent.json`:
+
+```json
+{
+  "agents": {
+    "forge": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "fallback_models": ["opencode/mimo-v2.5-free"]
+    }
+  }
+}
+```
+
+### Project-level registration
+
+Open the TestAgent repo (or any project with `plugin.yaml`) in OpenCode — MCP + skill auto-register.
+
+### Usage
+
+Select **forge** in the Agent dropdown, then:
 
 ```
 帮我测试 /path/to/sdk 的接口
 ```
 
-Or via `task()`:
+Try the bundled sample:
 
 ```
-task(category="deep", load_skills=["test-forge"], prompt="generate tests for /path/to/sdk")
+帮我测试 <repo>/test_sdk 的接口
 ```
 
-The agent will:
-1. Scan all `.h` files in the SDK directory
-2. Analyze the API surface
-3. Design targeted test cases
-4. Write GTest `.cpp` files
-5. Delete any existing test files
-6. Compile with CMake
-7. Run tests and report results
-
-### MCP Server (standalone)
-
-```bash
-# stdio transport (default, used by OpenCode)
-python mcp_server.py
-
-# SSE transport (for remote setups)
-python mcp_server.py --transport sse --port 8080
-```
-
-#### Available MCP Tools
+## MCP Tools
 
 | Tool | Description |
 |------|-------------|
-| `scan_headers` | Scan `.h` files, extract API structures |
-| `delete_tests` | Remove existing test files in a directory |
-| `compile_tests` | Compile GTest files with CMake (auto-creates CMakeLists.txt) |
-| `run_tests` | Run compiled test binary, parse results |
+| `scan_headers` | Scan `.h` / `.hpp`, extract API structures |
+| `delete_tests` | Recursively remove existing GTest files |
+| `compile_tests` | Compile with CMake; optional SDK include/lib/link params |
+| `run_tests` | Run compiled binary, parse GTest output |
+
+### compile_tests SDK parameters (v2.0)
+
+| Parameter | Example | Purpose |
+|-----------|---------|---------|
+| `sdk_include_dirs` | `["/sdk/include"]` | SDK header search paths |
+| `sdk_lib_dirs` | `["/sdk/build"]` | Library search paths |
+| `link_libraries` | `["calc"]` | Libraries to link besides gtest |
 
 ## Project Structure
 
 ```
 .
-├── mcp_server.py                # MCP server (file-operation tools)
-├── AGENTS.md                    # Test Forge Agent definition
-├── plugin.yaml                  # OpenCode plugin manifest
+├── mcp_server.py
+├── test_mcp_server.py
+├── AGENTS.md
+├── plugin.yaml
+├── test_sdk/                  # Sample C SDK
 ├── .opencode/
+│   ├── agents/forge.md
 │   └── skills/test-forge/
-│       └── SKILL.md             # Skill workflow instructions
-├── requirements.txt             # Python dependencies (mcp + pydantic only)
-├── pyproject.toml               # Project metadata
+├── REGISTER_AGENT.md          # Detailed registration guide
 └── README.md
 ```
 
 ## Development
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Run MCP server in dev mode
+pip install pytest pytest-asyncio
+python -m pytest test_mcp_server.py -v
 python mcp_server.py
-
-# Lint check
-python -m py_compile mcp_server.py
 ```
 
-## Plugin Files
+## Documentation
 
-| File | Purpose |
-|------|---------|
-| `plugin.yaml` | Auto-registers MCP server + skill in OpenCode |
-| `AGENTS.md` | Defines the Test Forge Agent behavior |
-| `.opencode/skills/test-forge/SKILL.md` | Skill instructions for task delegation |
-
-## Red Lines
-
-- ❌ **No external LLM API calls** — must use OpenCode's built-in model
-- ❌ No scanning = no guessing SDK structure
-- ❌ Generated code must be compiled and run before reporting
-- ❌ No hardcoded SDK paths
+See [REGISTER_AGENT.md](REGISTER_AGENT.md) for full OpenCode registration options.
 
 ## License
 

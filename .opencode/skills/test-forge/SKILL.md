@@ -1,3 +1,8 @@
+---
+name: test-forge
+description: Scan C/C++ SDK headers, generate GTest code, compile and run tests with SDK linking
+---
+
 # SDK Test Forge Skill
 
 Generate GoogleTest (GTest) test suites from C/C++ SDK header files.
@@ -18,7 +23,7 @@ Call the `scan_headers` MCP tool with the SDK root path:
 sdk_root: /path/to/sdk
 ```
 
-This returns a JSON-structured inventory of all `.h` files with:
+This returns a JSON-structured inventory of all `.h` / `.hpp` files with:
 - Functions (name, return type, params)
 - Classes/structs
 - Enums
@@ -69,14 +74,19 @@ Call `delete_tests` MCP tool:
 test_dir: /path/to/output/tests
 ```
 
-### Step 6: Compile
+### Step 6: Compile (with SDK linking)
 
 Call `compile_tests` MCP tool:
 
 ```
 source_dir: /path/to/output/tests
 build_dir: /path/to/output/build
+sdk_include_dirs: ["/path/to/sdk/include"]
+sdk_lib_dirs: ["/path/to/sdk/build"]
+link_libraries: ["calc"]
 ```
+
+Parameters can be JSON array strings if your client sends them as text.
 
 ### Step 7: Run Tests
 
@@ -100,3 +110,7 @@ Summarize the results:
 3. **Always compile and run** — generated code must be verified
 4. **Use descriptive test names** — `FunctionName_Scenario_ExpectedResult`
 5. **Write portable C++17** — avoid platform-specific APIs in tests
+
+## Sample SDK
+
+This repository includes [`test_sdk/`](../../test_sdk/) for end-to-end validation.

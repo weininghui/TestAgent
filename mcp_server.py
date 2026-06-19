@@ -190,13 +190,108 @@ def _parse_header(content: str, filepath: str) -> HeaderFileInfo:
     return info
 
 
+def _normalize_str_list(value: list[str] | str | None) -> list[str]:
+    """Accept MCP list args or JSON array strings."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            return [stripped]
+        return []
+    return [str(item) for item in value if str(item).strip()]
+
+
+def _cmake_path(path: str) -> str:
+    return str(Path(path).resolve()).replace("\\", "/")
+
+
+def _generate_cmake_content(
+    project_name: str,
+    test_file_names: list[str],
+    sdk_include_dirs: list[str] | None = None,
+    sdk_lib_dirs: list[str] | None = None,
+    link_libraries: list[str] | None = None,
+) -> str:
+    """Build CMakeLists.txt content for GTest executables."""
+    sdk_include_dirs = sdk_include_dirs or []
+    sdk_lib_dirs = sdk_lib_dirs or []
+    link_libraries = link_libraries or []
+
+    file_list = "\n    ".join(test_file_names)
+    include_dirs = ["${CMAKE_CURRENT_SOURCE_DIR}"]
+    include_dirs.extend(_cmake_path(item) for item in sdk_include_dirs)
+    include_block = "\n    ".join(include_dirs)
+
+    link_libs = ["gtest_main", "gmock", *link_libraries]
+    link_block = " ".join(link_libs)
+
+    cmake_content = f"""cmake_minimum_required(VERSION 3.14)
+project({project_name} CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(FetchContent)
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.14.0
+    GIT_SHALLOW TRUE
+    UPDATE_DISCONNECTED TRUE
+)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
+add_executable(run_tests
+    {file_list}
+)
+
+target_include_directories(run_tests PRIVATE
+    {include_block}
+)
+"""
+
+    if sdk_lib_dirs:
+        lib_dir_block = "\n    ".join(_cmake_path(item) for item in sdk_lib_dirs)
+        cmake_content += f"""target_link_directories(run_tests PRIVATE
+    {lib_dir_block}
+)
+"""
+
+    cmake_content += f"""target_link_libraries(run_tests PRIVATE {link_block})
+"""
+    return cmake_content
+
+
+def _discover_test_files(src_path: Path) -> list[Path]:
+    patterns = ("*_test.cpp", "*Test.cpp", "*_test.cc", "*_test.cxx")
+    discovered: list[Path] = []
+    for pattern in patterns:
+        discovered.extend(sorted(src_path.glob(pattern)))
+    return list(dict.fromkeys(discovered))
+
+
+def _collect_header_files(sdk_path: Path) -> list[Path]:
+    headers: list[Path] = []
+    for pattern in ("*.h", "*.hpp"):
+        headers.extend(sdk_path.rglob(pattern))
+    return sorted(set(headers))
+
+
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool(
-    description="""Scan a directory for C/C++ header files (.h) and extract
+    description="""Scan a directory for C/C++ header files (.h, .hpp) and extract
 structured API information: functions, classes, enums, typedefs, includes.
 
 Returns a JSON summary of all header files found and their extracted symbols.
@@ -206,7 +301,7 @@ The agent uses this to understand the SDK's API surface before designing tests.
 async def scan_headers(
     sdk_root: Annotated[
         str,
-        "Absolute path to the SDK root directory containing .h files.",
+        "Absolute path to the SDK root directory containing header files.",
     ],
 ) -> str:
     """Scan SDK header files and return structured API inventory."""
@@ -223,7 +318,7 @@ async def scan_headers(
     total_classes = 0
     total_enums = 0
 
-    for h_file in sorted(sdk_path.rglob("*.h")):
+    for h_file in _collect_header_files(sdk_path):
         try:
             content = h_file.read_text(encoding="utf-8", errors="replace")
         except Exception as exc:
@@ -304,17 +399,18 @@ async def delete_tests(
         "*Test.cpp", "*Test.cc",
     ]
 
-    deleted: list[str] = []
+    deleted_set: set[str] = set()
     for pattern in patterns:
-        for f in test_path.glob(pattern):
+        for f in test_path.rglob(pattern):
             if f.is_file():
                 try:
                     f.unlink()
-                    deleted.append(str(f))
+                    deleted_set.add(str(f))
                     logger.info("Deleted test file: %s", f)
                 except OSError as exc:
                     logger.warning("Cannot delete %s: %s", f, exc)
 
+    deleted = sorted(deleted_set)
     return json.dumps({
         "status": "ok",
         "directory": test_dir,
@@ -332,8 +428,9 @@ test files, and returns compilation output (success or errors).
 Parameters:
   - source_dir: Directory containing the test .cpp files and CMakeLists.txt
   - build_dir: Directory for build artifacts (will be created if missing)
-  - test_files: Optional — list of test file paths. If omitted, scans for
-    *_test.cpp files in source_dir.
+  - sdk_include_dirs: Optional SDK header search paths for target_include_directories
+  - sdk_lib_dirs: Optional SDK library search paths for target_link_directories
+  - link_libraries: Optional SDK/static libraries to link (e.g. calc, my_sdk)
 
 Returns compilation output (stdout/stderr) and exit code.
 """,
@@ -347,10 +444,25 @@ async def compile_tests(
         str,
         "Directory for build artifacts (created if missing).",
     ],
+    sdk_include_dirs: Annotated[
+        list[str] | str,
+        "Optional SDK include directories (list or JSON array string).",
+    ] = "",
+    sdk_lib_dirs: Annotated[
+        list[str] | str,
+        "Optional SDK library directories (list or JSON array string).",
+    ] = "",
+    link_libraries: Annotated[
+        list[str] | str,
+        "Optional libraries to link besides gtest (list or JSON array string).",
+    ] = "",
 ) -> str:
     """Compile GTest test files with CMake."""
     src_path = Path(source_dir)
     build_path = Path(build_dir)
+    include_dirs = _normalize_str_list(sdk_include_dirs)
+    lib_dirs = _normalize_str_list(sdk_lib_dirs)
+    libraries = _normalize_str_list(link_libraries)
 
     if not src_path.is_dir():
         return json.dumps({
@@ -358,48 +470,23 @@ async def compile_tests(
             "status": "error",
         }, indent=2)
 
-    # Check if CMakeLists.txt exists; if not, create one
     cmake_file = src_path / "CMakeLists.txt"
     if not cmake_file.exists():
-        # Auto-generate CMakeLists.txt
-        test_files = list(dict.fromkeys(
-                     sorted(src_path.glob("*_test.cpp")) +
-                     sorted(src_path.glob("*Test.cpp")) +
-                     sorted(src_path.glob("*_test.cc"))
-                 ))
+        test_files = _discover_test_files(src_path)
         if not test_files:
             return json.dumps({
                 "error": f"No test files (*_test.cpp, *Test.cpp) found in {source_dir}",
                 "status": "error",
             }, indent=2)
 
-        file_list = "\n    ".join(f.name for f in test_files)
         project_name = src_path.name.replace("-", "_").replace(" ", "_")
-
-        cmake_content = f"""cmake_minimum_required(VERSION 3.14)
-project({project_name} CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Fetch GoogleTest
-include(FetchContent)
-FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.14.0
-)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-
-# Test executable
-add_executable(run_tests
-    {file_list}
-)
-
-target_link_libraries(run_tests PRIVATE gtest_main gmock)
-target_include_directories(run_tests PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}})
-"""
+        cmake_content = _generate_cmake_content(
+            project_name=project_name,
+            test_file_names=[f.name for f in test_files],
+            sdk_include_dirs=include_dirs,
+            sdk_lib_dirs=lib_dirs,
+            link_libraries=libraries,
+        )
         cmake_file.write_text(cmake_content, encoding="utf-8")
         logger.info("Auto-generated CMakeLists.txt in %s", src_path)
 
@@ -416,7 +503,7 @@ target_include_directories(run_tests PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}})
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=240,
+            timeout=600,
         )
         cmake_output = (result.stdout or "") + "\n" + (result.stderr or "")
     except FileNotFoundError:
@@ -426,7 +513,7 @@ target_include_directories(run_tests PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}})
         }, indent=2)
     except subprocess.TimeoutExpired:
         return json.dumps({
-            "error": "cmake configure timed out (240s).",
+            "error": "cmake configure timed out (600s).",
             "status": "error",
         }, indent=2)
 
@@ -446,12 +533,12 @@ target_include_directories(run_tests PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}})
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=300,
+            timeout=600,
         )
         build_output = (build_result.stdout or "") + "\n" + (build_result.stderr or "")
     except subprocess.TimeoutExpired:
         return json.dumps({
-            "error": "cmake build timed out (300s).",
+            "error": "cmake build timed out (600s).",
             "status": "error",
         }, indent=2)
 
@@ -464,7 +551,16 @@ target_include_directories(run_tests PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}})
 
     # Locate the built test binary
     binary_path = build_path / "run_tests"
-    if not binary_path.exists():
+    if exe_suffix := (".exe" if sys.platform == "win32" else ""):
+        if not binary_path.with_suffix(exe_suffix).exists():
+            for sub in ["Debug", "Release", "RelWithDebInfo"]:
+                candidate = build_path / sub / f"run_tests{exe_suffix}"
+                if candidate.exists():
+                    binary_path = candidate
+                    break
+        else:
+            binary_path = binary_path.with_suffix(exe_suffix)
+    elif not binary_path.exists():
         # Check in Debug/Release subdirectories
         for sub in ["Debug", "Release", "RelWithDebInfo"]:
             candidate = build_path / sub / "run_tests"
@@ -505,18 +601,18 @@ async def run_tests(
 
     # Find the test binary
     binary = build_path / "run_tests"
+    exe_suffix = ".exe" if sys.platform == "win32" else ""
+    if not binary.with_suffix(exe_suffix).exists() and exe_suffix:
+        binary = binary.with_suffix(exe_suffix)
     if not binary.exists():
         for sub in ["Debug", "Release", "RelWithDebInfo"]:
-            candidate = build_path / sub / "run_tests"
+            candidate = build_path / sub / f"run_tests{exe_suffix}"
             if candidate.exists():
                 binary = candidate
                 break
         if not binary.exists():
-            # Try to find any executable with "run_" in name
-            # On Windows, executables have .exe extension
-            exe_suffix = ".exe" if sys.platform == "win32" else ""
-            for f in build_path.rglob(f"run_*{exe_suffix}"):
-                if f.is_file() and (sys.platform != "win32" or f.suffix == ".exe"):
+            for f in build_path.rglob(f"run_*{exe_suffix}" if exe_suffix else "run_*"):
+                if f.is_file() and (not exe_suffix or f.suffix == ".exe"):
                     binary = f
                     break
 
