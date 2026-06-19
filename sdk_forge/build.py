@@ -73,7 +73,7 @@ def sanitizer_cmake_block(sanitizer: str) -> tuple[str, list[str]]:
     if mode in ("", "none", "off", "false"):
         return "", hints
     if sys.platform == "win32":
-        hints.append("Sanitizers are not supported with MSVC in v3.4 — use Linux/clang or GCC")
+        hints.append("Sanitizers are not supported with MSVC on Windows — use Linux/clang or GCC")
         return "", hints
     flags = ""
     if mode in ("asan", "address"):

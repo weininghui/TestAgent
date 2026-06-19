@@ -81,7 +81,7 @@ Tools:
 )
 
 
-@mcp.tool(description="Check cmake, compiler, libclang, and forge cache directories.")
+@mcp.tool(description="Check cmake, compiler, libclang, forge cache; returns forge_version (authoritative).")
 async def forge_doctor() -> str:
     return json.dumps(doctor_impl(), indent=2, ensure_ascii=False)
 

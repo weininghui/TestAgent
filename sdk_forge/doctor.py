@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from sdk_forge import __version__ as FORGE_VERSION
 from sdk_forge.cache import gtest_cache_dir, scan_cache_dir
 from sdk_forge.gtest import ensure_gtest, gtest_toolchain_info
 from sdk_forge.scan import CLANG_AVAILABLE
@@ -37,6 +38,12 @@ def _check_cmd(name: str) -> dict:
 
 def doctor_impl() -> dict:
     checks: list[dict] = []
+    checks.append({
+        "name": "sdk_test_forge",
+        "ok": True,
+        "version": FORGE_VERSION,
+        "hint": f"SDK Test Forge {FORGE_VERSION} — authoritative package version",
+    })
     checks.append({"name": "python", "ok": True, "version": sys.version.split()[0]})
     checks.append(_check_cmd("cmake"))
     checks.append(_check_cmd("pkg-config"))
@@ -118,6 +125,7 @@ def doctor_impl() -> dict:
     failed = [c["name"] for c in checks if not c.get("ok", True)]
     return {
         "status": "ok" if not failed else "issues_found",
+        "forge_version": FORGE_VERSION,
         "platform": platform.platform(),
         "checks": checks,
         "failed": failed,
