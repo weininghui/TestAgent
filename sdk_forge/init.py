@@ -25,6 +25,9 @@ scaffold_quality_gate: true
 max_placeholder_ratio: 0.5
 quality_gate_mode: warn
 auto_report: true
+
+# Multi-agent orchestration (v4.6)
+multi_agent_batch_size: 4
 """
 
 

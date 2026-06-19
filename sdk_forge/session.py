@@ -15,6 +15,7 @@ from sdk_forge.retry import load_build_state
 from sdk_forge.enrich import load_scaffold_quality
 from sdk_forge.test_fix import load_proposals
 from sdk_forge.workflow import load_workflow_state
+from sdk_forge.orchestration import get_orchestration_context
 
 
 def save_plan_state(project_dir: str, plan: dict[str, Any]) -> Path:
@@ -63,11 +64,13 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
     compdb_path = root / ".forge" / "cache" / "compile_commands.json"
     report_html_path = root / ".forge" / "cache" / "report.html"
     workflow = load_workflow_state(str(root))
+    orchestration = get_orchestration_context(str(root))
 
     return {
         "status": "ok",
         "project_dir": str(root.resolve()),
         "workflow": workflow if workflow.get("stage") else None,
+        "orchestration": orchestration,
         "last_report_html": str(report_html_path.resolve()) if report_html_path.is_file() else None,
         "plan": plan if plan and plan.get("status") != "error" else None,
         "build_state": build_state if build_state.get("status") != "error" else None,

@@ -204,6 +204,7 @@ def cmd_enrich(args: argparse.Namespace) -> int:
             project_dir=args.project_dir or "",
             symbol=args.symbol or "",
             tests_dir=args.tests_dir or "",
+            test_files=args.test_files or "",
         ),
         args.quiet,
     )
@@ -214,6 +215,7 @@ def cmd_quality(args: argparse.Namespace) -> int:
         analyze_scaffold_quality_impl(
             project_dir=args.project_dir or "",
             tests_dir=args.tests_dir or "",
+            test_files=args.test_files or "",
         ),
         args.quiet,
     )
@@ -473,11 +475,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_enrich.add_argument("--project-dir", default="")
     p_enrich.add_argument("--symbol", default="")
     p_enrich.add_argument("--tests-dir", default="")
+    p_enrich.add_argument("--test-files", default="", help="Comma-separated test basenames or paths")
     p_enrich.set_defaults(func=cmd_enrich)
 
     p_quality = sub.add_parser("quality", help="Analyze scaffold placeholder ratio")
     p_quality.add_argument("--project-dir", default="")
     p_quality.add_argument("--tests-dir", default="")
+    p_quality.add_argument("--test-files", default="", help="Comma-separated test basenames or paths")
     p_quality.set_defaults(func=cmd_quality)
 
     p_cov_expand = sub.add_parser("coverage-expand", help="Append TEST_P for low-coverage symbols")

@@ -11,6 +11,7 @@ from typing import Any
 
 from sdk_forge.codegen import count_placeholders
 from sdk_forge.compdb import get_compile_commands_impl
+from sdk_forge.test_files import match_test_file, parse_test_files_filter, resolve_tests_dir
 from sdk_forge.plan_gap import _symbol_from_test_file
 from sdk_forge.plan_gap import _load_plan_state as load_plan_state
 
@@ -49,6 +50,7 @@ def enrich_test_cases_impl(
     project_dir: str = "",
     symbol: str = "",
     tests_dir: str = "",
+    test_files: list[str] | str = "",
 ) -> dict[str, Any]:
     """Build enrichment briefs for Agent to fill complex test cases.
     生成 Agent 补全复杂用例所需的 structured brief。
@@ -61,13 +63,8 @@ def enrich_test_cases_impl(
         return plan
 
     sdk_root = plan.get("sdk_root") or ""
-    tests_path = Path(tests_dir) if tests_dir else root / "tests"
-    if not tests_path.is_dir():
-        for candidate in ("tests", "test"):
-            alt = root / candidate
-            if alt.is_dir():
-                tests_path = alt
-                break
+    tests_path = resolve_tests_dir(str(root), tests_dir)
+    file_filter = parse_test_files_filter(test_files)
 
     compdb = get_compile_commands_impl(str(root))
     compile_macros: list[str] = []
@@ -83,10 +80,12 @@ def enrich_test_cases_impl(
     plan_targets = {str(t.get("symbol", "")).lower(): t for t in (plan.get("targets") or [])}
     briefs: list[dict[str, Any]] = []
 
-    if not tests_path.is_dir():
-        return {"status": "error", "error": f"Tests directory not found: {tests_path}"}
+    if not tests_path or not tests_path.is_dir():
+        return {"status": "error", "error": f"Tests directory not found under {root}"}
 
     for path in sorted(tests_path.glob("*_test.cpp")):
+        if not match_test_file(path, file_filter):
+            continue
         sym_key = _symbol_from_test_file(path).lower()
         if symbol and sym_key != symbol.lower().replace("-", "_"):
             continue
@@ -140,21 +139,17 @@ def enrich_test_cases_impl(
 def analyze_scaffold_quality_impl(
     project_dir: str = "",
     tests_dir: str = "",
+    test_files: list[str] | str = "",
 ) -> dict[str, Any]:
     """Analyze TODO/placeholder ratio in generated tests.
     分析生成测试中的占位符比例。
     """
     root = Path(project_dir or Path.cwd()).resolve()
-    tests_path = Path(tests_dir) if tests_dir else root / "tests"
-    if not tests_path.is_dir():
-        for candidate in ("tests", "test"):
-            alt = root / candidate
-            if alt.is_dir():
-                tests_path = alt
-                break
+    tests_path = resolve_tests_dir(str(root), tests_dir)
+    file_filter = parse_test_files_filter(test_files)
 
-    if not tests_path.is_dir():
-        return {"status": "error", "error": f"Tests directory not found: {tests_path}"}
+    if not tests_path or not tests_path.is_dir():
+        return {"status": "error", "error": f"Tests directory not found under {root}"}
 
     files: list[dict[str, Any]] = []
     placeholder_total = 0
@@ -162,6 +157,8 @@ def analyze_scaffold_quality_impl(
     test_count = 0
 
     for path in sorted(tests_path.glob("*_test.cpp")):
+        if not match_test_file(path, file_filter):
+            continue
         try:
             content = path.read_text(encoding="utf-8")
         except OSError:

@@ -33,7 +33,7 @@ from sdk_forge.coverage_expand import coverage_expand_impl
 from sdk_forge.templates import generate_test_skeleton_impl
 from sdk_forge.toolchain_install import setup_toolchain_impl, ensure_toolchain_impl
 from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
-from sdk_forge.workflow import update_workflow_stage
+from sdk_forge.workflow import update_workflow_stage, record_agent_completion
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,7 +64,7 @@ Tools:
   - get_compile_commands   → cached compile_commands.json
   - forge_report        → markdown / HTML / JSON report from last build
   - get_build_state     → read last build JSON
-  - get_session_context → plan + build + learned config
+  - get_session_context → plan + build + learned config + orchestration
   - get_learned_config  → cached compile params for SDK
   - scan_headers        → parse headers (libclang + regex)
   - probe_sdk           → suggest link settings
@@ -73,6 +73,7 @@ Tools:
   - collect_coverage    → gcov/lcov summary
   - generate_mocks      → GMock templates
   - delete_tests        → remove old test files
+  - record_agent_run    → mark sub-agent batch completion for orchestrator
 """,
 )
 
@@ -169,9 +170,10 @@ async def enrich_test_cases(
     project_dir: Annotated[str, "Project root with plan and tests/."] = "",
     symbol: Annotated[str, "Optional single symbol filter."] = "",
     tests_dir: Annotated[str, "Override tests directory."] = "",
+    test_files: Annotated[str, "Comma-separated test basenames or paths."] = "",
 ) -> str:
     return json.dumps(
-        enrich_test_cases_impl(project_dir, symbol=symbol, tests_dir=tests_dir),
+        enrich_test_cases_impl(project_dir, symbol=symbol, tests_dir=tests_dir, test_files=test_files),
         indent=2, ensure_ascii=False,
     )
 
@@ -180,9 +182,10 @@ async def enrich_test_cases(
 async def analyze_scaffold_quality(
     project_dir: Annotated[str, "Project root with tests/."] = "",
     tests_dir: Annotated[str, "Override tests directory."] = "",
+    test_files: Annotated[str, "Comma-separated test basenames or paths."] = "",
 ) -> str:
     return json.dumps(
-        analyze_scaffold_quality_impl(project_dir, tests_dir=tests_dir),
+        analyze_scaffold_quality_impl(project_dir, tests_dir=tests_dir, test_files=test_files),
         indent=2, ensure_ascii=False,
     )
 
@@ -274,6 +277,30 @@ async def get_session_context(
     project_dir: Annotated[str, "Project root with .forge/cache/."] = "",
 ) -> str:
     return json.dumps(get_session_context_impl(project_dir), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Record sub-agent completion for multi-agent orchestration (workflow.json agent_runs).")
+async def record_agent_run(
+    agent: Annotated[str, "Sub-agent name e.g. forge-enrich."],
+    project_dir: Annotated[str, "Project root."] = "",
+    status: Annotated[str, "ok or error."] = "ok",
+    batch_id: Annotated[int | str, "Enrich batch id when applicable."] = "",
+    detail_json: Annotated[str, "Optional JSON detail object."] = "",
+) -> str:
+    bid: int | None = None
+    if batch_id not in ("", None):
+        try:
+            bid = int(batch_id)
+        except (TypeError, ValueError):
+            bid = None
+    detail = None
+    if detail_json:
+        try:
+            detail = json.loads(detail_json)
+        except json.JSONDecodeError:
+            detail = {"raw": detail_json}
+    result = record_agent_completion(project_dir, agent, status=status, batch_id=bid, detail=detail)
+    return json.dumps(result, indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Load learned compile params for an SDK from prior successful builds.")

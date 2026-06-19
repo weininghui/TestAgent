@@ -1,0 +1,40 @@
+{
+  "agents": {
+    "forge": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "fallback_models": [
+        "opencode/nemotron-3-ultra-free"
+      ]
+    },
+    "forge-env": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "fallback_models": [
+        "opencode/mimo-v2.5-free"
+      ]
+    },
+    "forge-scan": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "fallback_models": [
+        "opencode/north-mini-code-free"
+      ]
+    },
+    "forge-scaffold": {
+      "model": "opencode/deepseek-v4-flash-free",
+      "fallback_models": [
+        "opencode/north-mini-code-free"
+      ]
+    },
+    "forge-enrich": {
+      "model": "opencode/nemotron-3-ultra-free",
+      "fallback_models": [
+        "opencode/deepseek-v4-flash-free"
+      ]
+    },
+    "forge-build": {
+      "model": "opencode/nemotron-3-ultra-free",
+      "fallback_models": [
+        "opencode/deepseek-v4-flash-free"
+      ]
+    }
+  }
+}

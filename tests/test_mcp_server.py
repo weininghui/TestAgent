@@ -969,6 +969,123 @@ class TestEnrich:
         assert result["briefs"][0]["markers"]
 
 
+class TestEnrichBatch:
+    def test_enrich_test_files_filter(self, tmp_path):
+        from sdk_forge.enrich import enrich_test_cases_impl
+
+        cache = tmp_path / ".forge" / "cache"
+        cache.mkdir(parents=True)
+        plan = {"status": "ok", "sdk_root": "", "targets": [
+            {"symbol": "calc_add", "file": "calc.h", "scenarios": [{"name": "normal"}]},
+            {"symbol": "calc_mul", "file": "calc.h", "scenarios": [{"name": "normal"}]},
+        ]}
+        (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "calc_add_test.cpp").write_text(
+            "TEST(Calc_add, Normal) { // AGENT: fill }\n", encoding="utf-8",
+        )
+        (tests / "calc_mul_test.cpp").write_text(
+            "TEST(Calc_mul, Normal) { // AGENT: fill }\n", encoding="utf-8",
+        )
+        result = enrich_test_cases_impl(
+            project_dir=str(tmp_path),
+            test_files="calc_add_test.cpp",
+        )
+        assert result["status"] == "ok"
+        assert result["brief_count"] == 1
+        assert "calc_add" in result["briefs"][0]["test_file"].lower()
+
+    def test_quality_test_files_filter(self, tmp_path):
+        from sdk_forge.enrich import analyze_scaffold_quality_impl
+
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "a_test.cpp").write_text("TEST(A, X) { // TODO: x }\n", encoding="utf-8")
+        (tests / "b_test.cpp").write_text("TEST(B, X) { EXPECT_TRUE(true); }\n", encoding="utf-8")
+        result = analyze_scaffold_quality_impl(
+            project_dir=str(tmp_path),
+            test_files="a_test.cpp",
+        )
+        assert result["status"] == "ok"
+        assert result["file_count"] == 1
+        assert result["files"][0]["file"] == "a_test.cpp"
+
+
+class TestOrchestration:
+    def test_split_enrich_batches(self):
+        from sdk_forge.orchestration import split_enrich_batches
+
+        batches = split_enrich_batches(["a.cpp", "b.cpp", "c.cpp", "d.cpp", "e.cpp"], batch_size=2)
+        assert len(batches) == 3
+        assert batches[0]["files"] == ["a.cpp", "b.cpp"]
+        assert batches[2]["files"] == ["e.cpp"]
+
+    def test_single_file_one_batch(self):
+        from sdk_forge.orchestration import split_enrich_batches
+
+        batches = split_enrich_batches(["only_test.cpp"], batch_size=4)
+        assert len(batches) == 1
+        assert batches[0]["batch_id"] == 0
+
+    def test_next_actions_env_first(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+
+        ctx = get_orchestration_context(str(tmp_path))
+        assert ctx["status"] == "ok"
+        assert ctx["next_actions"][0]["agent"] == "forge-env"
+
+    def test_next_actions_enrich_parallel(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        for name in ("a_test.cpp", "b_test.cpp", "c_test.cpp", "d_test.cpp", "e_test.cpp"):
+            (tests / name).write_text(f"TEST(X, Y) {{ // AGENT: fill }}\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text("multi_agent_batch_size: 2\n", encoding="utf-8")
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        enrich_actions = [a for a in ctx["next_actions"] if a["agent"] == "forge-enrich"]
+        assert len(enrich_actions) >= 2
+        assert all(a["parallel"] for a in enrich_actions)
+
+    def test_serial_enrich_one_batch_at_a_time(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "a_test.cpp").write_text("// AGENT: x\n", encoding="utf-8")
+        (tests / "b_test.cpp").write_text("// AGENT: y\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text("multi_agent_batch_size: 1\n", encoding="utf-8")
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        enrich_actions = [a for a in ctx["next_actions"] if a["agent"] == "forge-enrich"]
+        assert len(enrich_actions) == 1
+        assert enrich_actions[0]["parallel"] is False
+
+    def test_record_agent_completion(self, tmp_path):
+        from sdk_forge.workflow import load_workflow_state, record_agent_completion
+
+        record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
+        state = load_workflow_state(str(tmp_path))
+        assert len(state["agent_runs"]) == 1
+        assert state["agent_runs"][0]["agent"] == "forge-enrich"
+
+
 class TestQualityGate:
     def test_gate_settings_defaults(self):
         from sdk_forge.quality_gate import quality_gate_settings
@@ -1200,6 +1317,9 @@ class TestSessionContext:
         assert ctx["status"] == "ok"
         assert ctx["plan"] is not None
         assert ctx["build_state"] is not None
+        assert ctx["orchestration"] is not None
+        assert "enrich_batches" in ctx["orchestration"]
+        assert "next_actions" in ctx["orchestration"]
 
 
 class TestPlanGap:

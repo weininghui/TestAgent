@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.6.0] - 2026-06-19
+
+Multi-agent orchestration: primary forge + 5 subagents, parallel enrich batches.
+
+### Added
+- **`sdk_forge/orchestration.py`** — `enrich_batches`, `next_actions`, batch planning
+- **`sdk_forge/test_files.py`** — shared test file path/filter helpers
+- MCP **`record_agent_run`** — track sub-agent completion in `workflow.json`
+- MCP `enrich_test_cases` / `analyze_scaffold_quality` — **`test_files`** batch filter
+- CLI `forge enrich|quality --test-files`
+- `.forge.yaml` **`multi_agent_batch_size`** (default 4; 1 = serial enrich)
+- Sub-agents: `forge-env`, `forge-scan`, `forge-scaffold`, `forge-enrich`, `forge-build` (`.opencode/agents/`)
+- `get_session_context` → **`orchestration`** field
+- [oh-my-openagent.multi-agent.json](docs/examples/oh-my-openagent.multi-agent.json) model template
+
+### Changed
+- **`forge`** agent → `mode: primary` orchestrator (delegates via OpenCode `task()`)
+- [REGISTER_AGENT.md](docs/REGISTER_AGENT.md) — Multi-Agent section (§8)
+
 ## [4.5.2] - 2026-06-19
 
 Auto-install C++ toolchain; Agent-first full environment setup.

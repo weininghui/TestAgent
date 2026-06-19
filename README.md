@@ -6,7 +6,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: v4.5.2** — Quality gate, smart codegen depth, auto toolchain install, full Agent environment setup.
+**Current release: v4.6.0** — Multi-agent orchestration, parallel enrich batches, quality gate, auto toolchain install.
 
 ## What it does
 
@@ -207,6 +207,8 @@ TestAgent/
 | Sanitizer (ASan/UBSan) | `sanitizer` in compile | `--sanitizer` | v3.4 |
 | Session context | `get_session_context` | `forge session` | v3.4 |
 | Quality gate | `build_tests` / `.forge.yaml` | `forge build --skip-quality-gate` | v4.1 |
+| Multi-agent orchestration | `get_session_context` / `record_agent_run` | — | v4.6 |
+| Parallel enrich batches | `enrich_test_cases(test_files=...)` | `forge enrich --test-files` | v4.6 |
 | Auto toolchain | `ensure_forge_environment` | `forge setup-toolchain --confirm` | v4.5.2 |
 | Benchmark | `forge bench` | `forge bench` | v4.4 |
 | Smart test codegen | `generate_test_skeleton(fidelity=smart)` | `forge scaffold --fidelity smart` | v4.0 |
@@ -270,7 +272,7 @@ python -m pytest tests/ -v
 
 - [All releases](https://github.com/weininghui/TestAgent/releases)
 - [CHANGELOG](CHANGELOG.md)
-- Latest notes: [RELEASE_NOTES_v4.5.2.md](docs/releases/RELEASE_NOTES_v4.5.2.md)
+- Latest notes: [RELEASE_NOTES_v4.6.0.md](docs/releases/RELEASE_NOTES_v4.6.0.md)
 
 ## License
 

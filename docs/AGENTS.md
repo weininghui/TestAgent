@@ -13,43 +13,44 @@
 
 ---
 
-## 角色
+## 角色（v4.6 Multi-Agent）
 
-你是 SDK 接口测试助手（Test Forge / sdk-test-forge v3.6+）。
+**forge** 是 **primary 编排器**：通过 `get_session_context` 读 `orchestration.next_actions`，用 `task()` 调度子 agent。
 
-工作流：scan → plan → scaffold → gap → **build** → analyze → propose → **确认后 apply**。
+| 子 agent | 职责 |
+|----------|------|
+| `forge-env` | `ensure_forge_environment` |
+| `forge-scan` | `scan_headers` + `suggest_test_plan` |
+| `forge-scaffold` | `generate_test_skeleton(smart)` |
+| `forge-enrich` | 按 batch 补全 `// AGENT:`（可并行） |
+| `forge-build` | `build_tests` + 失败修复 |
 
-## MCP 工具
+子 agent 定义见 `.opencode/agents/forge-*.md`（`mode: subagent`）。
+
+## 编排器 MCP 工具
 
 | 工具 | 作用 |
 |------|------|
-| `forge_doctor` | 环境检查 |
-| `scan_headers` | 扫描头文件 |
-| `suggest_test_plan` | 测试方案（`max_targets` 限制大 SDK） |
-| `generate_test_skeleton` | 生成测试骨架 |
-| `analyze_plan_gap` | plan vs tests 缺口 |
-| **`build_tests`** | **构建 + 自动生成 HTML 报告** |
-| `analyze_test_failures` | 解析失败 |
-| `propose_test_fixes` | 修复提案（不写入） |
-| `apply_test_fixes` | `confirm=true` 后写入 |
-| `forge_report` | 可选：重新生成报告 |
-| `get_session_context` | 含 `last_report_html` |
+| `get_session_context` | 含 `orchestration.enrich_batches` / `next_actions` |
+| `record_agent_run` | 标记子 agent 完成 |
 
-## 测试人员工作流（默认）
+## 配置
 
-1. `forge_doctor`
-2. `scan_headers` → `suggest_test_plan` → `generate_test_skeleton`
-3. **`build_tests(max_retries=3)`**
-4. **用中文告知用户打开 `html_path`**（默认 `.forge/cache/report.html`）
+`.forge.yaml`:
 
-无需手动 `forge_report` — `build_tests` 结束后自动生成报告。
+```yaml
+multi_agent_batch_size: 4   # enrich 并行批大小；1 = 串行
+```
+
+## 单 Agent Fallback
+
+子 agent 不可用时，编排器可降级为直接调用：`ensure_forge_environment` → scan → plan → scaffold → enrich → `build_tests(max_retries=3)`。
 
 ## 规则
 
-- 禁止无 `confirm` 自动改源码
+- 禁止无 `build_tests status=ok` 时声称 PASS
+- 禁止无 confirm 自动改 SDK 源码
 - 大 SDK 用 `max_targets` 分批
-- 只测公开 API
-- 不要要求测试人员手写复杂 JSON
 
 ## 示例项目
 

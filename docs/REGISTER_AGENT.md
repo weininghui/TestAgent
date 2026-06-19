@@ -413,7 +413,67 @@ Skill 文件一般包含：
 
 ---
 
-## 8. MCP 工具参数（v3.0）
+## 8. Multi-Agent 编排（v4.6+）
+
+Test Forge 将流水线拆分为 **1 个 primary 编排器 + 5 个 subagent**：
+
+| Agent | mode | 文件 |
+|-------|------|------|
+| `forge` | `primary` | `.opencode/agents/forge.md` |
+| `forge-env` | `subagent` | `.opencode/agents/forge-env.md` |
+| `forge-scan` | `subagent` | `.opencode/agents/forge-scan.md` |
+| `forge-scaffold` | `subagent` | `.opencode/agents/forge-scaffold.md` |
+| `forge-enrich` | `subagent` | `.opencode/agents/forge-enrich.md` |
+| `forge-build` | `subagent` | `.opencode/agents/forge-build.md` |
+
+用户在下拉框中只选 **forge**；子 agent 通过 `task()` 调度，不出现在下拉框。
+
+### 编排器工作流
+
+```
+get_session_context(project_dir)
+  → orchestration.next_actions
+  → task(agent="forge-env", prompt="project_dir=...")
+  → record_agent_run(...)
+  → 重复直到 next_actions 为空
+```
+
+### enrich 并行
+
+`.forge.yaml`：
+
+```yaml
+multi_agent_batch_size: 4   # 每批最多 4 个测试文件；1 = 串行
+```
+
+`get_session_context` 返回：
+
+- `orchestration.enrich_batches` — 文件分批
+- `orchestration.next_actions` — 含 `parallel: true` 时可同一轮并行 dispatch 多个 `forge-enrich`
+
+`forge-enrich` prompt 示例：
+
+```
+project_dir=/path/to/project batch_id=0 test_files=foo_test.cpp,bar_test.cpp
+```
+
+### 模型配置
+
+复制 [examples/oh-my-openagent.multi-agent.json](examples/oh-my-openagent.multi-agent.json) 到 `~/.config/opencode/oh-my-openagent.json`，为 scan/scaffold 配快模型，enrich/build 配强模型。
+
+### task() 语法
+
+OpenCode 原生：
+
+```
+task(agent="forge-enrich", prompt="project_dir=... batch_id=0 test_files=a_test.cpp")
+```
+
+若版本不支持 `agent=` 参数，可在 `opencode.json` 的 `command` 字段配置 `subtask: true` 作为 fallback（见方式四）。
+
+---
+
+## 9. MCP 工具参数（v3.0）
 
 | 工具 | 关键参数 | 说明 |
 |------|----------|------|
@@ -421,6 +481,9 @@ Skill 文件一般包含：
 | `compile_tests` | `coverage`, `hints` | 失败时 JSON 含 `hints` 建议数组 |
 | `generate_mocks` | `scan_json`, `class_name` | 输出 `mock_<Class>.hpp` |
 | `collect_coverage` | `build_dir`, `source_dir` | Linux gcov/lcov |
+| `enrich_test_cases` | `test_files` | 逗号分隔 basename，用于 enrich batch |
+| `record_agent_run` | `agent`, `batch_id` | 多 agent 编排完成标记 |
+| `get_session_context` | — | 含 `orchestration.next_actions` |
 
 CLI：`forge compile --from-probe <sdk_root>` 自动填充 probe 参数。
 

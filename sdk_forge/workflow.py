@@ -59,3 +59,39 @@ def load_workflow_state(project_dir: str = "") -> dict[str, Any]:
         return data
     except (OSError, json.JSONDecodeError) as exc:
         return {"status": "error", "error": str(exc)}
+
+
+def record_agent_completion(
+    project_dir: str,
+    agent: str,
+    status: str = "ok",
+    batch_id: int | None = None,
+    detail: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Append sub-agent run result to workflow.json agent_runs."""
+    root = Path(project_dir or Path.cwd())
+    cache = root / ".forge" / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    path = cache / "workflow.json"
+
+    state: dict[str, Any] = {}
+    if path.exists():
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            state = {}
+
+    entry: dict[str, Any] = {
+        "agent": agent,
+        "status": status,
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+    if batch_id is not None:
+        entry["batch_id"] = batch_id
+    if detail:
+        entry.update(detail)
+
+    state.setdefault("agent_runs", []).append(entry)
+    state["updated_at"] = datetime.now(timezone.utc).isoformat()
+    path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"status": "ok", "recorded": entry, "path": str(path)}

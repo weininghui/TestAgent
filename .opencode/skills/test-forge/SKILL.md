@@ -3,26 +3,33 @@ name: test-forge
 description: Scan C/C++ SDK headers, generate smart GTest code, compile and run tests with SDK linking
 ---
 
-# SDK Test Forge Skill (v4.5.2)
+# SDK Test Forge Skill (v4.6.0)
 
 ## Communication / 交流语言
 
 - **Reply in Chinese by default** when talking to the user.
 - Switch to English only when the user explicitly asks in the chat.
 
-## Autonomous environment (Agent-first)
+## Multi-Agent (v4.6, preferred)
 
-Always start with:
+Select **forge** orchestrator agent. It delegates via OpenCode `task()`:
 
 ```
-ensure_forge_environment: {}
+get_session_context → read orchestration.next_actions
+task(agent="forge-env") → task(agent="forge-scan") → task(agent="forge-scaffold")
+→ parallel task(agent="forge-enrich", batch=...) → task(agent="forge-build")
+record_agent_run after each sub-agent
 ```
 
-This runs doctor and **auto-installs** MSVC/MinGW/g++ via winget/apt when missing. Do not ask the user to install Build Tools manually unless auto-install fails.
+Configure parallel enrich batch size in `.forge.yaml`:
 
-Fallback: `setup_cxx_toolchain: { agent_mode: true, method: auto }`
+```yaml
+multi_agent_batch_size: 4   # 1 = serial enrich batches
+```
 
-## Workflow
+## Single-Agent Fallback
+
+When sub-agents unavailable, run MCP tools directly:
 
 ### 1. Environment + Scan + Plan
 
@@ -36,7 +43,7 @@ suggest_test_plan: { scan_json: ..., project_dir: ./my_tests, max_targets: 20 }
 
 ```
 generate_test_skeleton: { fidelity: smart, overwrite: true, ... }
-enrich_test_cases: { project_dir: ./my_tests }
+enrich_test_cases: { project_dir: ./my_tests, test_files: "foo_test.cpp,bar_test.cpp" }
 analyze_scaffold_quality: { project_dir: ./my_tests }
 ```
 

@@ -1,3 +1,3 @@
 """SDK Test Forge — core library for MCP and CLI."""
 
-__version__ = "4.5.2"
+__version__ = "4.6.0"
