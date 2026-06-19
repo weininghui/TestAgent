@@ -508,6 +508,86 @@ class TestForgeDoctor:
         names = {c["name"] for c in result["checks"]}
         assert "cmake" in names
         assert "python" in names
+        assert "cxx_compiler" in names
+
+
+class TestToolchain:
+    def test_check_cxx_toolchain_shape(self):
+        from sdk_forge.toolchain import check_cxx_toolchain
+
+        tc = check_cxx_toolchain()
+        assert "available" in tc
+        assert "hints" in tc
+        assert "kind" in tc
+
+    def test_compiler_gate_blocks_build(self, tmp_path, monkeypatch):
+        def _blocked():
+            return {
+                "status": "compiler_not_found",
+                "error": "No compiler",
+                "hints": ["install MSVC"],
+                "compile": {"status": "compiler_not_found", "stage": "toolchain", "hints": []},
+            }
+
+        monkeypatch.setattr("sdk_forge.retry.compiler_gate_result", _blocked)
+        from sdk_forge.retry import build_with_retry_impl
+
+        tests = tmp_path / "tests"
+        build = tmp_path / "build"
+        tests.mkdir()
+        build.mkdir()
+        (tests / "t_test.cpp").write_text("#include <gtest/gtest.h>\nTEST(T,T){}\n")
+        result = build_with_retry_impl(project_dir=str(tmp_path), run_after_compile=False)
+        assert result["status"] == "compiler_not_found"
+
+    def test_report_compiler_not_found_summary(self):
+        from sdk_forge.report import build_auto_summary
+
+        text = build_auto_summary({
+            "status": "compiler_not_found",
+            "toolchain": {"hint": "Install Build Tools"},
+        })
+        assert "未检测到" in text or "compiler" in text.lower()
+        assert "PASS" not in text or "推断" in text
+
+    def test_setup_requires_confirm(self):
+        from sdk_forge.toolchain_install import setup_toolchain_impl
+
+        result = setup_toolchain_impl(method="auto", confirm=False)
+        assert result["status"] == "confirmation_required"
+        assert "available_options" in result
+
+    def test_setup_skips_when_compiler_ready(self, monkeypatch):
+        from sdk_forge.toolchain_install import setup_toolchain_impl
+
+        monkeypatch.setattr(
+            "sdk_forge.toolchain_install.check_cxx_toolchain",
+            lambda: {"available": True, "kind": "msvc"},
+        )
+        result = setup_toolchain_impl(confirm=True)
+        assert result["status"] == "ok"
+        assert result.get("skipped") is True
+
+    def test_detect_installers_windows(self, monkeypatch):
+        from sdk_forge.toolchain_install import detect_installers
+
+        if sys.platform != "win32":
+            pytest.skip("Windows only")
+        monkeypatch.setattr("sdk_forge.toolchain_install._which", lambda n: "/usr/bin/winget" if n == "winget" else None)
+        detected = detect_installers()
+        assert detected.get("auto_method") == "winget-msvc"
+        assert len(detected.get("options") or []) >= 1
+
+    def test_ensure_skips_when_ready(self, monkeypatch):
+        from sdk_forge.toolchain_install import ensure_toolchain_impl
+
+        monkeypatch.setattr(
+            "sdk_forge.toolchain_install.check_cxx_toolchain",
+            lambda: {"available": True, "kind": "msvc"},
+        )
+        result = ensure_toolchain_impl()
+        assert result["status"] == "ok"
+        assert result["action"] == "none"
 
 
 class TestForgeInit:
@@ -887,6 +967,157 @@ class TestEnrich:
         assert result["status"] == "ok"
         assert result["brief_count"] >= 1
         assert result["briefs"][0]["markers"]
+
+
+class TestQualityGate:
+    def test_gate_settings_defaults(self):
+        from sdk_forge.quality_gate import quality_gate_settings
+
+        s = quality_gate_settings({})
+        assert s["enabled"] is True
+        assert s["mode"] == "warn"
+        assert s["max_placeholder_ratio"] == 0.5
+
+    def test_gate_blocks_when_ratio_high(self, tmp_path):
+        from sdk_forge.pipeline import build_pipeline_impl
+
+        tests = tmp_path / "tests"
+        build = tmp_path / "build"
+        tests.mkdir()
+        build.mkdir()
+        (tests / "bad_test.cpp").write_text(
+            "TEST(Bad, A) { EXPECT_TRUE(true); // TODO: x // TODO: y // AGENT: z }\n" * 5,
+            encoding="utf-8",
+        )
+        (tmp_path / ".forge.yaml").write_text(
+            "scaffold_quality_gate: true\nmax_placeholder_ratio: 0.01\nquality_gate_mode: block\n",
+            encoding="utf-8",
+        )
+        result = build_pipeline_impl(project_dir=str(tmp_path), run_after_compile=False)
+        assert result["status"] == "scaffold_quality_blocked"
+        assert result["quality_gate"]["passed"] is False
+
+    def test_skip_quality_gate(self, tmp_path):
+        from sdk_forge.pipeline import build_pipeline_impl
+
+        tests = tmp_path / "tests"
+        build = tmp_path / "build"
+        tests.mkdir()
+        build.mkdir()
+        (tests / "noop_test.cpp").write_text(
+            "#include <gtest/gtest.h>\nTEST(Noop, Ok) { EXPECT_TRUE(true); }\n",
+            encoding="utf-8",
+        )
+        (tmp_path / ".forge.yaml").write_text(
+            "scaffold_quality_gate: true\nmax_placeholder_ratio: 0.01\nquality_gate_mode: block\n",
+            encoding="utf-8",
+        )
+        result = build_pipeline_impl(
+            project_dir=str(tmp_path),
+            run_after_compile=False,
+            skip_quality_gate=True,
+        )
+        assert result["status"] != "scaffold_quality_blocked"
+        assert result["quality_gate"]["skipped"] is True
+
+
+class TestCoverageExpand:
+    def test_appends_test_p_block(self, tmp_path):
+        from sdk_forge.coverage_expand import coverage_expand_impl
+
+        cache = tmp_path / ".forge" / "cache"
+        cache.mkdir(parents=True)
+        plan = {
+            "status": "ok",
+            "sdk_root": "",
+            "targets": [{
+                "symbol": "calc_add",
+                "kind": "function",
+                "params": "int a, int b",
+                "return_type": "int",
+                "scenarios": [{"name": "normal"}],
+            }],
+        }
+        (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        (cache / "plan_gap.json").write_text(json.dumps({
+            "status": "ok",
+            "missing_targets": [],
+            "partial_targets": [{"symbol": "calc_add"}],
+            "coverage": {"uncovered_symbols": ["calc_add"], "line_coverage_pct": 10},
+        }), encoding="utf-8")
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        (tests / "calc_add_test.cpp").write_text(
+            "TEST(Calc_add, Normal) { EXPECT_EQ(1, 1); }\n",
+            encoding="utf-8",
+        )
+        result = coverage_expand_impl(project_dir=str(tmp_path))
+        assert result["status"] == "ok"
+        assert result["appended_count"] >= 1
+        content = (tests / "calc_add_test.cpp").read_text(encoding="utf-8")
+        assert "ForgeExpand" in content or "INSTANTIATE_TEST_SUITE_P" in content
+
+
+class TestPlanEnum:
+    def test_status_enum_members_from_scan(self):
+        from sdk_forge.plan import suggest_test_plan_impl
+        from sdk_forge.scan import scan_headers_impl
+
+        sdk = EXAMPLES / "test_sdk_cpp"
+        scan = scan_headers_impl(str(sdk / "include"), use_clang=False, use_cache=False)
+        assert scan["status"] == "ok"
+        clamp_fn = next(
+            (f for f in scan["files"][0]["functions"] if f.get("name") == "clamp"),
+            None,
+        )
+        assert clamp_fn is not None
+        assert clamp_fn.get("is_template") is True
+        enum_info = next(e for e in scan["files"][0]["enums"] if e.get("name") == "Status")
+        assert len(enum_info.get("members") or []) >= 3
+        plan = suggest_test_plan_impl(scan_json=scan)
+        status = next(t for t in plan["targets"] if t["symbol"] == "Status")
+        assert status["kind"] == "enum"
+        assert len(status.get("enum_members") or []) >= 3
+        assert status.get("namespace") == "my_sdk" or status.get("parser_function")
+
+
+class TestScaffoldGroup:
+    def test_group_by_header(self, tmp_path):
+        from sdk_forge.templates import generate_test_skeleton_impl
+
+        plan = {
+            "status": "ok",
+            "targets": [
+                {
+                    "symbol": "calc_add",
+                    "kind": "function",
+                    "file": "calc.h",
+                    "return_type": "int",
+                    "params": "int a, int b",
+                    "scenarios": [{"name": "normal"}],
+                },
+                {
+                    "symbol": "calc_sub",
+                    "kind": "function",
+                    "file": "calc.h",
+                    "return_type": "int",
+                    "params": "int a, int b",
+                    "scenarios": [{"name": "normal"}],
+                },
+            ],
+        }
+        out = tmp_path / "tests"
+        result = generate_test_skeleton_impl(
+            plan_json=plan,
+            output_dir=str(out),
+            overwrite=True,
+            group_by_header=True,
+        )
+        assert result["status"] == "ok"
+        assert len(result["files_written"]) == 1
+        content = (out / "calc_test.cpp").read_text(encoding="utf-8")
+        assert "calc.h" in content
+        assert "TEST_F" in content or "TEST(" in content
 
 
 class TestTemplates:
@@ -1420,6 +1651,9 @@ def _find_sdk_lib_dir(sdk_build: Path) -> Path:
 def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
     sdk_root = repo_root / "examples" / "test_sdk"
     sdk_build = sdk_root / "build"
+    if sdk_build.exists():
+        import shutil
+        shutil.rmtree(sdk_build, ignore_errors=True)
     sdk_build.mkdir(parents=True, exist_ok=True)
 
     configure = subprocess.run(
@@ -1469,17 +1703,25 @@ class TestE2EPipeline:
             tests.mkdir()
             build.mkdir()
 
-            plan = suggest_test_plan_impl(sdk_root=str(repo_root / "examples" / "test_sdk"))
+            from sdk_forge.scan import scan_headers_impl
+
+            sdk_path = str(repo_root / "examples" / "test_sdk")
+            scan = scan_headers_impl(sdk_path, use_clang=False, use_cache=False)
+            plan = suggest_test_plan_impl(scan_json=scan)
             assert plan["status"] == "ok"
+            assert plan["target_count"] >= 1
             save_plan_state(str(project), plan)
 
-            scaffold = generate_test_skeleton_impl(plan_json=plan, output_dir=str(tests), overwrite=True)
+            scaffold = generate_test_skeleton_impl(
+                plan_json=plan, output_dir=str(tests), overwrite=True, fidelity="smart",
+            )
             assert scaffold["status"] == "ok"
 
             test_file = tests / "calc_add_test.cpp"
             assert test_file.exists()
             content = test_file.read_text(encoding="utf-8")
-            content = content.replace("EXPECT_TRUE(true)", "EXPECT_EQ(calc_add(1, 2), 0)", 1)
+            assert "EXPECT_EQ" in content
+            content = content.replace("EXPECT_EQ(calc_add(2, 3), 5)", "EXPECT_EQ(calc_add(1, 2), 0)", 1)
             test_file.write_text(content, encoding="utf-8")
 
             compile_result = compile_tests_impl(
@@ -1489,6 +1731,7 @@ class TestE2EPipeline:
                 sdk_lib_dirs=[str(lib_dir)],
                 link_libraries=["calc"],
                 use_config=False,
+                extra_cmake_snippet="add_definitions(-DFEATURE_ENABLED)",
             )
             assert compile_result["status"] == "ok"
 
@@ -1509,6 +1752,81 @@ class TestE2EPipeline:
 
             gap = analyze_plan_gap_impl(str(project))
             assert gap["status"] == "ok"
+
+    def test_smart_scaffold_build_passes_without_manual_edit(self):
+        from sdk_forge.build import compile_tests_impl
+        from sdk_forge.plan import suggest_test_plan_impl
+        from sdk_forge.run import run_tests_impl
+        from sdk_forge.templates import generate_test_skeleton_impl
+
+        from sdk_forge.scan import scan_headers_impl
+
+        repo_root = Path(__file__).resolve().parent.parent
+        sdk_root = repo_root / "examples" / "test_sdk"
+        include_dir, lib_dir = _build_test_sdk(repo_root)
+
+        with tempfile.TemporaryDirectory(prefix="forge_e2e_smart_") as tmp:
+            project = Path(tmp)
+            tests = project / "tests"
+            build = project / "build"
+            tests.mkdir()
+            if build.exists():
+                import shutil
+                shutil.rmtree(build)
+            build.mkdir()
+
+            scan = scan_headers_impl(str(sdk_root), use_clang=False, use_cache=False)
+            plan = suggest_test_plan_impl(scan_json=scan)
+            assert plan["target_count"] >= 1
+            scaffold = generate_test_skeleton_impl(
+                plan_json=plan, output_dir=str(tests), overwrite=True, fidelity="smart",
+            )
+            assert scaffold["status"] == "ok"
+            calc_test = tests / "calc_add_test.cpp"
+            assert calc_test.exists()
+            assert "EXPECT_EQ" in calc_test.read_text(encoding="utf-8")
+
+            compile_result = compile_tests_impl(
+                str(tests),
+                str(build),
+                sdk_include_dirs=[str(include_dir)],
+                sdk_lib_dirs=[str(lib_dir)],
+                link_libraries=["calc"],
+                use_config=False,
+                extra_cmake_snippet="add_definitions(-DFEATURE_ENABLED)",
+            )
+            assert compile_result["status"] == "ok"
+
+            run_result = run_tests_impl(str(build))
+            assert run_result["status"] == "ok"
+            assert run_result["failed"] == 0
+
+    def test_quality_gate_blocks_when_ratio_high(self, tmp_path):
+        from sdk_forge.pipeline import build_pipeline_impl
+        from sdk_forge.templates import generate_test_skeleton_impl
+
+        plan = {
+            "status": "ok",
+            "targets": [{
+                "symbol": "x",
+                "kind": "function",
+                "file": "x.h",
+                "return_type": "void",
+                "params": "",
+                "scenarios": [{"name": "normal"}],
+            }],
+        }
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        generate_test_skeleton_impl(
+            plan_json=plan, output_dir=str(tests), overwrite=True, fidelity="skeleton",
+        )
+        (tmp_path / ".forge.yaml").write_text(
+            "scaffold_quality_gate: true\nmax_placeholder_ratio: 0.01\nquality_gate_mode: block\n",
+            encoding="utf-8",
+        )
+        result = build_pipeline_impl(project_dir=str(tmp_path), run_after_compile=False)
+        assert result["status"] == "scaffold_quality_blocked"
 
 
 @pytest.mark.skipif(not _cmake_available(), reason="cmake not found in PATH — skip integration")
@@ -1748,3 +2066,44 @@ TEST(MathTest, Subtraction) {
             run_result = json.loads(await run_tests(build))
             assert run_result["status"] == "ok"
             assert run_result["passed"] >= 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(sys.platform == "win32", reason="medium scaffold E2E on Linux CI")
+    async def test_medium_sdk_scaffold_and_expand(self):
+        from mcp_server import coverage_expand, generate_test_skeleton, suggest_test_plan
+
+        sdk_root = EXAMPLES / "test_sdk_medium"
+        install_prefix = Path(tempfile.mkdtemp(prefix="medium_scaffold_"))
+        sdk_build = sdk_root / "build_scaffold"
+        sdk_build.mkdir(parents=True, exist_ok=True)
+
+        for cmd in (
+            ["cmake", str(sdk_root.resolve()), f"-DCMAKE_INSTALL_PREFIX={install_prefix}"],
+            ["cmake", "--build", str(sdk_build.resolve())],
+            ["cmake", "--install", str(sdk_build.resolve())],
+        ):
+            r = subprocess.run(cmd, cwd=str(sdk_build), capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
+            assert r.returncode == 0, r.stderr or r.stdout
+
+        with tempfile.TemporaryDirectory(prefix="medium_forge_") as tmp:
+            project = Path(tmp)
+            (project / "tests").mkdir()
+            (project / "build").mkdir()
+            plan = json.loads(await suggest_test_plan(str(sdk_root / "include"), max_targets=10))
+            assert plan["status"] == "ok"
+            cache = project / ".forge" / "cache"
+            cache.mkdir(parents=True)
+            (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
+
+            scaffold = json.loads(await generate_test_skeleton(
+                str(project / "tests"),
+                plan_json=json.dumps(plan),
+                overwrite=True,
+                fidelity="smart",
+            ))
+            assert scaffold["status"] == "ok"
+            assert scaffold.get("files_written")
+
+            expand = json.loads(await coverage_expand(str(project)))
+            assert expand["status"] == "ok"

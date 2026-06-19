@@ -31,6 +31,7 @@ from sdk_forge.session import get_session_context_impl, save_plan_state
 from sdk_forge.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl, load_scaffold_quality
 from sdk_forge.coverage_expand import coverage_expand_impl
 from sdk_forge.templates import generate_test_skeleton_impl
+from sdk_forge.toolchain_install import setup_toolchain_impl, ensure_toolchain_impl
 from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
 from sdk_forge.workflow import update_workflow_stage
 
@@ -47,6 +48,8 @@ mcp = FastMCP(
 
 Tools:
   - forge_doctor        → check cmake, compiler, caches
+  - setup_cxx_toolchain → auto-install MSVC/MinGW/g++ (agent_mode default)
+  - ensure_forge_environment → doctor + auto-install toolchain if missing
   - init_forge_project  → scaffold tests + .forge.yaml
   - suggest_test_plan   → structured test scenarios from scan
   - generate_test_skeleton → GTest .cpp (smart assertions or skeleton)
@@ -77,6 +80,42 @@ Tools:
 @mcp.tool(description="Check cmake, compiler, libclang, and forge cache directories.")
 async def forge_doctor() -> str:
     return json.dumps(doctor_impl(), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Auto-install C++ toolchain via winget/apt/brew. Agent mode skips manual confirm.")
+async def setup_cxx_toolchain(
+    confirm: Annotated[bool | str, "Explicit user confirm (CLI-style)."] = False,
+    agent_mode: Annotated[bool | str, "Agent delegated install (default true for forge agent)."] = True,
+    method: Annotated[str, "auto, winget-msvc, winget-mingw, apt-build-essential, brew-llvm, ..."] = "auto",
+) -> str:
+    return json.dumps(
+        setup_toolchain_impl(method=method, confirm=confirm, agent_mode=agent_mode),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Ensure cmake + C++ compiler; auto-install toolchain when missing (full Agent env setup).")
+async def ensure_forge_environment(
+    method: Annotated[str, "Toolchain install method when compiler missing."] = "auto",
+    auto_install: Annotated[bool | str, "Run package manager install if needed."] = True,
+) -> str:
+    from sdk_forge.doctor import doctor_impl
+
+    doctor = doctor_impl()
+    ensure = ensure_toolchain_impl(method=method, auto_install=auto_install, agent_mode=True)
+    doctor_after = doctor_impl()
+    return json.dumps(
+        {
+            "status": "ok" if ensure.get("status") == "ok" or doctor_after.get("ready") else ensure.get("status", "issues_found"),
+            "doctor_before": doctor,
+            "toolchain": ensure,
+            "doctor_after": doctor_after,
+            "ready": doctor_after.get("ready", False),
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
 
 
 @mcp.tool(description="Scaffold a forge test project with tests/ and .forge.yaml.")
@@ -114,11 +153,12 @@ async def generate_test_skeleton(
     overwrite: Annotated[bool | str, "Overwrite existing test files."] = False,
     fidelity: Annotated[str, "smart (default) or skeleton."] = "smart",
     group_by_header: Annotated[bool | str, "Group targets per header into one file with TEST_F."] = False,
+    skip_existing: Annotated[bool | str, "Only write missing target files (incremental scaffold)."] = False,
 ) -> str:
     return json.dumps(
         generate_test_skeleton_impl(
             plan_json or None, output_dir, sdk_root, project_name, overwrite,
-            fidelity=fidelity, group_by_header=group_by_header,
+            fidelity=fidelity, group_by_header=group_by_header, skip_existing=skip_existing,
         ),
         indent=2, ensure_ascii=False,
     )
@@ -261,11 +301,14 @@ async def build_tests(
     run_after_compile: Annotated[bool | str, "Run tests after compile (default true)."] = True,
     max_retries: Annotated[int | str, "Max compile attempts with hint-based auto-fix (default 3)."] = 3,
     auto_fix_config: Annotated[bool | str, "Write applied fixes back to .forge config."] = False,
+    skip_quality_gate: Annotated[bool | str, "Skip scaffold quality gate (default false)."] = False,
+    auto_setup_toolchain: Annotated[bool | str, "Auto-install compiler if missing (default true)."] = True,
 ) -> str:
     return json.dumps(
         build_pipeline_impl(
             project_dir, source_dir, build_dir, sdk_root,
-            run_after_compile, max_retries, auto_fix_config,
+            run_after_compile, max_retries, auto_fix_config, skip_quality_gate,
+            auto_setup_toolchain,
         ),
         indent=2, ensure_ascii=False,
     )

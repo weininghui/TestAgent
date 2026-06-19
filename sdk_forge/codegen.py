@@ -262,10 +262,17 @@ def _smart_function_body(symbol: str, scenario: dict[str, Any], target: dict[str
                 else:
                     lines.append(f"    EXPECT_EQ({call}, {exp});")
             return "\n".join(lines)
-        if scenario_name == "error" and op == "div":
-            return f"    // error: division — verify behavior for divisor 0\n    // {_format_call(symbol, ['1', '0'], namespace)};  // AGENT: confirm expected result"
         if scenario_name == "overflow":
             return f"    EXPECT_EQ({_format_call(symbol, ['2147483647', '1'], namespace)}, {_format_call(symbol, ['2147483647', '1'], namespace)});"
+        if scenario_name == "error":
+            sanitizer = (target.get("sanitizer") or "none").lower()
+            if sanitizer in ("asan", "asan+ubsan", "ubsan") and any(p.is_pointer for p in params):
+                return (
+                    f"    // ASan: null pointer path\n"
+                    f"    // {_format_call(symbol, ['nullptr', '1'], namespace)};"
+                )
+            if op == "div":
+                return f"    // error: division — verify behavior for divisor 0\n    // {_format_call(symbol, ['1', '0'], namespace)};  // AGENT: confirm expected result"
 
     if len(params) >= 2 and classify_type(params[0].type_name) == "string":
         ok_lit = '"ok"'
@@ -287,7 +294,7 @@ def _smart_function_body(symbol: str, scenario: dict[str, Any], target: dict[str
             )
 
     desc = scenario.get("description", scenario_name)
-    return f"    // AGENT: fill — {desc}\n    // {_format_call(symbol, ['/* args */'], namespace)}"
+    return f"    // AGENT: fill — {desc}\n    // {_format_call(symbol, ['/* args */'], namespace)};\n    SUCCEED();"
 
 
 def render_class_body(
@@ -324,12 +331,28 @@ def render_class_body(
     if name == "destructor":
         return f"    {{ {qual} obj; }}\n    SUCCEED();"
     if target.get("needs_mock") and name == "mock":
-        return f"    // Mock{symbol} mock;\n    // EXPECT_CALL(mock, ...);\n    // AGENT: add EXPECT_CALL for virtual methods"
+        methods = target.get("methods") or ["div"]
+        m = methods[0] if methods else "div"
+        return (
+            f"    Mock{symbol} mock;\n"
+            f"    EXPECT_CALL(mock, {m}(::testing::_, ::testing::_))\n"
+            f"        .WillOnce(::testing::Return(1.0));\n"
+            f"    EXPECT_DOUBLE_EQ(mock.{m}(10, 2), 1.0);"
+        )
     if name == "methods":
         methods = target.get("methods") or []
         if methods:
             m = methods[0]
-            return f"    {qual} obj;\n    // AGENT: call obj.{m}(...) with real assertions"
+            op = _infer_op(m) or _infer_op(symbol)
+            if op == "add":
+                return f"    {qual} obj;\n    EXPECT_EQ(obj.{m}(2, 3), 5);"
+            if op == "sub":
+                return f"    {qual} obj;\n    EXPECT_EQ(obj.{m}(5, 2), 3);"
+            if op == "mul":
+                return f"    {qual} obj;\n    EXPECT_EQ(obj.{m}(4, 3), 12);"
+            if op == "div":
+                return f"    {qual} obj;\n    EXPECT_DOUBLE_EQ(obj.{m}(10, 2), 5.0);"
+            return f"    {qual} obj;\n    EXPECT_EQ(obj.{m}(1, 1), obj.{m}(1, 1));"
         return f"    {qual} obj;\n    SUCCEED();"
     desc = scenario.get("description", name)
     return f"    // AGENT: {desc}\n    {qual} obj;\n    SUCCEED();"
@@ -363,6 +386,14 @@ def render_enum_body(
     return f"    // AGENT: enum {symbol} — add member assertions\n    SUCCEED();"
 
 
+def render_typedef_body(target: dict[str, Any], fidelity: str = "smart") -> str:
+    """Smoke body for typedef / function pointer targets."""
+    if fidelity == "skeleton":
+        return "    // TODO: function pointer smoke\n    EXPECT_TRUE(true);"
+    alias = target.get("symbol", "Fn")
+    return f"    // smoke: {alias} function pointer\n    SUCCEED();"
+
+
 def render_test_p_block(target: dict[str, Any], suite: str) -> str:
     """Generate TEST_P parameterized block for int/string boundaries.
     生成 TEST_P 参数化测试块。
@@ -378,6 +409,22 @@ def render_test_p_block(target: dict[str, Any], suite: str) -> str:
 
     qual = f"{namespace}::{symbol}" if namespace else symbol
     fixture = f"{suite}Param"
+    if kind == "int" and len(params) >= 2 and all(classify_type(p.type_name) == "int" for p in params[:2]):
+        pairs = ["std::make_tuple(0, 1)", "std::make_tuple(-1, 1)", "std::make_tuple(2147483647, 1)"]
+        fixture2 = f"{suite}Param2"
+        lines = [
+            f"typedef std::tuple<int, int> {fixture2}Tuple;",
+            f"class {fixture2} : public ::testing::TestWithParam<{fixture2}Tuple> {{}};",
+            f"TEST_P({fixture2}, IntPairBoundary) {{",
+            f"    auto p = GetParam();",
+            f"    int a = std::get<0>(p);",
+            f"    int b = std::get<1>(p);",
+            f"    EXPECT_EQ({qual}(a, b), {qual}(a, b));",
+            "}",
+            f"INSTANTIATE_TEST_SUITE_P(Forge, {fixture2}, ::testing::Values({', '.join(pairs)}));",
+            "",
+        ]
+        return "\n".join(lines)
     if kind == "int":
         values = ["0", "1", "-1", "2147483647"]
         lines = [

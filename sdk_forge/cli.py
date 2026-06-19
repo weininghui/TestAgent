@@ -24,6 +24,7 @@ from sdk_forge.run import run_tests_impl
 from sdk_forge.scan import scan_headers_impl
 from sdk_forge.session import get_session_context_impl, save_plan_state
 from sdk_forge.coverage_expand import coverage_expand_impl
+from sdk_forge.bench import run_bench_impl
 from sdk_forge.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl
 from sdk_forge.templates import generate_test_skeleton_impl
 from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
@@ -130,6 +131,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return _emit(doctor_impl(), args.quiet)
 
 
+def cmd_setup_toolchain(args: argparse.Namespace) -> int:
+    from sdk_forge.toolchain_install import setup_toolchain_impl
+
+    return _emit(
+        setup_toolchain_impl(method=args.method or "auto", confirm=args.confirm),
+        args.quiet,
+    )
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     return _emit(
         init_project_impl(args.target_dir, sdk_root=args.sdk_root or "", project_name=args.name),
@@ -147,6 +157,7 @@ def cmd_build(args: argparse.Namespace) -> int:
             run_after_compile=not args.no_run,
             max_retries=args.retry,
             auto_fix_config=args.auto_fix_config,
+            skip_quality_gate=args.skip_quality_gate,
         ),
         args.quiet,
     )
@@ -182,6 +193,7 @@ def cmd_scaffold(args: argparse.Namespace) -> int:
         overwrite=args.overwrite,
         fidelity=args.fidelity,
         group_by_header=args.group_by_header,
+        skip_existing=args.skip_existing,
     )
     return _emit(result, args.quiet)
 
@@ -213,6 +225,19 @@ def cmd_coverage_expand(args: argparse.Namespace) -> int:
             project_dir=args.project_dir or "",
             tests_dir=args.tests_dir or "",
             threshold_pct=args.threshold,
+        ),
+        args.quiet,
+    )
+
+
+def cmd_bench(args: argparse.Namespace) -> int:
+    return _emit(
+        run_bench_impl(
+            project_dir=args.project_dir or "",
+            sdk_root=args.sdk_root or "",
+            fidelity=args.fidelity,
+            run_build=not args.no_build,
+            clean_build=not args.no_clean,
         ),
         args.quiet,
     )
@@ -362,6 +387,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_doctor = sub.add_parser("doctor", help="Check toolchain and forge cache")
     p_doctor.set_defaults(func=cmd_doctor)
 
+    p_setup = sub.add_parser(
+        "setup-toolchain",
+        help="Auto-install C++ compiler via winget/apt/brew (requires --confirm)",
+    )
+    p_setup.add_argument(
+        "--method",
+        default="auto",
+        choices=[
+            "auto", "winget-msvc", "winget-mingw", "choco-mingw",
+            "apt-build-essential", "dnf-gcc", "brew-llvm", "xcode-cli",
+        ],
+        help="Install method (default: auto = best for platform)",
+    )
+    p_setup.add_argument(
+        "--confirm",
+        action="store_true",
+        help="Required to run install (may need admin, long download for MSVC)",
+    )
+    p_setup.set_defaults(func=cmd_setup_toolchain)
+
     p_init = sub.add_parser("init", help="Scaffold forge test project")
     p_init.add_argument("target_dir")
     p_init.add_argument("--sdk-root", default="")
@@ -376,6 +421,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("--no-run", action="store_true")
     p_build.add_argument("--retry", type=int, default=1, help="Max compile attempts with auto-fix (default 1)")
     p_build.add_argument("--auto-fix-config", action="store_true", help="Write applied fixes back to .forge config")
+    p_build.add_argument("--skip-quality-gate", action="store_true", help="Skip scaffold quality gate check")
     p_build.set_defaults(func=cmd_build)
 
     p_plan = sub.add_parser("plan", help="Suggest structured test plan from SDK scan")
@@ -395,6 +441,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_scaffold.add_argument("--overwrite", action="store_true")
     p_scaffold.add_argument("--fidelity", default="smart", choices=["smart", "skeleton"])
     p_scaffold.add_argument("--group-by-header", action="store_true")
+    p_scaffold.add_argument("--skip-existing", action="store_true", help="Only write missing target files")
     p_scaffold.set_defaults(func=cmd_scaffold)
 
     p_analyze = sub.add_parser("analyze", help="Analyze GTest failures from build dir")
@@ -438,6 +485,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_cov_expand.add_argument("--tests-dir", default="")
     p_cov_expand.add_argument("--threshold", type=float, default=80.0)
     p_cov_expand.set_defaults(func=cmd_coverage_expand)
+
+    p_bench = sub.add_parser("bench", help="Run plan→scaffold→quality→build benchmark")
+    p_bench.add_argument("--project-dir", default="")
+    p_bench.add_argument("--sdk-root", default="")
+    p_bench.add_argument("--fidelity", default="smart", choices=["smart", "skeleton"])
+    p_bench.add_argument("--no-build", action="store_true", help="Skip compile/run step")
+    p_bench.add_argument("--no-clean", action="store_true", help="Keep existing build directory")
+    p_bench.set_defaults(func=cmd_bench)
 
     p_compdb = sub.add_parser("compdb", help="Export or read compile_commands.json cache")
     p_compdb.add_argument("build_dir", nargs="?", default="")

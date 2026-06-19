@@ -3,19 +3,31 @@ name: test-forge
 description: Scan C/C++ SDK headers, generate smart GTest code, compile and run tests with SDK linking
 ---
 
-# SDK Test Forge Skill (v4.0)
+# SDK Test Forge Skill (v4.5.2)
 
 ## Communication / 交流语言
 
 - **Reply in Chinese by default** when talking to the user.
 - Switch to English only when the user explicitly asks in the chat.
 
-## Workflow
+## Autonomous environment (Agent-first)
 
-### 1. Doctor + Scan + Plan
+Always start with:
 
 ```
-forge_doctor
+ensure_forge_environment: {}
+```
+
+This runs doctor and **auto-installs** MSVC/MinGW/g++ via winget/apt when missing. Do not ask the user to install Build Tools manually unless auto-install fails.
+
+Fallback: `setup_cxx_toolchain: { agent_mode: true, method: auto }`
+
+## Workflow
+
+### 1. Environment + Scan + Plan
+
+```
+ensure_forge_environment
 scan_headers: { sdk_root: /path/to/sdk }
 suggest_test_plan: { scan_json: ..., project_dir: ./my_tests, max_targets: 20 }
 ```
@@ -23,48 +35,27 @@ suggest_test_plan: { scan_json: ..., project_dir: ./my_tests, max_targets: 20 }
 ### 2. Smart Scaffold + Enrich
 
 ```
-generate_test_skeleton: {
-  output_dir: ./my_tests/tests,
-  plan_json: ...,
-  fidelity: smart,
-  overwrite: true
-}
+generate_test_skeleton: { fidelity: smart, overwrite: true, ... }
 enrich_test_cases: { project_dir: ./my_tests }
-```
-
-Agent fills `// AGENT:` markers using header excerpts from enrich briefs.
-
-```
 analyze_scaffold_quality: { project_dir: ./my_tests }
 ```
-
-If `placeholder_ratio > 0.5`, continue editing before build.
 
 ### 3. Build + Auto Report
 
 ```
-build_tests: { project_dir: ./my_tests, max_retries: 3 }
+build_tests: { project_dir: ./my_tests, max_retries: 3, auto_setup_toolchain: true }
 ```
 
-Tell user to open `html_path`. No manual `forge_report` needed.
+Only claim all tests passed when `status: ok` and `run.passed` is set. Open `html_path` for the user.
 
-### 4. Coverage expand (optional)
-
-```
-analyze_plan_gap: { project_dir: ./my_tests }
-coverage_expand: { project_dir: ./my_tests, threshold_pct: 80 }
-build_tests: { project_dir: ./my_tests }
-```
-
-### 5. Failures (confirmation gate)
+### 4. Failures
 
 ```
 analyze_test_failures → propose_test_fixes → apply_test_fixes(confirm=true)
 ```
 
-## CLI equivalents
+## Rules
 
-- `forge scaffold --fidelity smart`
-- `forge enrich --project-dir .`
-- `forge quality --project-dir .`
-- `forge coverage-expand --project-dir .`
+- Agent configures toolchain — not the user
+- Never infer PASS from generated .cpp files alone
+- Never auto-edit SDK source without confirm

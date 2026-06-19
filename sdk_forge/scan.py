@@ -48,7 +48,13 @@ _RE_TYPEDEF = re.compile(
     r"^\s*(?:typedef\s+(.+?)\s+(\w+)|using\s+(\w+)\s*=\s*(.+?))\s*;",
     re.MULTILINE,
 )
-_RE_IF_DIRECTIVE = re.compile(r"^\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)$", re.MULTILINE)
+_RE_ENUM_BODY = re.compile(r"enum\s+(?:class\s+)?(\w+)\s*\{([^}]+)\}", re.DOTALL)
+_RE_NAMESPACE = re.compile(r"namespace\s+(\w+)\s*\{")
+_RE_TEMPLATE_FN = re.compile(
+    r"template\s*<[^>]+>\s*(?:inline\s+)?([\w:<>,\s*&]+?)\s+(\w+)\s*\(([^)]*)\)\s*(?:const\s*)?\{",
+    re.MULTILINE | re.DOTALL,
+)
+_RE_IF_DIRECTIVE = re.compile(r"^\s*#\s*(if|ifdef|ifndef|endif)\b")
 
 
 @dataclass
@@ -110,6 +116,48 @@ def cursor_namespace(cursor: Any) -> str:
     return "::".join(reversed(parts))
 
 
+def _primary_namespace(content: str) -> str:
+    m = _RE_NAMESPACE.search(content)
+    return m.group(1) if m else ""
+
+
+def _extract_enum_members(content: str, enum_name: str) -> list[dict[str, str]]:
+    members: list[dict[str, str]] = []
+    for m in _RE_ENUM_BODY.finditer(content):
+        if m.group(1) != enum_name:
+            continue
+        for part in m.group(2).split(","):
+            part = part.strip()
+            if not part or part.startswith("//"):
+                continue
+            name = re.sub(r"=\s*\d+.*", "", part).strip()
+            if name and re.match(r"^\w+$", name):
+                members.append({"name": name})
+    return members
+
+
+def _parse_template_functions(content: str, filepath: str, depths: dict[int, int], ns: str) -> list[dict]:
+    results: list[dict] = []
+    for m in _RE_TEMPLATE_FN.finditer(content):
+        name = m.group(2)
+        if name.startswith("_"):
+            continue
+        line = content[: m.start()].count("\n") + 1
+        results.append({
+            "name": name,
+            "return_type": m.group(1).strip(),
+            "params": m.group(3).strip(),
+            "line": line,
+            "kind": "function",
+            "virtual": False,
+            "static": False,
+            "is_template": True,
+            "namespace": ns,
+            "conditional": is_conditional_line(line, depths),
+        })
+    return results
+
+
 def parse_header(content: str, filepath: str) -> HeaderFileInfo:
     info = HeaderFileInfo(
         path=filepath,
@@ -118,7 +166,11 @@ def parse_header(content: str, filepath: str) -> HeaderFileInfo:
         parser="regex",
     )
     depths = compute_if_depths(content)
+    ns = _primary_namespace(content)
+    if ns:
+        info.namespaces = [ns]
     info.includes = [m.group(1) for m in _RE_INCLUDE.finditer(content)]
+    seen_names: set[str] = set()
     for m in _RE_FUNCTION.finditer(content):
         name = m.group("name")
         if name.startswith("_") or name in ("if", "else", "for", "while", "switch", "return"):
@@ -127,30 +179,39 @@ def parse_header(content: str, filepath: str) -> HeaderFileInfo:
         line_text = content.splitlines()[line - 1] if 0 < line <= len(content.splitlines()) else ""
         is_virtual = "virtual" in line_text
         is_static = "static" in line_text
-        fn_kind = "method" if is_virtual or is_static or line_text.strip().startswith(("int ", "void ", "double ", "bool ", "virtual ", "static ")) and ";" in line_text and "(" in line_text else "function"
         info.functions.append({
             "name": name,
             "return_type": m.group("return_type").strip(),
             "params": m.group("params").strip(),
             "line": line,
-            "kind": "method" if is_virtual or ("::" not in m.group("return_type") and fn_kind == "method") else "function",
+            "kind": "method" if is_virtual else "function",
             "virtual": is_virtual,
             "static": is_static,
+            "namespace": ns,
             "conditional": is_conditional_line(line, depths),
         })
+        seen_names.add(name)
+    for tmpl in _parse_template_functions(content, filepath, depths, ns):
+        if tmpl["name"] not in seen_names:
+            info.functions.append(tmpl)
+            seen_names.add(tmpl["name"])
     for m in _RE_CLASS.finditer(content):
         line = content[: m.start()].count("\n") + 1
         info.classes.append({
             "name": m.group(2),
             "kind": m.group(1),
             "line": line,
+            "namespace": ns,
             "conditional": is_conditional_line(line, depths),
         })
     for m in _RE_ENUM.finditer(content):
         line = content[: m.start()].count("\n") + 1
+        enum_name = m.group(1)
         info.enums.append({
-            "name": m.group(1),
+            "name": enum_name,
             "line": line,
+            "namespace": ns,
+            "members": _extract_enum_members(content, enum_name),
             "conditional": is_conditional_line(line, depths),
         })
     for m in _RE_TYPEDEF.finditer(content):
@@ -227,10 +288,16 @@ def parse_header_clang(filepath: str, compile_args: list[str]) -> HeaderFileInfo
                     "conditional": is_conditional_line(line, depths),
                 })
             elif kind == CursorKind.ENUM_DECL:
+                members = [
+                    {"name": c.spelling}
+                    for c in cursor.get_children()
+                    if c.kind == CursorKind.ENUM_CONSTANT_DECL and c.spelling
+                ]
                 info.enums.append({
                     "name": cursor.spelling,
                     "line": line,
                     "namespace": ns,
+                    "members": members,
                     "conditional": is_conditional_line(line, depths),
                 })
             for child in cursor.get_children():

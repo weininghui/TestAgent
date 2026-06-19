@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
-FORGE_YAML_TEMPLATE = """# SDK Test Forge project config (v3.1)
+FORGE_YAML_TEMPLATE = """# SDK Test Forge project config (v4.1)
 sdk_root: {sdk_root}
 tests_dir: {tests_dir}
 build_dir: {build_dir}
@@ -19,6 +19,12 @@ link_libraries:
 
 gtest_source: auto
 gtest_version: auto
+
+# Quality gate (v4.1)
+scaffold_quality_gate: true
+max_placeholder_ratio: 0.5
+quality_gate_mode: warn
+auto_report: true
 """
 
 

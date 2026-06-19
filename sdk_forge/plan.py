@@ -155,6 +155,7 @@ def suggest_test_plan_impl(
     scan_json: str | dict[str, Any] | None = None,
     include_dirs: list[str] | str | None = None,
     max_targets: int | str = 0,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     try:
         limit = int(max_targets) if str(max_targets).strip() not in ("", "0", "none") else 0
@@ -178,10 +179,11 @@ def suggest_test_plan_impl(
         return scan_data
 
     root = scan_data.get("sdk_root") or sdk_root or ""
+    sanitizer = str((config or {}).get("sanitizer") or "none").lower()
     targets: list[dict[str, Any]] = []
     summary = {
         "functions": 0, "classes": 0, "enums": 0, "virtual": 0,
-        "conditional": 0, "filtered": 0, "parameterized": 0,
+        "conditional": 0, "filtered": 0, "parameterized": 0, "deduped": 0,
     }
 
     for file_info in scan_data.get("files", []):
@@ -189,11 +191,19 @@ def suggest_test_plan_impl(
         header_text = _read_header_text(root, filename)
         namespace = _extract_namespace(header_text)
         functions = file_info.get("functions", [])
+        class_names = {cls.get("name") for cls in file_info.get("classes", []) if cls.get("name")}
+        method_names = {
+            fn.get("name") for fn in functions
+            if fn.get("kind") == "method" or fn.get("class") in class_names
+        }
 
         for fn in functions:
             if fn.get("kind") == "method":
                 continue
             symbol = fn.get("name", "")
+            if symbol in method_names and fn.get("class") in class_names:
+                summary["filtered"] += 1
+                continue
             if _is_noise_symbol(symbol, "function"):
                 summary["filtered"] += 1
                 continue
@@ -209,7 +219,9 @@ def suggest_test_plan_impl(
                 "file": filename,
                 "return_type": fn.get("return_type", ""),
                 "params": fn.get("params", ""),
-                "namespace": namespace,
+                "namespace": fn.get("namespace") or namespace,
+                "is_template": bool(fn.get("is_template")),
+                "sanitizer": sanitizer,
                 "scenarios": _function_scenarios(fn),
                 "conditional": conditional,
                 "needs_mock": False,
@@ -254,13 +266,13 @@ def suggest_test_plan_impl(
             enum_name = enum_info.get("name", "")
             if _is_noise_symbol(enum_name, "function"):
                 continue
-            members = _extract_enum_members(header_text, enum_name)
+            members = enum_info.get("members") or _extract_enum_members(header_text, enum_name)
             parser = _find_parser_for_enum(functions, enum_name)
             targets.append({
                 "symbol": enum_name,
                 "kind": "enum",
                 "file": filename,
-                "namespace": namespace,
+                "namespace": enum_info.get("namespace") or namespace,
                 "enum_members": members,
                 "parser_function": parser,
                 "scenarios": _enum_scenarios(),
@@ -285,6 +297,17 @@ def suggest_test_plan_impl(
                     "conditional": bool(td.get("conditional")),
                     "needs_mock": False,
                 })
+
+    seen: set[tuple[str, str, str]] = set()
+    deduped: list[dict[str, Any]] = []
+    for target in targets:
+        key = (str(target.get("symbol", "")), str(target.get("kind", "")), str(target.get("file", "")))
+        if key in seen:
+            summary["deduped"] += 1
+            continue
+        seen.add(key)
+        deduped.append(target)
+    targets = deduped
 
     total_before_limit = len(targets)
     if limit > 0 and len(targets) > limit:

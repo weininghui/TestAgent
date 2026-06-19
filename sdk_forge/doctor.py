@@ -12,6 +12,8 @@ from pathlib import Path
 from sdk_forge.cache import gtest_cache_dir, scan_cache_dir
 from sdk_forge.gtest import ensure_gtest, gtest_toolchain_info
 from sdk_forge.scan import CLANG_AVAILABLE
+from sdk_forge.toolchain import check_cxx_toolchain
+from sdk_forge.toolchain_install import detect_installers
 
 
 def _check_cmd(name: str) -> dict:
@@ -39,8 +41,25 @@ def doctor_impl() -> dict:
     checks.append(_check_cmd("cmake"))
     checks.append(_check_cmd("pkg-config"))
 
-    cxx = "cl" if sys.platform == "win32" else "g++"
-    checks.append(_check_cmd(cxx))
+    tc = check_cxx_toolchain()
+    checks.append({
+        "name": "cxx_compiler",
+        "ok": tc.get("available", False),
+        "kind": tc.get("kind", ""),
+        "path": tc.get("path", ""),
+        "on_path": tc.get("on_path", False),
+        "version": tc.get("version", ""),
+        "hint": tc.get("hint", ""),
+    })
+    if not tc.get("available"):
+        inst = detect_installers()
+        checks.append({
+            "name": "toolchain_install",
+            "ok": False,
+            "auto_method": inst.get("auto_method"),
+            "options": inst.get("options") or [],
+            "hint": "Run: forge setup-toolchain --confirm  (or MCP setup_cxx_toolchain with confirm=true)",
+        })
 
     gtest_cache = gtest_cache_dir()
     scan_cache = scan_cache_dir()

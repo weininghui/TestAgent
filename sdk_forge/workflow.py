@@ -14,6 +14,8 @@ STAGES = (
     "scan",
     "plan",
     "scaffold",
+    "enrich",
+    "quality_gate",
     "gap",
     "build",
     "analyze",

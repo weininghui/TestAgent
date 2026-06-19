@@ -18,6 +18,7 @@ from sdk_forge.config import (
 from sdk_forge.learn import learn_from_build, merge_learned_into_params
 from sdk_forge.probe import probe_sdk_impl
 from sdk_forge.run import run_tests_impl
+from sdk_forge.toolchain import compiler_gate_result
 from sdk_forge.util import parse_bool
 
 
@@ -59,6 +60,7 @@ def build_with_retry_impl(
     run_after_compile: bool | str = True,
     max_retries: int | str = 3,
     auto_fix_config: bool | str = False,
+    auto_setup_toolchain: bool | str = False,
 ) -> dict[str, Any]:
     should_run = parse_bool(run_after_compile, default=True)
     fix_config = parse_bool(auto_fix_config, default=False)
@@ -88,6 +90,28 @@ def build_with_retry_impl(
 
     if sdk:
         params = merge_learned_into_params(params, sdk, str(start))
+
+    toolchain_setup: dict[str, Any] | None = None
+    blocked = compiler_gate_result()
+    if blocked and parse_bool(auto_setup_toolchain, default=False):
+        from sdk_forge.toolchain_install import ensure_toolchain_impl
+
+        toolchain_setup = ensure_toolchain_impl(agent_mode=True)
+        blocked = compiler_gate_result()
+
+    if blocked:
+        blocked.update({
+            "config_file": config.get("_config_path"),
+            "source_dir": src,
+            "build_dir": bld,
+            "sdk_root": sdk or None,
+            "attempts": [],
+            "auto_fixed": False,
+            "retries_used": 0,
+        })
+        if toolchain_setup:
+            blocked["toolchain_setup"] = toolchain_setup
+        return blocked
 
     attempts: list[dict[str, Any]] = []
     compile_result: dict[str, Any] = {}
@@ -147,6 +171,9 @@ def build_with_retry_impl(
 
     if compile_result.get("status") != "ok":
         return result
+
+    if toolchain_setup:
+        result["toolchain_setup"] = toolchain_setup
 
     if should_run:
         run_result = run_tests_impl(bld)

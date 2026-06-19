@@ -11,7 +11,10 @@ from sdk_forge.run import run_tests_impl
 
 _RE_RUN = re.compile(r"\[ RUN      \]\s+(\S+)")
 _RE_FAIL = re.compile(r"\[  FAILED  \]\s+(\S+)")
-_RE_FILE_LINE = re.compile(r"^\s*(.+?):(\d+): Failure", re.MULTILINE)
+_RE_FILE_LINE = re.compile(
+    r"^\s*(?:(.+?):(\d+)|(.+?)\((\d+)\)):\s*(?:Failure|error(?:\s|$|:))",
+    re.MULTILINE,
+)
 _RE_EXPECTED = re.compile(r"Expected:\s*(.+)")
 _RE_ACTUAL = re.compile(r"Actual:\s*(.+)")
 _RE_WHICH = re.compile(r"Which is:\s*(.+)")
@@ -31,6 +34,7 @@ def parse_test_failures(run_result: dict[str, Any]) -> dict[str, Any]:
     failures: list[dict[str, Any]] = []
     current_test = ""
     current: dict[str, Any] = {}
+    msvc_values = False
 
     for line in output.splitlines():
         run_m = _RE_RUN.match(line.strip())
@@ -38,18 +42,21 @@ def parse_test_failures(run_result: dict[str, Any]) -> dict[str, Any]:
             current_test = run_m.group(1)
             continue
         fail_m = _RE_FAIL.match(line.strip())
-        if fail_m:
+        if fail_m and not fail_m.group(1).endswith("test,"):
             current_test = fail_m.group(1)
             continue
         file_m = _RE_FILE_LINE.match(line)
         if file_m:
             if current:
                 failures.append(current)
+            file_path = file_m.group(1) or file_m.group(3) or ""
+            line_no = file_m.group(2) or file_m.group(4) or "0"
             current = {
                 "test": current_test,
-                "file": file_m.group(1).strip(),
-                "line": int(file_m.group(2)),
+                "file": file_path.strip(),
+                "line": int(line_no),
             }
+            msvc_values = "Expected equality" in line
             continue
         exp_m = _RE_EXPECTED.search(line)
         if exp_m and current:
@@ -60,13 +67,29 @@ def parse_test_failures(run_result: dict[str, Any]) -> dict[str, Any]:
             current["actual"] = act_m.group(1).strip()
             continue
         which_m = _RE_WHICH.search(line)
-        if which_m and current and "actual" not in current:
+        if which_m and current:
             current["actual"] = which_m.group(1).strip()
+            continue
+        if msvc_values and current:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("Which is"):
+                continue
+            if "expected_expr" not in current:
+                current["expected_expr"] = stripped
+            elif "expected" not in current:
+                current["expected"] = stripped
+                msvc_values = False
 
     if current:
         failures.append(current)
 
     if not failures:
+        for line in output.splitlines():
+            fail_m = _RE_FAIL.match(line.strip())
+            if fail_m and not re.search(r"\d+\s+test", fail_m.group(1)):
+                name = fail_m.group(1)
+                if name and name not in {f.get("test") for f in failures}:
+                    failures.append({"test": name, "suggestion": "See GTest output for details"})
         for name in run_result.get("failed_tests") or []:
             failures.append({"test": name.strip(), "suggestion": "See GTest output for details"})
 

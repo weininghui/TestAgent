@@ -38,28 +38,60 @@ def detect_cmake_major() -> int | None:
 def detect_compiler() -> dict:
     if sys.platform == "win32":
         cl = shutil.which("cl")
-        if not cl:
-            return {"kind": "msvc", "major": None, "version": "", "available": False}
-        try:
-            result = subprocess.run(
-                ["cl"],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=10,
-            )
-            text = (result.stderr or result.stdout or "")
-            msvc = re.search(r"(\d{2})\d{2}", text)
-            major = int(msvc.group(1)) if msvc else None
-            return {
-                "kind": "msvc",
-                "major": major,
-                "version": text.splitlines()[0][:120] if text else "",
-                "available": True,
-            }
-        except (subprocess.TimeoutExpired, OSError):
-            return {"kind": "msvc", "major": None, "version": "", "available": True}
+        if cl:
+            try:
+                result = subprocess.run(
+                    ["cl"],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=10,
+                )
+                text = (result.stderr or result.stdout or "")
+                msvc = re.search(r"(\d{2})\d{2}", text)
+                major = int(msvc.group(1)) if msvc else None
+                return {
+                    "kind": "msvc",
+                    "major": major,
+                    "version": text.splitlines()[0][:120] if text else "",
+                    "available": True,
+                    "path": cl,
+                    "on_path": True,
+                }
+            except (subprocess.TimeoutExpired, OSError):
+                return {
+                    "kind": "msvc",
+                    "major": None,
+                    "version": "",
+                    "available": True,
+                    "path": cl,
+                    "on_path": True,
+                }
+        for name in ("g++", "clang++"):
+            path = shutil.which(name)
+            if path:
+                try:
+                    result = run_subprocess([name, "--version"], timeout=15)
+                    first = (result.stdout or result.stderr or "").splitlines()[0]
+                    return {
+                        "kind": name.replace("++", ""),
+                        "major": _parse_major(first),
+                        "version": first[:120],
+                        "available": True,
+                        "path": path,
+                        "on_path": True,
+                    }
+                except (subprocess.TimeoutExpired, OSError):
+                    return {
+                        "kind": name.replace("++", ""),
+                        "major": None,
+                        "version": "",
+                        "available": True,
+                        "path": path,
+                        "on_path": True,
+                    }
+        return {"kind": "msvc", "major": None, "version": "", "available": False, "path": "", "on_path": False}
 
     for kind, names in (("gcc", ("g++", "gcc")), ("clang", ("clang++", "clang"))):
         for name in names:

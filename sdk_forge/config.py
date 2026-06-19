@@ -167,6 +167,7 @@ def save_forge_config(config: dict[str, Any]) -> dict[str, Any]:
         "cmake_prefix_path", "pkg_config_packages", "find_packages",
         "extra_cmake_snippet", "gtest_source", "gtest_version",
         "coverage", "coverage_tool", "sanitizer",
+        "scaffold_quality_gate", "max_placeholder_ratio", "quality_gate_mode", "auto_report",
     )
     payload = {k: config[k] for k in keys_to_save if k in config}
 

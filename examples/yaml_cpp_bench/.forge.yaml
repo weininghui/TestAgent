@@ -1,0 +1,21 @@
+# SDK Test Forge benchmark project (v4.4)
+# Uses bundled test_sdk_cpp as stand-in when yaml-cpp is not installed locally.
+# Point sdk_root at your yaml-cpp install to benchmark a real SDK.
+sdk_root: ../test_sdk_cpp
+tests_dir: tests
+build_dir: build
+
+sdk_include_dirs:
+  - ../test_sdk_cpp/include
+sdk_lib_dirs:
+  - ../test_sdk_cpp/build
+link_libraries:
+  - my_sdk
+
+gtest_source: auto
+gtest_version: auto
+
+scaffold_quality_gate: true
+max_placeholder_ratio: 0.5
+quality_gate_mode: warn
+auto_report: true

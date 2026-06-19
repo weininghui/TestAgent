@@ -53,6 +53,8 @@ def enrich_test_cases_impl(
     """Build enrichment briefs for Agent to fill complex test cases.
     生成 Agent 补全复杂用例所需的 structured brief。
     """
+    from sdk_forge.workflow import update_workflow_stage
+
     root = Path(project_dir or Path.cwd()).resolve()
     plan = load_plan_state(str(root))
     if plan.get("status") == "error":
@@ -123,13 +125,16 @@ def enrich_test_cases_impl(
             ],
         })
 
-    return {
+    result = {
         "status": "ok",
         "project_dir": str(root),
         "sdk_root": sdk_root,
         "brief_count": len(briefs),
         "briefs": briefs,
     }
+    if project_dir:
+        update_workflow_stage(project_dir, "enrich", {"brief_count": len(briefs)})
+    return result
 
 
 def analyze_scaffold_quality_impl(

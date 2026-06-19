@@ -1,5 +1,58 @@
 # Changelog
 
+## [4.5.2] - 2026-06-19
+
+Auto-install C++ toolchain; Agent-first full environment setup.
+
+### Added
+- `forge setup-toolchain --confirm [--method auto|winget-msvc|winget-mingw|...]`
+- MCP `setup_cxx_toolchain(agent_mode=true)` — Agent 免手动 confirm
+- MCP **`ensure_forge_environment`** — doctor + 自动装编译器
+- **`build_tests(auto_setup_toolchain=true)`** — 缺编译器时自动安装后重试
+- Agent 文档：默认 `ensure_forge_environment` 开头，禁止让用户手装 VS
+
+### Changed
+- `forge doctor` shows `toolchain_install` options when compiler missing
+
+## [4.5.1] - 2026-06-19
+
+Fix misleading PASS when no C++ compiler on Windows.
+
+### Added
+- `sdk_forge/toolchain.py` — detect MSVC (PATH + vswhere), MinGW g++; install hints
+- `forge doctor` check `cxx_compiler` replaces bare `cl` lookup
+- `build_tests` early exit `compiler_not_found` before CMake
+- HTML report **Toolchain** section; auto-summary warns scaffold-only ≠ executed tests
+- Agent docs: must not claim PASS without successful `build_tests`
+
+## [4.5.0] - 2026-06-19
+
+v4.1–v4.5 iterative hardening (consolidated release).
+
+### v4.1 — Quality gate & E2E
+- `scaffold_quality_gate`, `max_placeholder_ratio`, `quality_gate_mode` in `.forge.yaml`
+- Build pipeline runs quality gate; `block` mode returns `scaffold_quality_blocked`
+- CLI `--skip-quality-gate`; MCP `skip_quality_gate` on `build_tests`
+- E2E: smart scaffold without manual EXPECT edits; gate block unit tests
+
+### v4.2 — Scan depth
+- Template functions (`is_template`), enum `members`, per-symbol `namespace`
+- Plan dedup; skip class methods duplicated as free functions
+
+### v4.3 — Codegen depth
+- Class method assertions, minimal GMock EXPECT_CALL, typedef smoke, 2-param TEST_P
+- Sanitizer-aware error scenario comments from config
+
+### v4.4 — Benchmark
+- `forge bench` → `.forge/cache/bench_last.json`
+- `examples/yaml_cpp_bench/` with README; CI bench job (no-build)
+
+### v4.5 — Engineering
+- `skip_existing` incremental scaffold (CLI/MCP)
+- Workflow stages: `enrich`, `quality_gate`
+- HTML report: quality gate, gate history, benchmark section
+- `test_sdk_medium` scaffold + coverage_expand E2E (Linux CI)
+
 ## [4.0.0] - 2026-06-19
 
 Smart test case generation roadmap (v3.7–v4.0 consolidated).

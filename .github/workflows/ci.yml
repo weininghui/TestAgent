@@ -33,6 +33,9 @@ jobs:
       - name: Run unit tests
         run: python -m pytest tests/ -v -k "not TestCompileAndRun and not TestCoveragePipeline and not TestCliIntegration"
 
+      - name: Bench metrics (no build)
+        run: forge bench --project-dir examples/yaml_cpp_bench --no-build --no-clean
+
   integration-linux:
     name: C++ integration (Linux)
     runs-on: ubuntu-latest

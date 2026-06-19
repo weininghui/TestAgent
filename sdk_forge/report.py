@@ -13,6 +13,7 @@ from sdk_forge.plan_gap import load_plan_gap
 from sdk_forge.report_html import format_report_html
 from sdk_forge.retry import load_build_state
 from sdk_forge.test_fix import load_proposals, parse_test_failures
+from sdk_forge.workflow import load_workflow_state
 
 
 def _enrich_report_state(project_dir: str, state: dict[str, Any]) -> dict[str, Any]:
@@ -40,6 +41,23 @@ def _enrich_report_state(project_dir: str, state: dict[str, Any]) -> dict[str, A
     elif gap.get("scaffold_quality"):
         enriched["scaffold_quality"] = gap.get("scaffold_quality")
 
+    if enriched.get("quality_gate"):
+        pass
+    elif state.get("quality_gate"):
+        enriched["quality_gate"] = state.get("quality_gate")
+
+    workflow = load_workflow_state(root)
+    if workflow.get("status") == "ok":
+        enriched["workflow"] = workflow
+
+    bench_path = Path(root) / ".forge" / "cache" / "bench_last.json"
+    if bench_path.is_file():
+        try:
+            enriched["bench"] = json.loads(bench_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    enriched["project_dir"] = root
     return enriched
 
 
@@ -214,6 +232,14 @@ def build_auto_summary(state: dict[str, Any]) -> str:
             lines.append(f"- 失败：{name}")
             if item.get("expected") is not None:
                 lines.append(f"  期望 {item.get('expected')}，实际 {item.get('actual', '?')}")
+    elif status == "compiler_not_found":
+        tc = state.get("toolchain") or {}
+        lines.append("未检测到 C++ 编译器，测试源码已生成但未编译、未运行。")
+        lines.append("请安装 Visual Studio Build Tools（含 C++ 工作负载）或 MinGW-w64 后重新 build_tests。")
+        if tc.get("hint"):
+            lines.append(f"详情：{tc['hint']}")
+    elif not run and status not in ("ok",):
+        lines.append("测试未运行：仅生成了 GTest 源码或构建失败，不能以用例数量推断 PASS。")
     elif status != "ok":
         stage = (state.get("compile") or {}).get("stage", "build")
         lines.append(f"构建未成功（阶段：{stage}）。")

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import html
+from pathlib import Path
 from typing import Any
 
 from sdk_forge.test_fix import parse_test_failures
@@ -38,7 +39,7 @@ def _esc(value: Any) -> str:
 def _badge_class(status: str) -> str:
     if status == "ok":
         return "badge-ok"
-    if status == "test_failures":
+    if status in ("test_failures", "compiler_not_found"):
         return "badge-warn"
     return "badge-fail"
 
@@ -91,6 +92,26 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
         parts.append(f"<ul>{''.join(meta_items)}</ul>")
 
     parts.append(_agent_analysis_html(agent_summary))
+
+    if status == "compiler_not_found" or (compile_info.get("status") == "compiler_not_found"):
+        tc = state.get("toolchain") or {}
+        body = (
+            "<p><strong>Tests were not compiled or executed.</strong> "
+            "Generated <code>*_test.cpp</code> files may look clean in the editor, "
+            "but GTest requires a C++ toolchain to link and run.</p>"
+        )
+        if tc.get("hint"):
+            body += f"<p>{_esc(tc['hint'])}</p>"
+        hints = tc.get("hints") or state.get("hints") or compile_info.get("hints") or []
+        if hints:
+            body += "<ul>" + "".join(f"<li>{_esc(h)}</li>" for h in hints[:6]) + "</ul>"
+        parts.append(_section("Toolchain", body))
+    elif not run and status not in ("ok", "test_failures"):
+        parts.append(_section(
+            "Toolchain",
+            "<p><em>No test run recorded. Do not infer PASS from generated source files alone — "
+            "run <code>build_tests</code> after installing a C++ compiler.</em></p>",
+        ))
 
     if run:
         results = (
@@ -197,6 +218,44 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
 
     if compile_info.get("sanitizer") and compile_info.get("sanitizer") not in ("none", ""):
         parts.append(_section("Sanitizer", f"<p>Mode: <code>{_esc(compile_info['sanitizer'])}</code></p>"))
+
+    gate = state.get("quality_gate") or {}
+    if gate:
+        passed = gate.get("passed")
+        label = "passed" if passed else "failed/warn"
+        parts.append(_section(
+            "Quality Gate",
+            f"<p>Mode: <code>{_esc(gate.get('mode', 'warn'))}</code> — "
+            f"<strong>{label}</strong> "
+            f"(ratio: {_esc(gate.get('ratio'))}, max: {_esc(gate.get('max_placeholder_ratio'))})</p>",
+        ))
+
+    workflow = state.get("workflow") or {}
+    history = workflow.get("history") or []
+    gate_history = [h for h in history if h.get("quality_gate") is not None or h.get("stage") == "quality_gate"]
+    if gate_history:
+        items = []
+        for h in gate_history[-5:]:
+            items.append(
+                f"<li>{_esc(h.get('stage'))}: quality_gate={_esc(h.get('quality_gate'))}</li>"
+            )
+        parts.append(_section("Gate History", f"<ul>{''.join(items)}</ul>"))
+
+    bench = state.get("bench") or {}
+    bench_path = Path(str(state.get("project_dir") or "")) / ".forge" / "cache" / "bench_last.json"
+    if not bench and bench_path.is_file():
+        try:
+            import json as _json
+            bench = _json.loads(bench_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            bench = {}
+    if bench.get("placeholder_ratio") is not None:
+        parts.append(_section(
+            "Benchmark",
+            f"<p>Placeholder ratio: <strong>{_esc(bench.get('placeholder_ratio'))}</strong> — "
+            f"build: <code>{_esc(bench.get('build_status'))}</code>, "
+            f"pass rate: {_esc(bench.get('test_pass_rate'))}</p>",
+        ))
 
     learned = state.get("learned") or {}
     if learned.get("path"):
