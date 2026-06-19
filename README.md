@@ -3,57 +3,56 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/weininghui/TestAgent)](https://github.com/weininghui/TestAgent/releases)
 
-OpenCode plugin **and standalone CLI** for generating GoogleTest suites from C/C++ SDK headers.
+OpenCode plugin and **standalone CLI** (`forge`) for C/C++ GTest generation.
 
-## What's New in v3.0
+## v3.0.x Capability Matrix
 
-- **`forge` CLI** — `scan`, `probe`, `compile`, `run`, `clean`, `coverage`, `mocks`
-- **`sdk_forge/` package** — shared core for MCP and CLI
-- **Scan cache** — `FORGE_SCAN_CACHE`, `use_cache` on `scan_headers`
-- **`conditional` flag** — symbols inside `#ifdef` blocks marked in scan JSON
-- **`collect_coverage`** — gcov/lcov summary (Linux)
-- **`generate_mocks`** — GMock `MOCK_METHOD` templates for virtual methods
+| Feature | MCP | CLI | Since |
+|---------|-----|-----|-------|
+| Header scan (libclang + regex) | `scan_headers` | `forge scan` | v2.5 |
+| Scan cache | `use_cache` | `--no-cache` | v3.0.1 |
+| `#ifdef` conditional flag | scan JSON | scan JSON | v3.0.1 |
+| SDK probe | `probe_sdk` | `forge probe` | v2.5 |
+| Compile + link | `compile_tests` | `forge compile` | v2.5 |
+| Compile from probe | — | `--from-probe` | v3.0.3 |
+| CMake error hints | `hints` field | JSON output | v3.0.3 |
+| Run tests | `run_tests` | `forge run` | v2.0 |
+| Coverage (Linux) | `collect_coverage` | `forge coverage` | v3.0.4 |
+| GMock templates | `generate_mocks` | `forge mocks` | v3.0.5 |
+| Compile timing | `compile_duration_sec` | same | v3.0.8 |
 
-See [v2.5 notes](RELEASE_NOTES_v2.5.0.md) for libclang, pkg-config, GTest cache.
-
-## CLI Quick Start
+## Quick Start
 
 ```bash
 pip install -r requirements.txt
+pip install -e .
+
 forge probe ./test_sdk_cpp
-forge scan ./test_sdk_cpp --include test_sdk_cpp/include
-forge compile ./tests ./build --include test_sdk_cpp/include --link my_sdk
+forge scan ./test_sdk_cpp/include
+forge compile ./tests ./build --from-probe ./test_sdk_cpp
 forge run ./build
 ```
 
-## MCP Tools
+## libclang (optional)
 
-| Tool | Description |
-|------|-------------|
-| `scan_headers` | libclang/regex scan with cache |
-| `probe_sdk` | Suggest compile parameters |
-| `compile_tests` | CMake build + optional `coverage` |
-| `run_tests` | Execute GTest binary |
-| `collect_coverage` | gcov/lcov report |
-| `generate_mocks` | GMock templates from scan |
-| `delete_tests` | Remove old test files |
+```bash
+pip install libclang>=16.0.0
+```
 
-## Real SDK Checklist
+Windows: set `LIBCLANG_PATH` to LLVM `bin` (e.g. `C:\Program Files\LLVM\bin`).
 
-1. `forge probe <sdk_root>` or `probe_sdk`
-2. `forge scan <sdk_root> --include ...` — check `conditional: true` symbols
-3. Link via pkg-config / find_package / manual include+lib
-4. `forge compile` with `gtest_source=cached`
-5. `forge run` then optional `forge coverage`
+## Fixtures
+
+- `test_sdk/` — C library
+- `test_sdk_cpp/` — C++ namespace/class/virtual
+- `test_sdk_medium/` — multi-module + `#ifdef MEDIUM_NET` + pkg-config
 
 ## Development
 
 ```bash
-python -m pytest test_mcp_server.py -v -k "not TestCompileAndRun"
-python mcp_server.py
-forge scan test_sdk
+python -m pytest test_mcp_server.py -v -k "not TestCompileAndRun and not TestCliIntegration"
 ```
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT

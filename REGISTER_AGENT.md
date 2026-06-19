@@ -411,16 +411,15 @@ Skill 文件一般包含：
 
 ---
 
-## 8. MCP 工具参数（v2.5）
+## 8. MCP 工具参数（v3.0）
 
 | 工具 | 关键参数 | 说明 |
 |------|----------|------|
-| `scan_headers` | `include_dirs`, `compile_args`, `use_clang` | libclang 解析（可选），失败时回退正则 |
-| `probe_sdk` | `sdk_root` | SDK 根目录或 `.pc` 文件，返回建议链接参数 |
-| `compile_tests` | `pkg_config_packages`, `find_packages`, `cmake_prefix_path` | 真实 SDK 链接 |
-| `compile_tests` | `gtest_source` | `cached`（默认）/ `fetch` / `system` |
-| `compile_tests` | `extra_cmake_snippet` | 注入自定义 CMake 片段 |
+| `scan_headers` | `use_cache` | 默认 true；`FORGE_SCAN_CACHE` 覆盖目录 |
+| `compile_tests` | `coverage`, `hints` | 失败时 JSON 含 `hints` 建议数组 |
+| `generate_mocks` | `scan_json`, `class_name` | 输出 `mock_<Class>.hpp` |
+| `collect_coverage` | `build_dir`, `source_dir` | Linux gcov/lcov |
 
-环境变量 `FORGE_GTEST_CACHE` 可覆盖 GTest 缓存目录。
+CLI：`forge compile --from-probe <sdk_root>` 自动填充 probe 参数。
 
-可选依赖：`pip install libclang>=16.0.0`（Windows 需设置 `LIBCLANG_PATH` 指向 LLVM bin）。
+环境变量：`FORGE_GTEST_CACHE`、`FORGE_SCAN_CACHE`、`LIBCLANG_PATH`（Windows libclang）。

@@ -2,9 +2,11 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,17 @@ from mcp_server import (
 )
 from sdk_forge.scan import compute_if_depths
 from sdk_forge.mock import generate_mocks_impl
+from sdk_forge.errors import parse_cmake_error
+from sdk_forge.build import find_test_binary
+from sdk_forge.scan import scan_headers_impl
+
+
+def _cmake_available() -> bool:
+    return any(
+        os.access(os.path.join(p, "cmake"), os.X_OK)
+        or os.access(os.path.join(p, "cmake.exe"), os.X_OK)
+        for p in os.environ.get("PATH", "").split(os.pathsep)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +182,23 @@ void also_visible();
         depths = compute_if_depths(content)
         assert depths[2] == 2
         assert depths[4] == 1
+
+    def test_conditional_class_and_enum(self):
+        content = """
+class Always {};
+
+#ifdef FEATURE_X
+class FeatureClass {};
+enum FeatureEnum { A, B };
+#endif
+"""
+        info = _parse_header(content, "/sdk/cond.h")
+        always = next(c for c in info.classes if c["name"] == "Always")
+        feature = next(c for c in info.classes if c["name"] == "FeatureClass")
+        assert always["conditional"] is False
+        assert feature["conditional"] is True
+        feat_enum = next(e for e in info.enums if e["name"] == "FeatureEnum")
+        assert feat_enum["conditional"] is True
 
 
 class TestGenerateCmakeContent:
@@ -343,6 +373,161 @@ class TestCli:
         assert args.sdk_root == "/tmp/sdk"
         assert args.no_cache is True
 
+    def test_cli_compile_from_probe_arg(self):
+        from sdk_forge.cli import build_parser
+        parser = build_parser()
+        args = parser.parse_args(["compile", "./tests", "./build", "--from-probe", "./sdk"])
+        assert args.from_probe == "./sdk"
+
+
+class TestCmakeHints:
+    def test_undefined_reference_hint(self):
+        hints = parse_cmake_error("undefined reference to `calc_add'")
+        assert any("link" in h.lower() for h in hints)
+
+    def test_missing_header_hint(self):
+        hints = parse_cmake_error("fatal error: api.h: No such file or directory")
+        assert any("include" in h.lower() for h in hints)
+
+
+class TestFindTestBinary:
+    def test_finds_x64_debug_exe(self, tmp_path):
+        nested = tmp_path / "x64" / "Debug"
+        nested.mkdir(parents=True)
+        exe = nested / "run_tests.exe"
+        exe.write_text("fake", encoding="utf-8")
+        found = find_test_binary(tmp_path)
+        assert found == exe
+
+
+def _forge_cmd() -> list[str]:
+    forge = shutil.which("forge")
+    if forge:
+        return [forge]
+    return [sys.executable, "-m", "sdk_forge.cli"]
+
+
+@pytest.mark.skipif(not _cmake_available(), reason="cmake not found")
+class TestCliIntegration:
+    def test_forge_compile_and_run(self):
+        with tempfile.TemporaryDirectory(prefix="forge_cli_") as tmp:
+            src = Path(tmp)
+            (src / "math_test.cpp").write_text("""
+#include <gtest/gtest.h>
+TEST(MathTest, One) { EXPECT_EQ(1, 1); }
+""")
+            build = str(Path(tempfile.mkdtemp(prefix="forge_cli_build_")))
+            cmd_base = _forge_cmd()
+            compile = subprocess.run(
+                cmd_base + ["compile", str(src), build],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            assert compile.returncode == 0, compile.stdout + compile.stderr
+            result = json.loads(compile.stdout)
+            assert result["status"] == "ok"
+            assert "compile_duration_sec" in result
+
+            run = subprocess.run(
+                cmd_base + ["run", build, "--quiet"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            assert run.returncode == 0, run.stdout + run.stderr
+            run_result = json.loads(run.stdout)
+            assert run_result["passed"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_compile_failure_returns_hints(self):
+        from mcp_server import compile_tests
+        with tempfile.TemporaryDirectory(prefix="forge_bad_link_") as tmp:
+            src = Path(tmp)
+            (src / "bad_test.cpp").write_text("""
+#include <gtest/gtest.h>
+extern int missing_symbol();
+TEST(Bad, Link) { EXPECT_EQ(missing_symbol(), 1); }
+""")
+            build = str(Path(tempfile.mkdtemp(prefix="forge_bad_build_")))
+            result = json.loads(await compile_tests(str(src), build))
+            assert result["status"] == "cmake_error"
+            assert result.get("hints")
+
+
+class TestScanCacheInvalidation:
+    @pytest.mark.asyncio
+    async def test_cache_invalidates_on_mtime_change(self, tmp_path, monkeypatch):
+        from mcp_server import scan_headers
+        cache_dir = tmp_path / "scan_cache"
+        cache_dir.mkdir()
+        monkeypatch.setenv("FORGE_SCAN_CACHE", str(cache_dir))
+        (tmp_path / "api.h").write_text("void foo();", encoding="utf-8")
+
+        first = json.loads(await scan_headers(str(tmp_path), use_clang=False))
+        assert first.get("cached") is False
+
+        second = json.loads(await scan_headers(str(tmp_path), use_clang=False))
+        assert second.get("cached") is True
+
+        time.sleep(0.05)
+        (tmp_path / "api.h").write_text("void foo();\nvoid bar();", encoding="utf-8")
+        third = json.loads(await scan_headers(str(tmp_path), use_clang=False))
+        assert third.get("cached") is False
+        assert third["total_functions"] >= 2
+
+
+class TestMocksE2E:
+    def test_scan_test_sdk_cpp_generates_div_mock(self):
+        repo = Path(__file__).resolve().parent
+        scan = scan_headers_impl(str(repo / "test_sdk_cpp" / "include"), use_clang=False, use_cache=False)
+        assert scan["status"] == "ok"
+        result = generate_mocks_impl(scan, "Calculator")
+        assert result["mock_count"] >= 1
+        assert "div" in result["header"]
+        assert "MOCK_METHOD" in result["header"]
+        assert "mock_Calculator.hpp" in result.get("output_files", [])
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="coverage pipeline on Linux CI")
+@pytest.mark.skipif(not _cmake_available(), reason="cmake not found")
+class TestCoveragePipeline:
+    @pytest.mark.asyncio
+    async def test_coverage_pipeline(self):
+        from mcp_server import collect_coverage, compile_tests, run_tests
+        with tempfile.TemporaryDirectory(prefix="cov_pipeline_") as tmp:
+            src = Path(tmp)
+            (src / "cov_test.cpp").write_text("""
+#include <gtest/gtest.h>
+TEST(Cov, Basic) { EXPECT_EQ(2+2, 4); }
+""")
+            build = str(Path(tempfile.mkdtemp(prefix="cov_build_")))
+            compile_result = json.loads(await compile_tests(str(src), build, coverage=True))
+            assert compile_result["status"] == "ok", compile_result
+            run_result = json.loads(await run_tests(build))
+            assert run_result["status"] == "ok"
+            cov = json.loads(await collect_coverage(build, str(src)))
+            assert cov["status"] in ("ok", "unsupported")
+
+
+@pytest.mark.skipif(not _cmake_available(), reason="cmake not found")
+class TestGtestCacheTiming:
+    @pytest.mark.asyncio
+    async def test_second_compile_tracks_duration(self):
+        from mcp_server import compile_tests
+        with tempfile.TemporaryDirectory(prefix="gtest_timing_") as tmp:
+            src = Path(tmp)
+            (src / "t_test.cpp").write_text("#include <gtest/gtest.h>\nTEST(T,T){EXPECT_TRUE(true);}\n")
+            build = str(Path(tempfile.mkdtemp(prefix="gtest_timing_build_")))
+            first = json.loads(await compile_tests(str(src), build))
+            assert first["status"] == "ok"
+            second = json.loads(await compile_tests(str(src), build))
+            assert second["status"] == "ok"
+            assert "compile_duration_sec" in second
+            assert second["compile_duration_sec"] <= 600
+
 
 class TestParseHeaderClang:
     @pytest.fixture
@@ -458,14 +643,6 @@ class TestDeleteTests:
 # ---------------------------------------------------------------------------
 # compile_tests + run_tests — integration (skip if cmake unavailable)
 # ---------------------------------------------------------------------------
-
-def _cmake_available() -> bool:
-    return any(
-        os.access(os.path.join(p, "cmake"), os.X_OK)
-        or os.access(os.path.join(p, "cmake.exe"), os.X_OK)
-        for p in os.environ.get("PATH", "").split(os.pathsep)
-    )
-
 
 def _find_sdk_lib_dir(sdk_build: Path) -> Path:
     for candidate in [sdk_build, sdk_build / "Debug", sdk_build / "Release"]:
@@ -706,3 +883,47 @@ TEST(MathTest, Subtraction) {
             run_result = json.loads(await run_tests(build_dir))
             assert run_result["status"] == "ok", run_result
             assert run_result["passed"] == 5
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(sys.platform == "win32", reason="medium pkg-config on Linux CI")
+    async def test_medium_sdk_pipeline(self):
+        from mcp_server import compile_tests, probe_sdk, run_tests, scan_headers
+
+        repo_root = Path(__file__).resolve().parent
+        sdk_root = repo_root / "test_sdk_medium"
+        install_prefix = Path(tempfile.mkdtemp(prefix="medium_install_"))
+        sdk_build = sdk_root / "build_ci"
+        sdk_build.mkdir(parents=True, exist_ok=True)
+
+        for cmd in (
+            ["cmake", str(sdk_root.resolve()), f"-DCMAKE_INSTALL_PREFIX={install_prefix}"],
+            ["cmake", "--build", str(sdk_build.resolve())],
+            ["cmake", "--install", str(sdk_build.resolve())],
+        ):
+            r = subprocess.run(cmd, cwd=str(sdk_build), capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
+            assert r.returncode == 0, r.stderr or r.stdout
+
+        scan = json.loads(await scan_headers(str(sdk_root / "include"), use_clang=False))
+        assert scan["status"] == "ok"
+        conditional = [
+            sym for f in scan["files"] for sym in f.get("functions", []) + f.get("classes", [])
+            if sym.get("conditional")
+        ]
+        assert len(conditional) >= 1
+
+        probe = json.loads(await probe_sdk(str(install_prefix)))
+        assert probe["status"] == "ok"
+
+        os.environ["PKG_CONFIG_PATH"] = str(install_prefix / "lib" / "pkgconfig")
+        with tempfile.TemporaryDirectory(prefix="medium_tests_") as tmp:
+            src = Path(tmp)
+            (src / "medium_test.cpp").write_text(
+                (sdk_root / "examples" / "medium_test.cpp").read_text(encoding="utf-8")
+            )
+            build = str(Path(tempfile.mkdtemp(prefix="medium_test_build_")))
+            compile_result = json.loads(await compile_tests(str(src), build, pkg_config_packages=["medium"]))
+            assert compile_result["status"] == "ok", compile_result
+            run_result = json.loads(await run_tests(build))
+            assert run_result["status"] == "ok"
+            assert run_result["passed"] >= 1

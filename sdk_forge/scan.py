@@ -124,12 +124,18 @@ def parse_header(content: str, filepath: str) -> HeaderFileInfo:
         if name.startswith("_") or name in ("if", "else", "for", "while", "switch", "return"):
             continue
         line = content[: m.start("name")].count("\n") + 1
+        line_text = content.splitlines()[line - 1] if 0 < line <= len(content.splitlines()) else ""
+        is_virtual = "virtual" in line_text
+        is_static = "static" in line_text
+        fn_kind = "method" if is_virtual or is_static or line_text.strip().startswith(("int ", "void ", "double ", "bool ", "virtual ", "static ")) and ";" in line_text and "(" in line_text else "function"
         info.functions.append({
             "name": name,
             "return_type": m.group("return_type").strip(),
             "params": m.group("params").strip(),
             "line": line,
-            "kind": "function",
+            "kind": "method" if is_virtual or ("::" not in m.group("return_type") and fn_kind == "method") else "function",
+            "virtual": is_virtual,
+            "static": is_static,
             "conditional": is_conditional_line(line, depths),
         })
     for m in _RE_CLASS.finditer(content):
@@ -317,6 +323,7 @@ def scan_headers_impl(
     if want_cache:
         cached = load_scan_cache(cache_key)
         if cached is not None:
+            cached = dict(cached)
             cached["cached"] = True
             cached["cache_key"] = cache_key
             return cached
@@ -346,6 +353,7 @@ def scan_headers_impl(
         "libclang_available": CLANG_AVAILABLE,
         "cached": False,
         "cache_key": cache_key,
+        "header_count": len(headers),
         "total_files": len(header_files),
         "total_functions": sum(len(hf.functions) for hf in header_files),
         "total_classes": sum(len(hf.classes) for hf in header_files),

@@ -31,12 +31,27 @@ CLI 等价命令：`forge probe/scan/mocks/compile/run/coverage/clean`
 4. **设计测试** — 正常/边界/错误/资源配对
 5. **清理** — `delete_tests(test_dir)`
 6. **生成代码** — Write 工具写 GTest .cpp
-7. **编译** — `compile_tests`；失败时读 `output` 字段修正 include/lib
+7. **编译** — `compile_tests` 或 `forge compile --from-probe <sdk>`；失败时读 `hints` + `output`
 8. **运行** — `run_tests(build_dir)`
 9. **覆盖率（可选）** — `compile_tests(coverage=true)` + `collect_coverage`
 10. **报告** — 汇总通过/失败/覆盖率
 
 ## 失败恢复
+
+1. 读 `compile_tests` 返回的 **`hints`** 数组（优先）
+2. 再读 **`output`** 中的 CMake 日志定位行号
+3. 用 `probe_sdk` 核对路径后重试
+
+### CMake 常见错误
+
+| 日志关键词 | 处理 |
+|-----------|------|
+| `undefined reference` | 加 `link_libraries` / `--link` |
+| `No such file ... .h` | 加 `sdk_include_dirs` / `--include` |
+| `cannot find -l` | 加 `sdk_lib_dirs` / `--lib-dir` |
+| `find_package` failed | 加 `cmake_prefix_path` / `--prefix` |
+| `pkg_check_modules` failed | 设置 `PKG_CONFIG_PATH` 或装 dev 包 |
+| `No CMAKE_CXX_COMPILER` | 安装 g++/MSVC Build Tools |
 
 - **cmake configure 失败** — 检查 `sdk_include_dirs`、`pkg_config_packages`、`cmake_prefix_path`
 - **link 失败** — 用 `probe_sdk` 核对 lib 路径；Windows 注意 Debug/Release 子目录

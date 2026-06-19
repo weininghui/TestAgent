@@ -5,9 +5,11 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from sdk_forge.cache import gtest_cache_dir
+from sdk_forge.errors import parse_cmake_error
 from sdk_forge.util import cmake_path, normalize_json_list, normalize_str_list, run_subprocess
 
 
@@ -153,12 +155,13 @@ def discover_test_files(src_path: Path) -> list[Path]:
 def find_test_binary(build_path: Path) -> Path | None:
     binary = build_path / "run_tests"
     exe_suffix = ".exe" if sys.platform == "win32" else ""
-    if exe_suffix and binary.with_suffix(exe_suffix).exists():
-        return binary.with_suffix(exe_suffix)
-    if binary.exists():
-        return binary
-    for sub in ["Debug", "Release", "RelWithDebInfo"]:
-        candidate = build_path / sub / f"run_tests{exe_suffix}"
+    candidates: list[Path] = []
+    if exe_suffix:
+        candidates.append(binary.with_suffix(exe_suffix))
+    candidates.append(binary)
+    for sub in ["Debug", "Release", "RelWithDebInfo", "x64/Debug", "x64/Release"]:
+        candidates.append(build_path / sub / f"run_tests{exe_suffix}")
+    for candidate in candidates:
         if candidate.exists():
             return candidate
     for f in build_path.rglob(f"run_tests{exe_suffix}" if exe_suffix else "run_tests"):
@@ -212,6 +215,7 @@ def compile_tests_impl(
         cmake_file.write_text(cmake_content, encoding="utf-8")
 
     build_path.mkdir(parents=True, exist_ok=True)
+    compile_start = time.monotonic()
     try:
         result = run_subprocess(["cmake", str(src_path.resolve())], cwd=str(build_path.resolve()))
     except FileNotFoundError:
@@ -221,7 +225,12 @@ def compile_tests_impl(
 
     cmake_output = (result.stdout or "") + "\n" + (result.stderr or "")
     if result.returncode != 0:
-        return {"status": "cmake_error", "stage": "configure", "output": cmake_output}
+        return {
+            "status": "cmake_error",
+            "stage": "configure",
+            "output": cmake_output,
+            "hints": parse_cmake_error(cmake_output),
+        }
 
     try:
         build_result = run_subprocess(["cmake", "--build", str(build_path.resolve())], cwd=str(build_path.resolve()))
@@ -229,8 +238,16 @@ def compile_tests_impl(
         return {"error": "cmake build timed out (600s).", "status": "error"}
 
     build_output = (build_result.stdout or "") + "\n" + (build_result.stderr or "")
+    compile_duration_sec = round(time.monotonic() - compile_start, 2)
     if build_result.returncode != 0:
-        return {"status": "cmake_error", "stage": "build", "output": build_output}
+        combined = cmake_output + "\n" + build_output
+        return {
+            "status": "cmake_error",
+            "stage": "build",
+            "output": build_output,
+            "hints": parse_cmake_error(combined),
+            "compile_duration_sec": compile_duration_sec,
+        }
 
     binary_path = find_test_binary(build_path)
     return {
@@ -238,5 +255,6 @@ def compile_tests_impl(
         "binary_path": str(binary_path) if binary_path else None,
         "gtest_cache_dir": str(gtest_cache_dir()),
         "coverage_enabled": want_coverage,
+        "compile_duration_sec": compile_duration_sec,
         "build_output": build_output,
     }

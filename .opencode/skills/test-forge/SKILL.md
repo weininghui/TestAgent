@@ -58,7 +58,7 @@ compile_tests:
   coverage: false   # set true if user asks for coverage
 ```
 
-**Failure recovery:** read `output` from cmake_error responses; fix include/lib/pkg-config paths from probe_sdk.
+**Failure recovery:** read `hints` first, then `output`. Use `forge compile --from-probe <sdk>`.
 
 ### Step 7: Run
 

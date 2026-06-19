@@ -45,15 +45,31 @@ def cmd_probe(args: argparse.Namespace) -> int:
 
 
 def cmd_compile(args: argparse.Namespace) -> int:
+    sdk_include = args.include or []
+    sdk_lib = args.lib_dir or []
+    link = args.link or []
+    prefix = args.prefix or []
+    pkg_config = args.pkg_config or []
+
+    if args.from_probe:
+        probe = probe_sdk_impl(args.from_probe)
+        if probe.get("status") != "ok":
+            return _emit(probe, args.quiet)
+        sdk_include = list(dict.fromkeys(sdk_include + probe.get("sdk_include_dirs", [])))
+        sdk_lib = list(dict.fromkeys(sdk_lib + probe.get("sdk_lib_dirs", [])))
+        link = list(dict.fromkeys(link + probe.get("link_libraries", [])))
+        prefix = list(dict.fromkeys(prefix + probe.get("cmake_prefix_path", [])))
+        pkg_config = list(dict.fromkeys(pkg_config + probe.get("pkg_config_packages", [])))
+
     result = compile_tests_impl(
         args.source_dir,
         args.build_dir,
-        sdk_include_dirs=args.include or [],
-        sdk_lib_dirs=args.lib_dir or [],
-        link_libraries=args.link or [],
-        cmake_prefix_path=args.prefix or [],
+        sdk_include_dirs=sdk_include,
+        sdk_lib_dirs=sdk_lib,
+        link_libraries=link,
+        cmake_prefix_path=prefix,
         find_packages=args.find_package or [],
-        pkg_config_packages=args.pkg_config or [],
+        pkg_config_packages=pkg_config,
         extra_cmake_snippet=args.cmake_snippet or "",
         gtest_source=args.gtest_source,
         coverage=args.coverage,
@@ -116,6 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_compile.add_argument("--pkg-config", action="append", default=[])
     p_compile.add_argument("--find-package", action="append", default=[])
     p_compile.add_argument("--cmake-snippet", default="")
+    p_compile.add_argument("--from-probe", default="", help="SDK root to probe for auto include/lib/link")
     p_compile.add_argument("--gtest-source", default="cached", choices=["cached", "fetch", "system"])
     p_compile.add_argument("--coverage", action="store_true")
     p_compile.add_argument("--coverage-tool", default="gcov")
