@@ -18,19 +18,18 @@ EXAMPLES = REPO_ROOT / "examples"
 sys.path.insert(0, str(REPO_ROOT))
 
 from mcp_server import (
-    HeaderFileInfo,
     _CLANG_AVAILABLE,
+    HeaderFileInfo,
     _generate_cmake_content,
     _gtest_cache_dir,
     _normalize_str_list,
     _parse_header,
     _parse_header_clang,
 )
-from sdk_forge.pipeline.scan import compute_if_depths
-from sdk_forge.pipeline.mock import generate_mocks_impl
 from sdk_forge.domain.errors import parse_cmake_error
 from sdk_forge.pipeline.build import find_test_binary
-from sdk_forge.pipeline.scan import scan_headers_impl
+from sdk_forge.pipeline.mock import generate_mocks_impl
+from sdk_forge.pipeline.scan import compute_if_depths, scan_headers_impl
 
 
 def _cmake_available() -> bool:
@@ -44,6 +43,7 @@ def _cmake_available() -> bool:
 # ---------------------------------------------------------------------------
 # _parse_header — pure function unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestParseHeader:
     """Core header parsing logic — fastest feedback loop."""
@@ -219,7 +219,6 @@ class TestGenerateCmakeContent:
         assert "target_link_libraries(run_tests PRIVATE gtest_main gmock calc)" in content
 
     def test_gtest_cache_block(self, monkeypatch):
-        from sdk_forge.infra.gtest import gtest_source_path
 
         monkeypatch.setattr(
             "sdk_forge.pipeline.build.gtest_source_path",
@@ -238,11 +237,12 @@ class TestGenerateCmakeContent:
         assert "FETCHCONTENT_UPDATES_DISCONNECTED TRUE" in content
 
     def test_gtest_local_subdirectory(self, tmp_path, monkeypatch):
-        from sdk_forge.infra.gtest import gtest_source_path
 
         local = tmp_path / "gtest-src"
         local.mkdir()
-        (local / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.14)\n", encoding="utf-8")
+        (local / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.14)\n", encoding="utf-8"
+        )
         monkeypatch.setattr("sdk_forge.pipeline.build.gtest_source_path", lambda tag: local)
         content = _generate_cmake_content(
             project_name="demo_tests",
@@ -281,7 +281,9 @@ class TestGenerateCmakeContent:
             project_name="demo_tests",
             test_file_names=["demo_test.cpp"],
             pkg_config_packages=["libcurl"],
-            find_packages=[{"name": "OpenSSL", "components": ["Crypto"], "target": "OpenSSL::Crypto"}],
+            find_packages=[
+                {"name": "OpenSSL", "components": ["Crypto"], "target": "OpenSSL::Crypto"}
+            ],
             cmake_prefix_path=["/opt/sdk"],
         )
         assert "pkg_check_modules(LIBCURL REQUIRED IMPORTED_TARGET libcurl)" in content
@@ -316,6 +318,7 @@ class TestNormalizeStrList:
 # scan_headers — integration tests with temp directories
 # ---------------------------------------------------------------------------
 
+
 class TestScanHeaders:
     """Tests scan_headers with real files."""
 
@@ -343,6 +346,7 @@ public:
     @pytest.mark.asyncio
     async def test_scan_basic(self, sdk_dir):
         from mcp_server import scan_headers
+
         result = json.loads(await scan_headers(sdk_dir))
         assert result["status"] == "ok"
         assert result["total_files"] == 3
@@ -353,6 +357,7 @@ public:
     @pytest.mark.asyncio
     async def test_scan_invalid_dir(self):
         from mcp_server import scan_headers
+
         result = json.loads(await scan_headers("/nonexistent/path"))
         assert result["status"] == "error"
         assert "error" in result
@@ -360,6 +365,7 @@ public:
     @pytest.mark.asyncio
     async def test_scan_reports_parser_metadata(self, sdk_dir):
         from mcp_server import scan_headers
+
         result = json.loads(await scan_headers(sdk_dir, use_clang=False))
         assert result["status"] == "ok"
         assert result["parser"] == "regex"
@@ -368,6 +374,7 @@ public:
     @pytest.mark.asyncio
     async def test_scan_cache_hit(self, sdk_dir, tmp_path, monkeypatch):
         from mcp_server import scan_headers
+
         cache_dir = tmp_path / "scan_cache"
         cache_dir.mkdir()
         monkeypatch.setenv("FORGE_SCAN_CACHE", str(cache_dir))
@@ -386,17 +393,21 @@ class TestGenerateMocks:
     def test_generates_mock_for_virtual_method(self):
         scan = {
             "status": "ok",
-            "files": [{
-                "file": "api.hpp",
-                "classes": [{"name": "Calculator", "kind": "class"}],
-                "functions": [{
-                    "name": "div",
-                    "return_type": "double",
-                    "params": "int a, int b",
-                    "virtual": True,
-                    "kind": "method",
-                }],
-            }],
+            "files": [
+                {
+                    "file": "api.hpp",
+                    "classes": [{"name": "Calculator", "kind": "class"}],
+                    "functions": [
+                        {
+                            "name": "div",
+                            "return_type": "double",
+                            "params": "int a, int b",
+                            "virtual": True,
+                            "kind": "method",
+                        }
+                    ],
+                }
+            ],
         }
         result = generate_mocks_impl(scan, "Calculator")
         assert result["status"] == "ok"
@@ -408,6 +419,7 @@ class TestGenerateMocks:
 class TestCli:
     def test_cli_scan_help(self):
         from sdk_forge.cli import build_parser
+
         parser = build_parser()
         args = parser.parse_args(["scan", "/tmp/sdk", "--no-cache"])
         assert args.command == "scan"
@@ -416,12 +428,14 @@ class TestCli:
 
     def test_cli_compile_from_probe_arg(self):
         from sdk_forge.cli import build_parser
+
         parser = build_parser()
         args = parser.parse_args(["compile", "./tests", "./build", "--from-probe", "./sdk"])
         assert args.from_probe == "./sdk"
 
     def test_cli_doctor_init_build_args(self):
         from sdk_forge.cli import build_parser
+
         parser = build_parser()
         assert parser.parse_args(["doctor"]).command == "doctor"
         init_args = parser.parse_args(["init", "./proj", "--sdk-root", "../sdk", "--name", "calc"])
@@ -475,13 +489,15 @@ class TestForgeConfig:
 
         config_file = tmp_path / ".forge.json"
         config_file.write_text(
-            json.dumps({
-                "sdk_root": "../sdk",
-                "tests_dir": "tests",
-                "build_dir": "build",
-                "sdk_include_dirs": ["include"],
-                "link_libraries": ["calc"],
-            }),
+            json.dumps(
+                {
+                    "sdk_root": "../sdk",
+                    "tests_dir": "tests",
+                    "build_dir": "build",
+                    "sdk_include_dirs": ["include"],
+                    "link_libraries": ["calc"],
+                }
+            ),
             encoding="utf-8",
         )
         found = find_forge_config(tmp_path / "tests")
@@ -543,10 +559,12 @@ class TestToolchain:
     def test_report_compiler_not_found_summary(self):
         from sdk_forge.infra.report import build_auto_summary
 
-        text = build_auto_summary({
-            "status": "compiler_not_found",
-            "toolchain": {"hint": "Install Build Tools"},
-        })
+        text = build_auto_summary(
+            {
+                "status": "compiler_not_found",
+                "toolchain": {"hint": "Install Build Tools"},
+            }
+        )
         assert "未检测到" in text or "compiler" in text.lower()
         assert "PASS" not in text or "推断" in text
 
@@ -573,7 +591,10 @@ class TestToolchain:
 
         if sys.platform != "win32":
             pytest.skip("Windows only")
-        monkeypatch.setattr("sdk_forge.infra.toolchain_install._which", lambda n: "/usr/bin/winget" if n == "winget" else None)
+        monkeypatch.setattr(
+            "sdk_forge.infra.toolchain_install._which",
+            lambda n: "/usr/bin/winget" if n == "winget" else None,
+        )
         detected = detect_installers()
         assert detected.get("auto_method") == "winget-msvc"
         assert len(detected.get("options") or []) >= 1
@@ -649,10 +670,13 @@ class TestHintActions:
         from sdk_forge.infra.config import apply_actions_to_params
 
         params = {"link_libraries": ["a"], "sdk_include_dirs": []}
-        updated = apply_actions_to_params(params, [
-            {"type": "merge_link_libraries", "values": ["calc"]},
-            {"type": "merge_sdk_include_dirs", "values": ["/inc"]},
-        ])
+        updated = apply_actions_to_params(
+            params,
+            [
+                {"type": "merge_link_libraries", "values": ["calc"]},
+                {"type": "merge_sdk_include_dirs", "values": ["/inc"]},
+            ],
+        )
         assert "calc" in updated["link_libraries"]
         assert "/inc" in updated["sdk_include_dirs"]
 
@@ -664,17 +688,21 @@ class TestSuggestPlan:
         scan = {
             "status": "ok",
             "sdk_root": "/sdk",
-            "files": [{
-                "file": "calc.h",
-                "functions": [{
-                    "name": "calc_add",
-                    "return_type": "int",
-                    "params": "int a, int b",
-                    "kind": "function",
-                    "conditional": False,
-                }],
-                "classes": [],
-            }],
+            "files": [
+                {
+                    "file": "calc.h",
+                    "functions": [
+                        {
+                            "name": "calc_add",
+                            "return_type": "int",
+                            "params": "int a, int b",
+                            "kind": "function",
+                            "conditional": False,
+                        }
+                    ],
+                    "classes": [],
+                }
+            ],
         }
         plan = suggest_test_plan_impl(scan_json=scan)
         assert plan["status"] == "ok"
@@ -688,17 +716,21 @@ class TestSuggestPlan:
 
         scan = {
             "status": "ok",
-            "files": [{
-                "file": "api.hpp",
-                "functions": [{
-                    "name": "run",
-                    "kind": "method",
-                    "virtual": True,
-                    "return_type": "void",
-                    "params": "",
-                }],
-                "classes": [{"name": "Worker", "kind": "class"}],
-            }],
+            "files": [
+                {
+                    "file": "api.hpp",
+                    "functions": [
+                        {
+                            "name": "run",
+                            "kind": "method",
+                            "virtual": True,
+                            "return_type": "void",
+                            "params": "",
+                        }
+                    ],
+                    "classes": [{"name": "Worker", "kind": "class"}],
+                }
+            ],
         }
         plan = suggest_test_plan_impl(scan_json=scan)
         worker = next(t for t in plan["targets"] if t["symbol"] == "Worker")
@@ -724,7 +756,11 @@ class TestBuildRetry:
             return {"status": "ok", "binary_path": str(tmp_path / "run_tests")}
 
         monkeypatch.setattr(retry_mod, "compile_tests_impl", fake_compile)
-        monkeypatch.setattr(retry_mod, "run_tests_impl", lambda b: {"status": "ok", "total": 1, "passed": 1, "failed": 0})
+        monkeypatch.setattr(
+            retry_mod,
+            "run_tests_impl",
+            lambda b: {"status": "ok", "total": 1, "passed": 1, "failed": 0},
+        )
 
         tests = tmp_path / "tests"
         build = tmp_path / "build"
@@ -910,14 +946,16 @@ class TestCodegen:
 
         plan = {
             "status": "ok",
-            "targets": [{
-                "symbol": "calc_add",
-                "kind": "function",
-                "file": "calc.h",
-                "return_type": "int",
-                "params": "int a, int b",
-                "scenarios": [{"name": "normal"}, {"name": "boundary"}],
-            }],
+            "targets": [
+                {
+                    "symbol": "calc_add",
+                    "kind": "function",
+                    "file": "calc.h",
+                    "return_type": "int",
+                    "params": "int a, int b",
+                    "scenarios": [{"name": "normal"}, {"name": "boundary"}],
+                }
+            ],
         }
         out = tmp_path / "tests"
         result = generate_test_skeleton_impl(plan_json=plan, output_dir=str(out), fidelity="smart")
@@ -953,9 +991,17 @@ class TestEnrich:
 
         cache = tmp_path / ".forge" / "cache"
         cache.mkdir(parents=True)
-        plan = {"status": "ok", "sdk_root": "", "targets": [{
-            "symbol": "calc_add", "file": "calc.h", "scenarios": [{"name": "normal"}],
-        }]}
+        plan = {
+            "status": "ok",
+            "sdk_root": "",
+            "targets": [
+                {
+                    "symbol": "calc_add",
+                    "file": "calc.h",
+                    "scenarios": [{"name": "normal"}],
+                }
+            ],
+        }
         (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -975,18 +1021,24 @@ class TestEnrichBatch:
 
         cache = tmp_path / ".forge" / "cache"
         cache.mkdir(parents=True)
-        plan = {"status": "ok", "sdk_root": "", "targets": [
-            {"symbol": "calc_add", "file": "calc.h", "scenarios": [{"name": "normal"}]},
-            {"symbol": "calc_mul", "file": "calc.h", "scenarios": [{"name": "normal"}]},
-        ]}
+        plan = {
+            "status": "ok",
+            "sdk_root": "",
+            "targets": [
+                {"symbol": "calc_add", "file": "calc.h", "scenarios": [{"name": "normal"}]},
+                {"symbol": "calc_mul", "file": "calc.h", "scenarios": [{"name": "normal"}]},
+            ],
+        }
         (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "calc_add_test.cpp").write_text(
-            "TEST(Calc_add, Normal) { // AGENT: fill }\n", encoding="utf-8",
+            "TEST(Calc_add, Normal) { // AGENT: fill }\n",
+            encoding="utf-8",
         )
         (tests / "calc_mul_test.cpp").write_text(
-            "TEST(Calc_mul, Normal) { // AGENT: fill }\n", encoding="utf-8",
+            "TEST(Calc_mul, Normal) { // AGENT: fill }\n",
+            encoding="utf-8",
         )
         result = enrich_test_cases_impl(
             project_dir=str(tmp_path),
@@ -1036,17 +1088,22 @@ class TestOrchestration:
         assert ctx["next_actions"][0]["agent"] == "forge-env"
 
     def test_next_actions_enrich_parallel(self, tmp_path):
-        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "a"}, {"symbol": "b"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         for name in ("a_test.cpp", "b_test.cpp", "c_test.cpp", "d_test.cpp", "e_test.cpp"):
-            (tests / name).write_text(f"TEST(X, Y) {{ // AGENT: fill }}\n", encoding="utf-8")
+            (tests / name).write_text("TEST(X, Y) { // AGENT: fill }\n", encoding="utf-8")
         (tmp_path / ".forge.yaml").write_text("multi_agent_batch_size: 2\n", encoding="utf-8")
         for agent in ("forge-env", "forge-scan", "forge-scaffold"):
             record_agent_completion(str(tmp_path), agent, status="ok")
@@ -1057,13 +1114,18 @@ class TestOrchestration:
         assert all(a["parallel"] for a in enrich_actions)
 
     def test_serial_enrich_one_batch_at_a_time(self, tmp_path):
-        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "a"}, {"symbol": "b"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "a_test.cpp").write_text("// AGENT: x\n", encoding="utf-8")
@@ -1104,13 +1166,18 @@ class TestAutopilotLoop:
         assert cleared["remaining_runs"] == 0
 
     def test_redispatch_after_assertion_fail(self, tmp_path):
-        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.orchestration.workflow import get_enrich_round, record_agent_completion
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "good"}, {"symbol": "weak"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "good"}, {"symbol": "weak"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "good_test.cpp").write_text(
@@ -1153,9 +1220,14 @@ class TestOrchestrationV52:
         from sdk_forge.infra.session import save_plan_state
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "x"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "x_test.cpp").write_text("TEST(X, Ok) { EXPECT_EQ(1, 1); }\n", encoding="utf-8")
@@ -1211,7 +1283,9 @@ class TestOrchestrationV52:
         self._base_project(tmp_path)
         record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
         record_agent_completion(
-            str(tmp_path), "forge-review", status="ok",
+            str(tmp_path),
+            "forge-review",
+            status="ok",
             detail={"review_verdict": "pass"},
         )
 
@@ -1221,16 +1295,19 @@ class TestOrchestrationV52:
 
     def test_build_blocked_redispatch_enrich(self, tmp_path):
         from sdk_forge.orchestration.core import get_orchestration_context
-        from sdk_forge.pipeline.retry import save_build_state
         from sdk_forge.orchestration.workflow import record_agent_completion
+        from sdk_forge.pipeline.retry import save_build_state
 
         self._base_project(tmp_path)
         (tmp_path / "tests" / "x_test.cpp").write_text(
-            "TEST(X, Bad) { SUCCEED(); }\n", encoding="utf-8",
+            "TEST(X, Bad) { SUCCEED(); }\n",
+            encoding="utf-8",
         )
         record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
         record_agent_completion(
-            str(tmp_path), "forge-review", status="ok",
+            str(tmp_path),
+            "forge-review",
+            status="ok",
             detail={"review_verdict": "pass"},
         )
         record_agent_completion(str(tmp_path), "forge-build", status="error")
@@ -1243,13 +1320,15 @@ class TestOrchestrationV52:
 
     def test_merge_ready_when_complete(self, tmp_path):
         from sdk_forge.orchestration.core import get_orchestration_context
-        from sdk_forge.pipeline.retry import save_build_state
         from sdk_forge.orchestration.workflow import record_agent_completion
+        from sdk_forge.pipeline.retry import save_build_state
 
         self._base_project(tmp_path)
         record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
         record_agent_completion(
-            str(tmp_path), "forge-review", status="ok",
+            str(tmp_path),
+            "forge-review",
+            status="ok",
             detail={"review_verdict": "pass"},
         )
         record_agent_completion(str(tmp_path), "forge-build", status="ok")
@@ -1262,16 +1341,21 @@ class TestOrchestrationV52:
 
 class TestForgeOracle:
     def test_draft_golden_from_plan(self, tmp_path):
-        from sdk_forge.pipeline.oracle import draft_golden_from_plan_impl
         from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.pipeline.oracle import draft_golden_from_plan_impl
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok",
-            "targets": [{
-                "symbol": "add",
-                "scenarios": [{"name": "Normal", "args": [1, 2]}],
-            }],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "targets": [
+                    {
+                        "symbol": "add",
+                        "scenarios": [{"name": "Normal", "args": [1, 2]}],
+                    }
+                ],
+            },
+        )
         dry = draft_golden_from_plan_impl(str(tmp_path), confirm=False)
         assert dry["status"] == "ok"
         assert dry["added_count"] >= 1
@@ -1287,9 +1371,14 @@ class TestAutopilotAdvance:
         from sdk_forge.orchestration.workflow import record_agent_completion
         from sdk_forge.orchestration.workflow_advance import advance_forge_workflow_impl
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "x"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "x_test.cpp").write_text("// AGENT: fill\n", encoding="utf-8")
@@ -1310,9 +1399,14 @@ class TestAutopilotAdvance:
         from sdk_forge.infra.session import save_plan_state
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "x"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "x_test.cpp").write_text("TEST(X, Ok) { EXPECT_EQ(1,1); }\n", encoding="utf-8")
@@ -1334,13 +1428,18 @@ class TestOrchestrationV53:
         assert resolve_batch_size("auto", 20) == 7
 
     def test_oracle_gate_before_enrich(self, tmp_path):
-        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "x"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "x_test.cpp").write_text("// AGENT: fill\n", encoding="utf-8")
@@ -1378,23 +1477,32 @@ class TestOrchestrationV53:
         assert ctx["scan_batches"]
 
     def test_merge_scan_batches(self, tmp_path):
-        from sdk_forge.pipeline.scan_merge import merge_scan_batches_impl
         from sdk_forge.orchestration.workflow import save_scan_batch_result
+        from sdk_forge.pipeline.scan_merge import merge_scan_batches_impl
 
         sdk = tmp_path / "sdk"
         sdk.mkdir()
-        save_scan_batch_result(str(tmp_path), 0, {
-            "status": "ok",
-            "sdk_root": str(sdk),
-            "files": [{"filename": "a.h", "functions": [{"name": "foo"}]}],
-        })
-        save_scan_batch_result(str(tmp_path), 1, {
-            "status": "ok",
-            "sdk_root": str(sdk),
-            "files": [{"filename": "b.h", "functions": [{"name": "bar"}]}],
-        })
+        save_scan_batch_result(
+            str(tmp_path),
+            0,
+            {
+                "status": "ok",
+                "sdk_root": str(sdk),
+                "files": [{"filename": "a.h", "functions": [{"name": "foo"}]}],
+            },
+        )
+        save_scan_batch_result(
+            str(tmp_path),
+            1,
+            {
+                "status": "ok",
+                "sdk_root": str(sdk),
+                "files": [{"filename": "b.h", "functions": [{"name": "bar"}]}],
+            },
+        )
         for bid in (0, 1):
             from sdk_forge.orchestration.workflow import record_agent_completion
+
             record_agent_completion(str(tmp_path), "forge-scan", batch_id=bid, status="ok")
 
         result = merge_scan_batches_impl(str(tmp_path), sdk_root=str(sdk))
@@ -1402,7 +1510,7 @@ class TestOrchestrationV53:
         assert result["target_count"] >= 1
 
     def test_stage_timeline(self, tmp_path):
-        from sdk_forge.orchestration.core import build_stage_timeline, get_orchestration_context
+        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.orchestration.workflow import record_agent_completion
 
         record_agent_completion(str(tmp_path), "forge-env", status="ok")
@@ -1415,13 +1523,18 @@ class TestOrchestrationV53:
 
 class TestDelegationV55:
     def test_parallel_enrich_delegation_metadata(self, tmp_path):
-        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "a"}, {"symbol": "b"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         for name in ("a_test.cpp", "b_test.cpp", "c_test.cpp", "d_test.cpp"):
@@ -1472,12 +1585,17 @@ class TestDelegationV55:
         )
         from sdk_forge.orchestration.workflow_advance import advance_forge_workflow_impl
 
-        register_delegation_impl(str(tmp_path), "task-1", "forge-enrich", batch_id=0, title="Enrich batch 0")
+        register_delegation_impl(
+            str(tmp_path), "task-1", "forge-enrich", batch_id=0, title="Enrich batch 0"
+        )
         polled = poll_forge_delegations_impl(str(tmp_path))
         assert polled["pending_count"] == 1
 
         advance_forge_workflow_impl(
-            str(tmp_path), last_agent="forge-enrich", last_status="ok", batch_id=0,
+            str(tmp_path),
+            last_agent="forge-enrich",
+            last_status="ok",
+            batch_id=0,
         )
         polled2 = poll_forge_delegations_impl(str(tmp_path))
         assert polled2["pending_count"] == 0
@@ -1489,13 +1607,17 @@ class TestDelegationV55:
 
     def test_get_delegation_plan_splits_actions(self, tmp_path):
         from sdk_forge.delegation.core import get_delegation_plan_impl
-        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.infra.session import save_plan_state
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "sdk_root": "/sdk",
+                "targets": [{"symbol": "a"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         for name in ("a_test.cpp", "b_test.cpp", "c_test.cpp", "d_test.cpp"):
@@ -1517,7 +1639,11 @@ class TestDelegationV55:
         from mcp_server import get_delegation_plan, register_forge_delegation
 
         raw = await register_forge_delegation(
-            "omo-task-42", "forge-enrich", str(tmp_path), 0, "Enrich batch 0",
+            "omo-task-42",
+            "forge-enrich",
+            str(tmp_path),
+            0,
+            "Enrich batch 0",
         )
         assert json.loads(raw)["status"] == "ok"
         plan_raw = await get_delegation_plan(str(tmp_path))
@@ -1530,8 +1656,11 @@ class TestDelegationV56:
         from sdk_forge.delegation.core import register_delegation_impl
 
         result = register_delegation_impl(
-            str(tmp_path), "bg_test1", "forge-enrich",
-            batch_id=0, session_id="ses_abc123",
+            str(tmp_path),
+            "bg_test1",
+            "forge-enrich",
+            batch_id=0,
+            session_id="ses_abc123",
         )
         assert result["status"] == "ok"
         nav = result["navigation"]
@@ -1570,11 +1699,13 @@ class TestDelegationV56:
 
 class TestDelegationV57:
     def test_next_actions_omo_fields(self, tmp_path):
-        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.core import get_orchestration_context
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
+        save_plan_state(
+            str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]}
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         for name in ("a_test.cpp", "b_test.cpp", "c_test.cpp", "d_test.cpp"):
@@ -1628,7 +1759,11 @@ subagent: forge-enrich
 
         text = "Task ID: bg_test99\nSession ID: ses_test88\n"
         result = register_from_omo_result_impl(
-            str(tmp_path), text, "forge-enrich", batch_id=0, title="Enrich batch 0",
+            str(tmp_path),
+            text,
+            "forge-enrich",
+            batch_id=0,
+            title="Enrich batch 0",
         )
         assert result["status"] == "ok"
         assert result["delegation"]["session_id"] == "ses_test88"
@@ -1637,12 +1772,18 @@ subagent: forge-enrich
 
 class TestDelegationV58:
     def test_export_preview_parsing(self):
-        from sdk_forge.delegation.session_nav import _extract_message_text, export_session_preview_impl
+        from sdk_forge.delegation.session_nav import (
+            _extract_message_text,
+        )
 
         sample = {
             "parts": [
                 {"type": "text", "text": "hello"},
-                {"type": "tool", "tool": "grep", "state": {"status": "completed", "title": "search"}},
+                {
+                    "type": "tool",
+                    "tool": "grep",
+                    "state": {"status": "completed", "title": "search"},
+                },
             ]
         }
         text = _extract_message_text(sample)
@@ -1661,7 +1802,11 @@ class TestDelegationV58:
         from sdk_forge.delegation.session_nav import sync_delegation_sessions_impl
 
         register_delegation_impl(
-            str(tmp_path), "bg_sync1", "forge-enrich", batch_id=0, title="Enrich batch 0",
+            str(tmp_path),
+            "bg_sync1",
+            "forge-enrich",
+            batch_id=0,
+            title="Enrich batch 0",
         )
 
         def fake_list(max_count=100):
@@ -1677,7 +1822,8 @@ class TestDelegationV58:
             }
 
         monkeypatch.setattr(
-            "sdk_forge.delegation.session_nav.list_opencode_sessions_impl", fake_list,
+            "sdk_forge.delegation.session_nav.list_opencode_sessions_impl",
+            fake_list,
         )
         result = sync_delegation_sessions_impl(str(tmp_path))
         assert result["bound_count"] == 1
@@ -1688,8 +1834,12 @@ class TestDelegationV58:
         from sdk_forge.delegation.session_nav import get_subagent_dashboard_impl
 
         register_delegation_impl(
-            str(tmp_path), "dash1", "forge-enrich", batch_id=0,
-            title="Enrich batch 0", session_id="ses_dash01",
+            str(tmp_path),
+            "dash1",
+            "forge-enrich",
+            batch_id=0,
+            title="Enrich batch 0",
+            session_id="ses_dash01",
         )
 
         monkeypatch.setattr(
@@ -1779,15 +1929,19 @@ class TestDelegationV511:
         from sdk_forge.orchestration.workflow import record_agent_completion
 
         register_delegation_impl(
-            str(tmp_path), "task_to1", "forge-enrich", batch_id=0, title="Enrich batch 0",
+            str(tmp_path),
+            "task_to1",
+            "forge-enrich",
+            batch_id=0,
+            title="Enrich batch 0",
         )
         record_agent_completion(str(tmp_path), "forge-enrich", status="error", batch_id=0)
         result = recover_stalled_subagent_impl(str(tmp_path), task_id="task_to1", action="retry")
         assert result["status"] == "ok"
         assert result["workflow"]["status"] in ("needs_agent", "blocked", "idle", "ok")
-        polled = __import__("sdk_forge.delegation.core", fromlist=["list_delegations_impl"]).list_delegations_impl(
-            str(tmp_path)
-        )
+        polled = __import__(
+            "sdk_forge.delegation.core", fromlist=["list_delegations_impl"]
+        ).list_delegations_impl(str(tmp_path))
         done = [d for d in polled["completed"] if d.get("task_id") == "task_to1"]
         assert done and done[0].get("status") == "error"
 
@@ -1807,7 +1961,11 @@ class TestDelegationV511:
         from sdk_forge.delegation.core import register_delegation_impl
 
         register_delegation_impl(
-            str(tmp_path), "task_h1", "forge-enrich", batch_id=0, session_id="ses_h1",
+            str(tmp_path),
+            "task_h1",
+            "forge-enrich",
+            batch_id=0,
+            session_id="ses_h1",
         )
         raw = await check_subagent_health(str(tmp_path))
         data = json.loads(raw)
@@ -1819,14 +1977,16 @@ class TestTaskDispatchV59:
     def test_build_omo_task_call(self):
         from sdk_forge.delegation.task_dispatch import build_omo_task_call
 
-        call = build_omo_task_call({
-            "subagent_type": "forge-enrich",
-            "description": "Enrich batch 0",
-            "prompt_hint": "project_dir=/x batch_id=0",
-            "run_in_background": True,
-            "load_skills": [],
-            "batch_id": 0,
-        })
+        call = build_omo_task_call(
+            {
+                "subagent_type": "forge-enrich",
+                "description": "Enrich batch 0",
+                "prompt_hint": "project_dir=/x batch_id=0",
+                "run_in_background": True,
+                "load_skills": [],
+                "batch_id": 0,
+            }
+        )
         assert call["tool"] == "task"
         assert call["args"]["subagent_type"] == "forge-enrich"
         assert call["args"]["load_skills"] == []
@@ -1843,11 +2003,13 @@ class TestTaskDispatchV59:
         assert delegation_mode(str(tmp_path)) == "omo"
 
     def test_get_task_dispatch_plan(self, tmp_path):
-        from sdk_forge.infra.session import save_plan_state
         from sdk_forge.delegation.task_dispatch import get_task_dispatch_plan_impl
+        from sdk_forge.infra.session import save_plan_state
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
+        save_plan_state(
+            str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]}
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         for name in ("a_test.cpp", "b_test.cpp"):
@@ -1880,7 +2042,9 @@ class TestTaskDispatchV59:
         from sdk_forge.infra.session import save_plan_state
         from sdk_forge.orchestration.workflow import record_agent_completion
 
-        save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
+        save_plan_state(
+            str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]}
+        )
         (tmp_path / "tests").mkdir()
         (tmp_path / "tests" / "a_test.cpp").write_text("// AGENT: x\n", encoding="utf-8")
         (tmp_path / ".forge.yaml").write_text("delegation_mode: omo\n", encoding="utf-8")
@@ -1913,12 +2077,16 @@ class TestTaskDispatchV59:
 
 class TestGoldenSnapshot:
     def test_extract_expect_eq_to_golden(self, tmp_path):
-        from sdk_forge.pipeline.golden import load_golden_cases, snapshot_golden_from_plan_impl
         from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.pipeline.golden import load_golden_cases, snapshot_golden_from_plan_impl
 
-        save_plan_state(str(tmp_path), {
-            "status": "ok", "targets": [{"symbol": "calc_add"}],
-        })
+        save_plan_state(
+            str(tmp_path),
+            {
+                "status": "ok",
+                "targets": [{"symbol": "calc_add"}],
+            },
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "calc_add_test.cpp").write_text(
@@ -2008,7 +2176,7 @@ class TestAssertionQuality:
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "foo_test.cpp").write_text(
-            'TEST(Foo, Weak) { SUCCEED(); }\n',
+            "TEST(Foo, Weak) { SUCCEED(); }\n",
             encoding="utf-8",
         )
         result = analyze_assertion_quality_impl(project_dir=str(tmp_path))
@@ -2074,7 +2242,9 @@ class TestProductionProfile:
             encoding="utf-8",
         )
         (tmp_path / ".forge.yaml").write_text("forge_profile: production\n", encoding="utf-8")
-        result = build_pipeline_impl(project_dir=str(tmp_path), run_after_compile=False, profile="production")
+        result = build_pipeline_impl(
+            project_dir=str(tmp_path), run_after_compile=False, profile="production"
+        )
         assert result["status"] == "assertion_quality_blocked"
 
 
@@ -2102,19 +2272,27 @@ class TestGolden:
     def test_golden_enrich_hints(self, tmp_path):
         from sdk_forge.pipeline.enrich import enrich_test_cases_impl
         from sdk_forge.pipeline.golden import init_golden_template
-        from sdk_forge.infra.session import save_plan_state
 
         init_golden_template(str(tmp_path))
         cache = tmp_path / ".forge" / "cache"
         cache.mkdir(parents=True, exist_ok=True)
-        plan = {"status": "ok", "sdk_root": "", "targets": [{
-            "symbol": "calc_add", "file": "calc.h", "scenarios": [{"name": "normal"}],
-        }]}
+        plan = {
+            "status": "ok",
+            "sdk_root": "",
+            "targets": [
+                {
+                    "symbol": "calc_add",
+                    "file": "calc.h",
+                    "scenarios": [{"name": "normal"}],
+                }
+            ],
+        }
         (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "calc_add_test.cpp").write_text(
-            "TEST(Calc_add, Normal) { // AGENT: fill }\n", encoding="utf-8",
+            "TEST(Calc_add, Normal) { // AGENT: fill }\n",
+            encoding="utf-8",
         )
         result = enrich_test_cases_impl(project_dir=str(tmp_path))
         assert result["briefs"][0].get("oracle_hints")
@@ -2181,21 +2359,28 @@ class TestCoverageExpand:
         plan = {
             "status": "ok",
             "sdk_root": "",
-            "targets": [{
-                "symbol": "calc_add",
-                "kind": "function",
-                "params": "int a, int b",
-                "return_type": "int",
-                "scenarios": [{"name": "normal"}],
-            }],
+            "targets": [
+                {
+                    "symbol": "calc_add",
+                    "kind": "function",
+                    "params": "int a, int b",
+                    "return_type": "int",
+                    "scenarios": [{"name": "normal"}],
+                }
+            ],
         }
         (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
-        (cache / "plan_gap.json").write_text(json.dumps({
-            "status": "ok",
-            "missing_targets": [],
-            "partial_targets": [{"symbol": "calc_add"}],
-            "coverage": {"uncovered_symbols": ["calc_add"], "line_coverage_pct": 10},
-        }), encoding="utf-8")
+        (cache / "plan_gap.json").write_text(
+            json.dumps(
+                {
+                    "status": "ok",
+                    "missing_targets": [],
+                    "partial_targets": [{"symbol": "calc_add"}],
+                    "coverage": {"uncovered_symbols": ["calc_add"], "line_coverage_pct": 10},
+                }
+            ),
+            encoding="utf-8",
+        )
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "calc_add_test.cpp").write_text(
@@ -2277,19 +2462,21 @@ class TestTemplates:
 
         plan = {
             "status": "ok",
-            "targets": [{
-                "symbol": "calc_add",
-                "kind": "function",
-                "file": "calc.h",
-                "return_type": "int",
-                "params": "int a, int b",
-                "scenarios": [
-                    {"name": "normal", "description": "positive integers"},
-                    {"name": "boundary", "description": "edge values"},
-                ],
-                "conditional": False,
-                "needs_mock": False,
-            }],
+            "targets": [
+                {
+                    "symbol": "calc_add",
+                    "kind": "function",
+                    "file": "calc.h",
+                    "return_type": "int",
+                    "params": "int a, int b",
+                    "scenarios": [
+                        {"name": "normal", "description": "positive integers"},
+                        {"name": "boundary", "description": "edge values"},
+                    ],
+                    "conditional": False,
+                    "needs_mock": False,
+                }
+            ],
         }
         out = tmp_path / "tests"
         result = generate_test_skeleton_impl(plan_json=plan, output_dir=str(out))
@@ -2302,7 +2489,11 @@ class TestTemplates:
 
 class TestLearn:
     def test_learn_and_load(self, tmp_path):
-        from sdk_forge.infra.learn import learn_from_build, load_learned_config, merge_learned_into_params
+        from sdk_forge.infra.learn import (
+            learn_from_build,
+            load_learned_config,
+            merge_learned_into_params,
+        )
 
         state = {
             "status": "ok",
@@ -2311,7 +2502,12 @@ class TestLearn:
             "run": {"status": "ok"},
             "link_libraries": ["calc"],
             "sdk_include_dirs": ["/inc"],
-            "attempts": [{"attempt": 1, "actions_applied": [{"type": "merge_link_libraries", "values": ["calc"]}]}],
+            "attempts": [
+                {
+                    "attempt": 1,
+                    "actions_applied": [{"type": "merge_link_libraries", "values": ["calc"]}],
+                }
+            ],
         }
         saved = learn_from_build(state, str(tmp_path))
         assert saved["status"] == "ok"
@@ -2364,18 +2560,29 @@ class TestPlanGap:
         tests = tmp_path / "tests"
         tests.mkdir()
         (tests / "calc_add_test.cpp").write_text(
-            '#include <gtest/gtest.h>\nTEST(Calc_add, Normal) {}\n',
+            "#include <gtest/gtest.h>\nTEST(Calc_add, Normal) {}\n",
             encoding="utf-8",
         )
         plan = {
             "status": "ok",
             "targets": [
-                {"symbol": "calc_add", "kind": "function", "file": "calc.h", "scenarios": [
-                    {"name": "normal"}, {"name": "error"},
-                ]},
-                {"symbol": "calc_mul", "kind": "function", "file": "calc.h", "scenarios": [
-                    {"name": "normal"},
-                ]},
+                {
+                    "symbol": "calc_add",
+                    "kind": "function",
+                    "file": "calc.h",
+                    "scenarios": [
+                        {"name": "normal"},
+                        {"name": "error"},
+                    ],
+                },
+                {
+                    "symbol": "calc_mul",
+                    "kind": "function",
+                    "file": "calc.h",
+                    "scenarios": [
+                        {"name": "normal"},
+                    ],
+                },
             ],
         }
         save_plan_state(str(tmp_path), plan)
@@ -2401,13 +2608,15 @@ class TestProposeFix:
         )
         analysis = {
             "status": "ok",
-            "failures": [{
-                "test": "CalcAdd.Normal",
-                "file": str(test_file),
-                "line": 3,
-                "expected": "3",
-                "actual": "0",
-            }],
+            "failures": [
+                {
+                    "test": "CalcAdd.Normal",
+                    "file": str(test_file),
+                    "line": 3,
+                    "expected": "3",
+                    "actual": "0",
+                }
+            ],
         }
         result = propose_test_fixes_impl(
             analysis_json=analysis,
@@ -2437,8 +2646,9 @@ class TestCompdb:
 
 class TestProbeCmake:
     def test_yaml_cpp_library_name(self):
-        from sdk_forge.pipeline.probe import parse_cmake_link_libraries
         from pathlib import Path
+
+        from sdk_forge.pipeline.probe import parse_cmake_link_libraries
 
         cmake = Path(r"C:\Users\14513\Downloads\test\CMakeLists.txt")
         if not cmake.is_file():
@@ -2447,15 +2657,18 @@ class TestProbeCmake:
         assert "yaml-cpp" in libs
 
     def test_probe_not_folder_name(self):
-        from sdk_forge.pipeline.probe import probe_sdk_impl
         from pathlib import Path
+
+        from sdk_forge.pipeline.probe import probe_sdk_impl
 
         root = Path(r"C:\Users\14513\Downloads\test")
         if not root.is_dir():
             pytest.skip("yaml-cpp clone not present")
         result = probe_sdk_impl(str(root))
         assert result["status"] == "ok"
-        assert "test" not in result.get("link_libraries", []) or "yaml-cpp" in result["link_libraries"]
+        assert (
+            "test" not in result.get("link_libraries", []) or "yaml-cpp" in result["link_libraries"]
+        )
 
 
 class TestPlanFilter:
@@ -2470,14 +2683,16 @@ class TestPlanFilter:
 
         scan = {
             "status": "ok",
-            "files": [{
-                "file": "api.h",
-                "functions": [
-                    {"name": f"fn_{i}", "kind": "function", "params": "int x"}
-                    for i in range(10)
-                ],
-                "classes": [],
-            }],
+            "files": [
+                {
+                    "file": "api.h",
+                    "functions": [
+                        {"name": f"fn_{i}", "kind": "function", "params": "int x"}
+                        for i in range(10)
+                    ],
+                    "classes": [],
+                }
+            ],
         }
         plan = suggest_test_plan_impl(scan_json=scan, max_targets=3)
         assert plan["target_count"] == 3
@@ -2502,9 +2717,13 @@ class TestApplyFix:
 
         analysis = {
             "status": "ok",
-            "failures": [{"test": "T.C", "file": str(test_file), "line": 2, "expected": "1", "actual": "0"}],
+            "failures": [
+                {"test": "T.C", "file": str(test_file), "line": 2, "expected": "1", "actual": "0"}
+            ],
         }
-        propose_test_fixes_impl(analysis_json=analysis, project_dir=str(tmp_path), tests_dir=str(tests))
+        propose_test_fixes_impl(
+            analysis_json=analysis, project_dir=str(tmp_path), tests_dir=str(tests)
+        )
         result = apply_proposed_fixes_impl(str(tmp_path), confirm=True)
         assert result["status"] == "ok"
         assert "EXPECT_EQ(1, 1)" in test_file.read_text(encoding="utf-8")
@@ -2592,6 +2811,7 @@ TEST(MathTest, One) { EXPECT_EQ(1, 1); }
     @pytest.mark.asyncio
     async def test_compile_failure_returns_hints(self):
         from mcp_server import compile_tests
+
         with tempfile.TemporaryDirectory(prefix="forge_bad_link_") as tmp:
             src = Path(tmp)
             (src / "bad_test.cpp").write_text("""
@@ -2609,6 +2829,7 @@ class TestScanCacheInvalidation:
     @pytest.mark.asyncio
     async def test_cache_invalidates_on_mtime_change(self, tmp_path, monkeypatch):
         from mcp_server import scan_headers
+
         cache_dir = tmp_path / "scan_cache"
         cache_dir.mkdir()
         monkeypatch.setenv("FORGE_SCAN_CACHE", str(cache_dir))
@@ -2629,7 +2850,9 @@ class TestScanCacheInvalidation:
 
 class TestMocksE2E:
     def test_scan_test_sdk_cpp_generates_div_mock(self):
-        scan = scan_headers_impl(str(EXAMPLES / "test_sdk_cpp" / "include"), use_clang=False, use_cache=False)
+        scan = scan_headers_impl(
+            str(EXAMPLES / "test_sdk_cpp" / "include"), use_clang=False, use_cache=False
+        )
         assert scan["status"] == "ok"
         result = generate_mocks_impl(scan, "Calculator")
         assert result["mock_count"] >= 1
@@ -2644,6 +2867,7 @@ class TestCoveragePipeline:
     @pytest.mark.asyncio
     async def test_coverage_pipeline(self):
         from mcp_server import collect_coverage, compile_tests, run_tests
+
         with tempfile.TemporaryDirectory(prefix="cov_pipeline_") as tmp:
             src = Path(tmp)
             (src / "cov_test.cpp").write_text("""
@@ -2664,9 +2888,12 @@ class TestGtestCacheTiming:
     @pytest.mark.asyncio
     async def test_second_compile_tracks_duration(self):
         from mcp_server import compile_tests
+
         with tempfile.TemporaryDirectory(prefix="gtest_timing_") as tmp:
             src = Path(tmp)
-            (src / "t_test.cpp").write_text("#include <gtest/gtest.h>\nTEST(T,T){EXPECT_TRUE(true);}\n")
+            (src / "t_test.cpp").write_text(
+                "#include <gtest/gtest.h>\nTEST(T,T){EXPECT_TRUE(true);}\n"
+            )
             build = str(Path(tempfile.mkdtemp(prefix="gtest_timing_build_")))
             first = json.loads(await compile_tests(str(src), build))
             assert first["status"] == "ok"
@@ -2726,6 +2953,7 @@ class TestProbeSdk:
     @pytest.mark.asyncio
     async def test_probe_sdk_root(self, sdk_layout):
         from mcp_server import probe_sdk
+
         result = json.loads(await probe_sdk(str(sdk_layout)))
         assert result["status"] == "ok"
         assert any("include" in p for p in result["sdk_include_dirs"])
@@ -2734,6 +2962,7 @@ class TestProbeSdk:
     @pytest.mark.asyncio
     async def test_probe_pc_file(self, sdk_layout):
         from mcp_server import probe_sdk
+
         pc = sdk_layout / "my_sdk.pc"
         result = json.loads(await probe_sdk(str(pc)))
         assert result["status"] == "ok"
@@ -2744,6 +2973,7 @@ class TestProbeSdk:
 # ---------------------------------------------------------------------------
 # delete_tests — integration tests with temp directories
 # ---------------------------------------------------------------------------
+
 
 class TestDeleteTests:
     """Tests delete_tests with real files."""
@@ -2765,6 +2995,7 @@ class TestDeleteTests:
     @pytest.mark.asyncio
     async def test_delete_matching_files(self, test_dir):
         from mcp_server import delete_tests
+
         result = json.loads(await delete_tests(test_dir))
         assert result["status"] == "ok"
         assert result["deleted_count"] == 4
@@ -2775,6 +3006,7 @@ class TestDeleteTests:
     @pytest.mark.asyncio
     async def test_delete_empty_dir(self):
         from mcp_server import delete_tests
+
         with tempfile.TemporaryDirectory() as tmp:
             result = json.loads(await delete_tests(tmp))
             assert result["status"] == "ok"
@@ -2783,6 +3015,7 @@ class TestDeleteTests:
     @pytest.mark.asyncio
     async def test_delete_nonexistent_dir(self):
         from mcp_server import delete_tests
+
         result = json.loads(await delete_tests("/nonexistent/dir"))
         assert result["status"] == "error"
 
@@ -2790,6 +3023,7 @@ class TestDeleteTests:
 # ---------------------------------------------------------------------------
 # compile_tests + run_tests — integration (skip if cmake unavailable)
 # ---------------------------------------------------------------------------
+
 
 def _find_sdk_lib_dir(sdk_build: Path) -> Path:
     for candidate in [sdk_build, sdk_build / "Debug", sdk_build / "Release"]:
@@ -2807,6 +3041,7 @@ def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
     sdk_build = sdk_root / "build"
     if sdk_build.exists():
         import shutil
+
         shutil.rmtree(sdk_build, ignore_errors=True)
     sdk_build.mkdir(parents=True, exist_ok=True)
 
@@ -2839,11 +3074,11 @@ def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
 @pytest.mark.skipif(not _cmake_available(), reason="cmake not found")
 class TestE2EPipeline:
     def test_scaffold_build_analyze_propose(self):
+        from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
+        from sdk_forge.infra.session import save_plan_state
         from sdk_forge.pipeline.build import compile_tests_impl
         from sdk_forge.pipeline.plan import suggest_test_plan_impl
-        from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
         from sdk_forge.pipeline.run import run_tests_impl
-        from sdk_forge.infra.session import save_plan_state
         from sdk_forge.pipeline.templates import generate_test_skeleton_impl
         from sdk_forge.pipeline.test_fix import analyze_test_failures_impl, propose_test_fixes_impl
 
@@ -2867,7 +3102,10 @@ class TestE2EPipeline:
             save_plan_state(str(project), plan)
 
             scaffold = generate_test_skeleton_impl(
-                plan_json=plan, output_dir=str(tests), overwrite=True, fidelity="smart",
+                plan_json=plan,
+                output_dir=str(tests),
+                overwrite=True,
+                fidelity="smart",
             )
             assert scaffold["status"] == "ok"
 
@@ -2875,7 +3113,9 @@ class TestE2EPipeline:
             assert test_file.exists()
             content = test_file.read_text(encoding="utf-8")
             assert "EXPECT_EQ" in content
-            content = content.replace("EXPECT_EQ(calc_add(2, 3), 5)", "EXPECT_EQ(calc_add(1, 2), 0)", 1)
+            content = content.replace(
+                "EXPECT_EQ(calc_add(2, 3), 5)", "EXPECT_EQ(calc_add(1, 2), 0)", 1
+            )
             test_file.write_text(content, encoding="utf-8")
 
             compile_result = compile_tests_impl(
@@ -2911,9 +3151,8 @@ class TestE2EPipeline:
         from sdk_forge.pipeline.build import compile_tests_impl
         from sdk_forge.pipeline.plan import suggest_test_plan_impl
         from sdk_forge.pipeline.run import run_tests_impl
-        from sdk_forge.pipeline.templates import generate_test_skeleton_impl
-
         from sdk_forge.pipeline.scan import scan_headers_impl
+        from sdk_forge.pipeline.templates import generate_test_skeleton_impl
 
         repo_root = Path(__file__).resolve().parent.parent
         sdk_root = repo_root / "examples" / "test_sdk"
@@ -2926,6 +3165,7 @@ class TestE2EPipeline:
             tests.mkdir()
             if build.exists():
                 import shutil
+
                 shutil.rmtree(build)
             build.mkdir()
 
@@ -2933,7 +3173,10 @@ class TestE2EPipeline:
             plan = suggest_test_plan_impl(scan_json=scan)
             assert plan["target_count"] >= 1
             scaffold = generate_test_skeleton_impl(
-                plan_json=plan, output_dir=str(tests), overwrite=True, fidelity="smart",
+                plan_json=plan,
+                output_dir=str(tests),
+                overwrite=True,
+                fidelity="smart",
             )
             assert scaffold["status"] == "ok"
             calc_test = tests / "calc_add_test.cpp"
@@ -2961,19 +3204,24 @@ class TestE2EPipeline:
 
         plan = {
             "status": "ok",
-            "targets": [{
-                "symbol": "x",
-                "kind": "function",
-                "file": "x.h",
-                "return_type": "void",
-                "params": "",
-                "scenarios": [{"name": "normal"}],
-            }],
+            "targets": [
+                {
+                    "symbol": "x",
+                    "kind": "function",
+                    "file": "x.h",
+                    "return_type": "void",
+                    "params": "",
+                    "scenarios": [{"name": "normal"}],
+                }
+            ],
         }
         tests = tmp_path / "tests"
         tests.mkdir()
         generate_test_skeleton_impl(
-            plan_json=plan, output_dir=str(tests), overwrite=True, fidelity="skeleton",
+            plan_json=plan,
+            output_dir=str(tests),
+            overwrite=True,
+            fidelity="skeleton",
         )
         (tmp_path / ".forge.yaml").write_text(
             "scaffold_quality_gate: true\nmax_placeholder_ratio: 0.01\nquality_gate_mode: block\n",
@@ -3193,14 +3441,22 @@ TEST(MathTest, Subtraction) {
             ["cmake", "--build", str(sdk_build.resolve())],
             ["cmake", "--install", str(sdk_build.resolve())],
         ):
-            r = subprocess.run(cmd, cwd=str(sdk_build), capture_output=True, text=True,
-                               encoding="utf-8", errors="replace")
+            r = subprocess.run(
+                cmd,
+                cwd=str(sdk_build),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
             assert r.returncode == 0, r.stderr or r.stdout
 
         scan = json.loads(await scan_headers(str(sdk_root / "include"), use_clang=False))
         assert scan["status"] == "ok"
         conditional = [
-            sym for f in scan["files"] for sym in f.get("functions", []) + f.get("classes", [])
+            sym
+            for f in scan["files"]
+            for sym in f.get("functions", []) + f.get("classes", [])
             if sym.get("conditional")
         ]
         assert len(conditional) >= 1
@@ -3215,7 +3471,9 @@ TEST(MathTest, Subtraction) {
                 (sdk_root / "examples" / "medium_test.cpp").read_text(encoding="utf-8")
             )
             build = str(Path(tempfile.mkdtemp(prefix="medium_test_build_")))
-            compile_result = json.loads(await compile_tests(str(src), build, pkg_config_packages=["medium"]))
+            compile_result = json.loads(
+                await compile_tests(str(src), build, pkg_config_packages=["medium"])
+            )
             assert compile_result["status"] == "ok", compile_result
             run_result = json.loads(await run_tests(build))
             assert run_result["status"] == "ok"
@@ -3236,8 +3494,14 @@ TEST(MathTest, Subtraction) {
             ["cmake", "--build", str(sdk_build.resolve())],
             ["cmake", "--install", str(sdk_build.resolve())],
         ):
-            r = subprocess.run(cmd, cwd=str(sdk_build), capture_output=True, text=True,
-                               encoding="utf-8", errors="replace")
+            r = subprocess.run(
+                cmd,
+                cwd=str(sdk_build),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
             assert r.returncode == 0, r.stderr or r.stdout
 
         with tempfile.TemporaryDirectory(prefix="medium_forge_") as tmp:
@@ -3250,12 +3514,14 @@ TEST(MathTest, Subtraction) {
             cache.mkdir(parents=True)
             (cache / "last_plan.json").write_text(json.dumps(plan), encoding="utf-8")
 
-            scaffold = json.loads(await generate_test_skeleton(
-                str(project / "tests"),
-                plan_json=json.dumps(plan),
-                overwrite=True,
-                fidelity="smart",
-            ))
+            scaffold = json.loads(
+                await generate_test_skeleton(
+                    str(project / "tests"),
+                    plan_json=json.dumps(plan),
+                    overwrite=True,
+                    fidelity="smart",
+                )
+            )
             assert scaffold["status"] == "ok"
             assert scaffold.get("files_written")
 

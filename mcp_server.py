@@ -10,36 +10,43 @@ import logging
 from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
-
-from sdk_forge.pipeline.build import compile_tests_impl
+from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
 from sdk_forge.infra.clean import delete_tests_impl
-from sdk_forge.pipeline.coverage import collect_coverage_impl
+from sdk_forge.infra.compdb import export_compile_commands_impl, get_compile_commands_impl
 from sdk_forge.infra.doctor import doctor_impl
+from sdk_forge.infra.learn import forget_learned_config as forget_learned_config_impl
+from sdk_forge.infra.learn import load_learned_config
+from sdk_forge.infra.logging_config import configure_forge_logging
+from sdk_forge.infra.report import report_impl
+from sdk_forge.infra.response import forge_json
+from sdk_forge.infra.session import get_session_context_impl, save_plan_state
+from sdk_forge.infra.toolchain_install import ensure_toolchain_impl, setup_toolchain_impl
+from sdk_forge.infra.trace import new_run_id, set_run_id
+from sdk_forge.orchestration.workflow import record_agent_completion, update_workflow_stage
+from sdk_forge.pipeline.build import compile_tests_impl
+from sdk_forge.pipeline.core import build_pipeline_impl
+from sdk_forge.pipeline.coverage import collect_coverage_impl
+from sdk_forge.pipeline.coverage_expand import coverage_expand_impl
+from sdk_forge.pipeline.enrich import (
+    analyze_scaffold_quality_impl,
+    enrich_test_cases_impl,
+)
 from sdk_forge.pipeline.init import init_project_impl
 from sdk_forge.pipeline.mock import generate_mocks_impl
-from sdk_forge.infra.learn import forget_learned_config, load_learned_config
-from sdk_forge.pipeline.core import build_pipeline_impl
-from sdk_forge.infra.compdb import export_compile_commands_impl, get_compile_commands_impl
 from sdk_forge.pipeline.plan import suggest_test_plan_impl
-from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
 from sdk_forge.pipeline.probe import probe_sdk_impl
-from sdk_forge.infra.report import report_impl
 from sdk_forge.pipeline.retry import load_build_state
 from sdk_forge.pipeline.run import run_tests_impl
 from sdk_forge.pipeline.scan import CLANG_AVAILABLE, scan_headers_impl
-from sdk_forge.infra.session import get_session_context_impl, save_plan_state
-from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl, load_scaffold_quality
-from sdk_forge.pipeline.coverage_expand import coverage_expand_impl
 from sdk_forge.pipeline.templates import generate_test_skeleton_impl
-from sdk_forge.infra.toolchain_install import setup_toolchain_impl, ensure_toolchain_impl
-from sdk_forge.pipeline.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
-from sdk_forge.orchestration.workflow import update_workflow_stage, record_agent_completion
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)-8s %(message)s",
-    datefmt="%H:%M:%S",
+from sdk_forge.pipeline.test_fix import (
+    analyze_test_failures_impl,
+    apply_proposed_fixes_impl,
+    propose_test_fixes_impl,
 )
+
+configure_forge_logging()
+set_run_id(new_run_id())
 logger = logging.getLogger("mcp_server")
 
 mcp = FastMCP(
@@ -73,7 +80,8 @@ Tools:
   - get_compile_commands   → cached compile_commands.json
   - forge_report        → markdown / HTML / JSON report from last build
   - get_build_state     → read last build JSON
-  - get_session_context → plan + build + learned config + orchestration
+  - get_session_context → plan + build + learned config + orchestration + recent_audit
+  - get_forge_audit_log → last N audit.jsonl events (v5.12)
   - get_learned_config  → cached compile params for SDK
   - scan_headers        → parse headers (libclang + regex)
   - probe_sdk           → suggest link settings
@@ -87,25 +95,35 @@ Tools:
 )
 
 
-@mcp.tool(description="Check cmake, compiler, libclang, forge cache; returns forge_version (authoritative).")
+@mcp.tool(
+    description="Check cmake, compiler, libclang, forge cache; returns forge_version (authoritative)."
+)
 async def forge_doctor() -> str:
-    return json.dumps(doctor_impl(), indent=2, ensure_ascii=False)
+    return forge_json(doctor_impl(), indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="Auto-install C++ toolchain via winget/apt/brew. Agent mode skips manual confirm.")
+@mcp.tool(
+    description="Auto-install C++ toolchain via winget/apt/brew. Agent mode skips manual confirm."
+)
 async def setup_cxx_toolchain(
     confirm: Annotated[bool | str, "Explicit user confirm (CLI-style)."] = False,
-    agent_mode: Annotated[bool | str, "Agent delegated install (default true for forge agent)."] = True,
-    method: Annotated[str, "auto, winget-msvc, winget-mingw, apt-build-essential, brew-llvm, ..."] = "auto",
+    agent_mode: Annotated[
+        bool | str, "Agent delegated install (default true for forge agent)."
+    ] = True,
+    method: Annotated[
+        str, "auto, winget-msvc, winget-mingw, apt-build-essential, brew-llvm, ..."
+    ] = "auto",
 ) -> str:
-    return json.dumps(
+    return forge_json(
         setup_toolchain_impl(method=method, confirm=confirm, agent_mode=agent_mode),
         indent=2,
         ensure_ascii=False,
     )
 
 
-@mcp.tool(description="Ensure cmake + C++ compiler; auto-install toolchain when missing (full Agent env setup).")
+@mcp.tool(
+    description="Ensure cmake + C++ compiler; auto-install toolchain when missing (full Agent env setup)."
+)
 async def ensure_forge_environment(
     method: Annotated[str, "Toolchain install method when compiler missing."] = "auto",
     auto_install: Annotated[bool | str, "Run package manager install if needed."] = True,
@@ -115,9 +133,11 @@ async def ensure_forge_environment(
     doctor = doctor_impl()
     ensure = ensure_toolchain_impl(method=method, auto_install=auto_install, agent_mode=True)
     doctor_after = doctor_impl()
-    return json.dumps(
+    return forge_json(
         {
-            "status": "ok" if ensure.get("status") == "ok" or doctor_after.get("ready") else ensure.get("status", "issues_found"),
+            "status": "ok"
+            if ensure.get("status") == "ok" or doctor_after.get("ready")
+            else ensure.get("status", "issues_found"),
             "doctor_before": doctor,
             "toolchain": ensure,
             "doctor_after": doctor_after,
@@ -134,10 +154,14 @@ async def init_forge_project(
     sdk_root: Annotated[str, "Optional SDK root for .forge.yaml template."] = "",
     project_name: Annotated[str, "Sample test file base name."] = "sdk_tests",
 ) -> str:
-    return json.dumps(init_project_impl(target_dir, sdk_root, project_name), indent=2, ensure_ascii=False)
+    return forge_json(
+        init_project_impl(target_dir, sdk_root, project_name), indent=2, ensure_ascii=False
+    )
 
 
-@mcp.tool(description="Generate structured test plan with scenarios from scan_headers JSON or SDK root.")
+@mcp.tool(
+    description="Generate structured test plan with scenarios from scan_headers JSON or SDK root."
+)
 async def suggest_test_plan(
     sdk_root: Annotated[str, "SDK root to scan when scan_json is empty."] = "",
     scan_json: Annotated[str, "JSON from scan_headers."] = "",
@@ -145,16 +169,20 @@ async def suggest_test_plan(
     max_targets: Annotated[int | str, "Limit targets for large SDKs (0 = all)."] = 0,
 ) -> str:
     result = suggest_test_plan_impl(
-        sdk_root=sdk_root, scan_json=scan_json or None, max_targets=max_targets,
+        sdk_root=sdk_root,
+        scan_json=scan_json or None,
+        max_targets=max_targets,
     )
     if project_dir and result.get("status") == "ok":
         save_plan_state(project_dir, result)
         update_workflow_stage(project_dir, "plan")
         result["plan_saved"] = str((project_dir or ".") + "/.forge/cache/last_plan.json")
-    return json.dumps(result, indent=2, ensure_ascii=False)
+    return forge_json(result, indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="Generate GTest files with smart assertions (fidelity=smart) or TODO skeleton.")
+@mcp.tool(
+    description="Generate GTest files with smart assertions (fidelity=smart) or TODO skeleton."
+)
 async def generate_test_skeleton(
     output_dir: Annotated[str, "Directory for generated *_test.cpp files."],
     plan_json: Annotated[str, "JSON from suggest_test_plan."] = "",
@@ -162,15 +190,26 @@ async def generate_test_skeleton(
     project_name: Annotated[str, "Base name fallback."] = "sdk_tests",
     overwrite: Annotated[bool | str, "Overwrite existing test files."] = False,
     fidelity: Annotated[str, "smart (default) or skeleton."] = "smart",
-    group_by_header: Annotated[bool | str, "Group targets per header into one file with TEST_F."] = False,
-    skip_existing: Annotated[bool | str, "Only write missing target files (incremental scaffold)."] = False,
+    group_by_header: Annotated[
+        bool | str, "Group targets per header into one file with TEST_F."
+    ] = False,
+    skip_existing: Annotated[
+        bool | str, "Only write missing target files (incremental scaffold)."
+    ] = False,
 ) -> str:
-    return json.dumps(
+    return forge_json(
         generate_test_skeleton_impl(
-            plan_json or None, output_dir, sdk_root, project_name, overwrite,
-            fidelity=fidelity, group_by_header=group_by_header, skip_existing=skip_existing,
+            plan_json or None,
+            output_dir,
+            sdk_root,
+            project_name,
+            overwrite,
+            fidelity=fidelity,
+            group_by_header=group_by_header,
+            skip_existing=skip_existing,
         ),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -181,9 +220,12 @@ async def enrich_test_cases(
     tests_dir: Annotated[str, "Override tests directory."] = "",
     test_files: Annotated[str, "Comma-separated test basenames or paths."] = "",
 ) -> str:
-    return json.dumps(
-        enrich_test_cases_impl(project_dir, symbol=symbol, tests_dir=tests_dir, test_files=test_files),
-        indent=2, ensure_ascii=False,
+    return forge_json(
+        enrich_test_cases_impl(
+            project_dir, symbol=symbol, tests_dir=tests_dir, test_files=test_files
+        ),
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -193,9 +235,10 @@ async def analyze_scaffold_quality(
     tests_dir: Annotated[str, "Override tests directory."] = "",
     test_files: Annotated[str, "Comma-separated test basenames or paths."] = "",
 ) -> str:
-    return json.dumps(
+    return forge_json(
         analyze_scaffold_quality_impl(project_dir, tests_dir=tests_dir, test_files=test_files),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -206,9 +249,11 @@ async def analyze_assertion_quality(
     test_files: Annotated[str, "Comma-separated test basenames or paths."] = "",
 ) -> str:
     from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl
-    return json.dumps(
+
+    return forge_json(
         analyze_assertion_quality_impl(project_dir, tests_dir=tests_dir, test_files=test_files),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -218,7 +263,8 @@ async def load_golden_cases(
     symbol: Annotated[str, "Optional symbol filter."] = "",
 ) -> str:
     from sdk_forge.pipeline.golden import load_golden_cases as load_golden_impl
-    return json.dumps(load_golden_impl(project_dir, symbol=symbol), indent=2, ensure_ascii=False)
+
+    return forge_json(load_golden_impl(project_dir, symbol=symbol), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Verify golden cases are referenced in generated tests.")
@@ -226,18 +272,22 @@ async def verify_golden_coverage(
     project_dir: Annotated[str, "Project root with tests/."] = "",
 ) -> str:
     from sdk_forge.pipeline.golden import verify_golden_in_tests
-    return json.dumps(verify_golden_in_tests(project_dir), indent=2, ensure_ascii=False)
+
+    return forge_json(verify_golden_in_tests(project_dir), indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="Snapshot EXPECT_EQ cases from test sources into .forge/golden.yaml (merge by default).")
+@mcp.tool(
+    description="Snapshot EXPECT_EQ cases from test sources into .forge/golden.yaml (merge by default)."
+)
 async def snapshot_golden_cases(
     project_dir: Annotated[str, "Project root with tests/."] = "",
     merge: Annotated[bool | str, "Merge with existing golden.yaml (default true)."] = True,
     confirm: Annotated[bool | str, "Write golden.yaml (default false = dry-run)."] = False,
 ) -> str:
-    from sdk_forge.pipeline.golden import snapshot_golden_from_plan_impl
     from sdk_forge.domain.util import parse_bool
-    return json.dumps(
+    from sdk_forge.pipeline.golden import snapshot_golden_from_plan_impl
+
+    return forge_json(
         snapshot_golden_from_plan_impl(
             project_dir,
             merge=parse_bool(merge, default=True),
@@ -254,9 +304,10 @@ async def draft_golden_cases(
     merge: Annotated[bool | str, "Merge with existing golden.yaml (default true)."] = True,
     confirm: Annotated[bool | str, "Write golden.yaml (default false = dry-run)."] = False,
 ) -> str:
-    from sdk_forge.pipeline.oracle import draft_golden_from_plan_impl
     from sdk_forge.domain.util import parse_bool
-    return json.dumps(
+    from sdk_forge.pipeline.oracle import draft_golden_from_plan_impl
+
+    return forge_json(
         draft_golden_from_plan_impl(
             project_dir,
             merge=parse_bool(merge, default=True),
@@ -267,18 +318,23 @@ async def draft_golden_cases(
     )
 
 
-@mcp.tool(description="Hands-off autopilot: init/env/scan/scaffold then return orchestration next_actions.")
+@mcp.tool(
+    description="Hands-off autopilot: init/env/scan/scaffold then return orchestration next_actions."
+)
 async def run_forge_autopilot(
     sdk_root: Annotated[str, "SDK root to scan and test."] = "",
     project_dir: Annotated[str, "Forge project directory (auto-created if empty)."] = "",
     profile: Annotated[str, "Forge profile: production (default) or default."] = "production",
-    max_enrich_rounds: Annotated[int | str, "Max assertion-driven enrich rounds (0 = config default)."] = 0,
+    max_enrich_rounds: Annotated[
+        int | str, "Max assertion-driven enrich rounds (0 = config default)."
+    ] = 0,
 ) -> str:
     from sdk_forge.orchestration.autopilot import run_autopilot_impl
+
     rounds: int | str = ""
     if max_enrich_rounds not in (0, "0", "", None):
         rounds = max_enrich_rounds
-    return json.dumps(
+    return forge_json(
         run_autopilot_impl(
             sdk_root=sdk_root,
             project_dir=project_dir,
@@ -294,15 +350,18 @@ async def run_forge_autopilot(
 async def coverage_expand(
     project_dir: Annotated[str, "Project root with plan, gap, and tests/."] = "",
     tests_dir: Annotated[str, "Override tests directory."] = "",
-    threshold_pct: Annotated[float | str, "Expand when line coverage below this (default 80)."] = 80.0,
+    threshold_pct: Annotated[
+        float | str, "Expand when line coverage below this (default 80)."
+    ] = 80.0,
 ) -> str:
     try:
         threshold = float(threshold_pct)
     except (TypeError, ValueError):
         threshold = 80.0
-    return json.dumps(
+    return forge_json(
         coverage_expand_impl(project_dir, tests_dir=tests_dir, threshold_pct=threshold),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -311,21 +370,25 @@ async def analyze_test_failures(
     build_dir: Annotated[str, "Build directory to run tests from."] = "",
     run_json: Annotated[str, "Optional run_tests JSON instead of re-running."] = "",
 ) -> str:
-    return json.dumps(
+    return forge_json(
         analyze_test_failures_impl(build_dir, run_json or None),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
-@mcp.tool(description="Propose test assertion fixes from failures; never writes source (requires user confirmation).")
+@mcp.tool(
+    description="Propose test assertion fixes from failures; never writes source (requires user confirmation)."
+)
 async def propose_test_fixes(
     build_dir: Annotated[str, "Build directory to analyze."] = "",
     analysis_json: Annotated[str, "Optional analyze_test_failures JSON."] = "",
     project_dir: Annotated[str, "Project root for cache and tests/."] = "",
 ) -> str:
-    return json.dumps(
+    return forge_json(
         propose_test_fixes_impl(build_dir, analysis_json or None, project_dir),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -338,7 +401,7 @@ async def apply_test_fixes(
     result = apply_proposed_fixes_impl(project_dir, confirm=confirm, indices=indices or None)
     if result.get("status") == "ok" and project_dir:
         update_workflow_stage(project_dir, "apply", {"applied_count": result.get("applied_count")})
-    return json.dumps(result, indent=2, ensure_ascii=False)
+    return forge_json(result, indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Compare test plan targets against tests/ files and optional coverage cache.")
@@ -348,9 +411,10 @@ async def analyze_plan_gap(
     tests_dir: Annotated[str, "Override tests directory."] = "",
     sdk_root: Annotated[str, "Scan SDK when no cached plan."] = "",
 ) -> str:
-    return json.dumps(
+    return forge_json(
         analyze_plan_gap_impl(project_dir, plan_json or None, tests_dir, sdk_root),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -358,7 +422,7 @@ async def analyze_plan_gap(
 async def get_compile_commands(
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:
-    return json.dumps(get_compile_commands_impl(project_dir), indent=2, ensure_ascii=False)
+    return forge_json(get_compile_commands_impl(project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Export compile_commands.json from build dir into project cache.")
@@ -366,9 +430,10 @@ async def export_compile_commands(
     build_dir: Annotated[str, "CMake build directory."],
     project_dir: Annotated[str, "Project root for cache."] = "",
 ) -> str:
-    return json.dumps(
+    return forge_json(
         export_compile_commands_impl(build_dir, project_dir),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -376,10 +441,22 @@ async def export_compile_commands(
 async def get_session_context(
     project_dir: Annotated[str, "Project root with .forge/cache/."] = "",
 ) -> str:
-    return json.dumps(get_session_context_impl(project_dir), indent=2, ensure_ascii=False)
+    return forge_json(get_session_context_impl(project_dir), indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="Record sub-agent completion for multi-agent orchestration (workflow.json agent_runs).")
+@mcp.tool(description="Read last N audit.jsonl events for project (v5.12).")
+async def get_forge_audit_log(
+    project_dir: Annotated[str, "Project root."] = "",
+    last_n: Annotated[int, "Number of recent events."] = 50,
+) -> str:
+    from sdk_forge.infra.audit import read_audit_log
+
+    return forge_json(read_audit_log(project_dir, last_n=last_n), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(
+    description="Record sub-agent completion for multi-agent orchestration (workflow.json agent_runs)."
+)
 async def record_agent_run(
     agent: Annotated[str, "Sub-agent name e.g. forge-enrich."],
     project_dir: Annotated[str, "Project root."] = "",
@@ -404,10 +481,12 @@ async def record_agent_run(
         detail = dict(detail or {})
         detail["review_verdict"] = review_verdict.strip().lower()
     result = record_agent_completion(project_dir, agent, status=status, batch_id=bid, detail=detail)
-    return json.dumps(result, indent=2, ensure_ascii=False)
+    return forge_json(result, indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="Advance workflow after sub-agent completes; records run and returns next step.")
+@mcp.tool(
+    description="Advance workflow after sub-agent completes; records run and returns next step."
+)
 async def advance_forge_workflow(
     project_dir: Annotated[str, "Project root."] = "",
     last_agent: Annotated[str, "Completed sub-agent name (empty to only read next step)."] = "",
@@ -430,7 +509,7 @@ async def advance_forge_workflow(
             detail = json.loads(detail_json)
         except json.JSONDecodeError:
             detail = {"raw": detail_json}
-    return json.dumps(
+    return forge_json(
         advance_forge_workflow_impl(
             project_dir=project_dir,
             last_agent=last_agent,
@@ -444,7 +523,9 @@ async def advance_forge_workflow(
     )
 
 
-@mcp.tool(description="Register OMO background task_id after primary dispatches a sub-agent (v5.5+).")
+@mcp.tool(
+    description="Register OMO background task_id after primary dispatches a sub-agent (v5.5+)."
+)
 async def register_forge_delegation(
     task_id: Annotated[str, "OMO task() return value."],
     agent: Annotated[str, "Sub-agent name e.g. forge-enrich."],
@@ -461,10 +542,14 @@ async def register_forge_delegation(
             bid = int(batch_id)
         except (TypeError, ValueError):
             bid = None
-    return json.dumps(
+    return forge_json(
         register_delegation_impl(
-            project_dir, task_id, agent,
-            batch_id=bid, title=title, session_id=session_id,
+            project_dir,
+            task_id,
+            agent,
+            batch_id=bid,
+            title=title,
+            session_id=session_id,
         ),
         indent=2,
         ensure_ascii=False,
@@ -479,7 +564,7 @@ async def update_forge_delegation_session(
 ) -> str:
     from sdk_forge.delegation.core import update_delegation_session_impl
 
-    return json.dumps(
+    return forge_json(
         update_delegation_session_impl(project_dir, task_id, session_id),
         indent=2,
         ensure_ascii=False,
@@ -502,8 +587,10 @@ async def register_from_omo_task_result(
             bid = int(batch_id)
         except (TypeError, ValueError):
             bid = None
-    return json.dumps(
-        register_from_omo_result_impl(project_dir, omo_result_text, agent, batch_id=bid, title=title),
+    return forge_json(
+        register_from_omo_result_impl(
+            project_dir, omo_result_text, agent, batch_id=bid, title=title
+        ),
         indent=2,
         ensure_ascii=False,
     )
@@ -515,17 +602,19 @@ async def poll_forge_delegations(
 ) -> str:
     from sdk_forge.delegation.core import poll_forge_delegations_impl
 
-    return json.dumps(poll_forge_delegations_impl(project_dir), indent=2, ensure_ascii=False)
+    return forge_json(poll_forge_delegations_impl(project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Auto-bind delegations to OpenCode sessions by title pattern (v5.8).")
 async def sync_delegation_sessions(
     project_dir: Annotated[str, "Project root."] = "",
-    parent_session_id: Annotated[str, "Optional forge primary session id to filter child sessions."] = "",
+    parent_session_id: Annotated[
+        str, "Optional forge primary session id to filter child sessions."
+    ] = "",
 ) -> str:
     from sdk_forge.delegation.session_nav import sync_delegation_sessions_impl
 
-    return json.dumps(
+    return forge_json(
         sync_delegation_sessions_impl(project_dir, parent_session_id=parent_session_id),
         indent=2,
         ensure_ascii=False,
@@ -540,7 +629,7 @@ async def get_subagent_dashboard(
 ) -> str:
     from sdk_forge.delegation.session_nav import get_subagent_dashboard_impl
 
-    return json.dumps(
+    return forge_json(
         get_subagent_dashboard_impl(
             project_dir,
             parent_session_id=parent_session_id,
@@ -558,37 +647,43 @@ async def peek_subagent_session(
 ) -> str:
     from sdk_forge.delegation.session_nav import export_session_preview_impl
 
-    return json.dumps(
+    return forge_json(
         export_session_preview_impl(session_id, max_chars=max_chars),
         indent=2,
         ensure_ascii=False,
     )
 
 
-@mcp.tool(description="Detect sub-agent timeouts, tool failures, and stale pending delegations (v5.11).")
+@mcp.tool(
+    description="Detect sub-agent timeouts, tool failures, and stale pending delegations (v5.11)."
+)
 async def check_subagent_health(
     project_dir: Annotated[str, "Project root."] = "",
     include_preview: Annotated[bool, "Scan session export for timeout/tool errors."] = True,
 ) -> str:
     from sdk_forge.delegation.health import check_subagent_health_impl
 
-    return json.dumps(
+    return forge_json(
         check_subagent_health_impl(project_dir, include_preview=include_preview),
         indent=2,
         ensure_ascii=False,
     )
 
 
-@mcp.tool(description="Recover from sub-agent timeout: mark error, advance workflow, enable orchestration retry (v5.11).")
+@mcp.tool(
+    description="Recover from sub-agent timeout: mark error, advance workflow, enable orchestration retry (v5.11)."
+)
 async def recover_stalled_subagent(
     project_dir: Annotated[str, "Project root."] = "",
     task_id: Annotated[str, "Delegation task_id (empty = first pending)."] = "",
     action: Annotated[str, "retry | skip"] = "retry",
-    failure_reason: Annotated[str, "Recorded failure code e.g. upstream_idle_timeout."] = "upstream_idle_timeout",
+    failure_reason: Annotated[
+        str, "Recorded failure code e.g. upstream_idle_timeout."
+    ] = "upstream_idle_timeout",
 ) -> str:
     from sdk_forge.delegation.health import recover_stalled_subagent_impl
 
-    return json.dumps(
+    return forge_json(
         recover_stalled_subagent_impl(
             project_dir=project_dir,
             task_id=task_id,
@@ -600,22 +695,26 @@ async def recover_stalled_subagent(
     )
 
 
-@mcp.tool(description="Build dispatch plan from orchestration next_actions with run_in_background hints (v5.5).")
+@mcp.tool(
+    description="Build dispatch plan from orchestration next_actions with run_in_background hints (v5.5)."
+)
 async def get_delegation_plan(
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:
     from sdk_forge.delegation.core import get_delegation_plan_impl
 
-    return json.dumps(get_delegation_plan_impl(project_dir), indent=2, ensure_ascii=False)
+    return forge_json(get_delegation_plan_impl(project_dir), indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="OMO task() dispatch plan for OpenCode GUI Task cards (v5.9). task is environment-managed — invoke via native tool call, not markdown text.")
+@mcp.tool(
+    description="OMO task() dispatch plan for OpenCode GUI Task cards (v5.9). task is environment-managed — invoke via native tool call, not markdown text."
+)
 async def get_task_dispatch_plan(
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:
     from sdk_forge.delegation.task_dispatch import get_task_dispatch_plan_impl
 
-    return json.dumps(get_task_dispatch_plan_impl(project_dir), indent=2, ensure_ascii=False)
+    return forge_json(get_task_dispatch_plan_impl(project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Validate agent tool text — reject call_omo_agent / task(agent=) (v5.9).")
@@ -624,7 +723,7 @@ async def validate_forge_delegation_tool(
 ) -> str:
     from sdk_forge.delegation.task_dispatch import validate_delegation_tool_text_impl
 
-    return json.dumps(validate_delegation_tool_text_impl(text), indent=2, ensure_ascii=False)
+    return forge_json(validate_delegation_tool_text_impl(text), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Store parallel scan batch JSON in workflow (forge-scan sub-agent).")
@@ -638,15 +737,15 @@ async def record_scan_batch(
     try:
         bid = int(batch_id)
     except (TypeError, ValueError):
-        return json.dumps({"status": "error", "error": "batch_id required"}, indent=2)
+        return forge_json({"status": "error", "error": "batch_id required"}, indent=2)
     if not scan_json:
-        return json.dumps({"status": "error", "error": "scan_json required"}, indent=2)
+        return forge_json({"status": "error", "error": "scan_json required"}, indent=2)
     try:
         payload = json.loads(scan_json)
     except json.JSONDecodeError as exc:
-        return json.dumps({"status": "error", "error": str(exc)}, indent=2)
+        return forge_json({"status": "error", "error": str(exc)}, indent=2)
     result = save_scan_batch_result(project_dir, bid, payload)
-    return json.dumps(result, indent=2, ensure_ascii=False)
+    return forge_json(result, indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Load learned compile params for an SDK from prior successful builds.")
@@ -654,7 +753,7 @@ async def get_learned_config(
     sdk_root: Annotated[str, "SDK root path."],
     project_dir: Annotated[str, "Project cache directory."] = "",
 ) -> str:
-    return json.dumps(load_learned_config(sdk_root, project_dir), indent=2, ensure_ascii=False)
+    return forge_json(load_learned_config(sdk_root, project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Remove cached learned compile params for an SDK.")
@@ -662,29 +761,45 @@ async def forget_learned_config(
     sdk_root: Annotated[str, "SDK root path."],
     project_dir: Annotated[str, "Project cache directory."] = "",
 ) -> str:
-    return json.dumps(forget_learned_config(sdk_root, project_dir), indent=2, ensure_ascii=False)
+    return forge_json(
+        forget_learned_config_impl(sdk_root, project_dir), indent=2, ensure_ascii=False
+    )
 
 
-@mcp.tool(description="Probe + compile + run with retry; auto-generates HTML report at .forge/cache/report.html.")
+@mcp.tool(
+    description="Probe + compile + run with retry; auto-generates HTML report at .forge/cache/report.html."
+)
 async def build_tests(
     project_dir: Annotated[str, "Project root containing .forge.yaml or .forge.json."] = "",
     source_dir: Annotated[str, "Override tests directory."] = "",
     build_dir: Annotated[str, "Override build directory."] = "",
     sdk_root: Annotated[str, "Override SDK root for probe."] = "",
     run_after_compile: Annotated[bool | str, "Run tests after compile (default true)."] = True,
-    max_retries: Annotated[int | str, "Max compile attempts with hint-based auto-fix (default 3)."] = 3,
+    max_retries: Annotated[
+        int | str, "Max compile attempts with hint-based auto-fix (default 3)."
+    ] = 3,
     auto_fix_config: Annotated[bool | str, "Write applied fixes back to .forge config."] = False,
     skip_quality_gate: Annotated[bool | str, "Skip scaffold quality gate (default false)."] = False,
-    auto_setup_toolchain: Annotated[bool | str, "Auto-install compiler if missing (default true)."] = True,
+    auto_setup_toolchain: Annotated[
+        bool | str, "Auto-install compiler if missing (default true)."
+    ] = True,
     profile: Annotated[str, "Forge profile: default or production."] = "",
 ) -> str:
-    return json.dumps(
+    return forge_json(
         build_pipeline_impl(
-            project_dir, source_dir, build_dir, sdk_root,
-            run_after_compile, max_retries, auto_fix_config, skip_quality_gate,
-            auto_setup_toolchain, profile=profile,
+            project_dir,
+            source_dir,
+            build_dir,
+            sdk_root,
+            run_after_compile,
+            max_retries,
+            auto_fix_config,
+            skip_quality_gate,
+            auto_setup_toolchain,
+            profile=profile,
         ),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -693,7 +808,9 @@ async def forge_report(
     project_dir: Annotated[str, "Project directory with .forge/cache/last_build.json."] = "",
     output_format: Annotated[str, "markdown (default), html, or json."] = "markdown",
     agent_summary: Annotated[str, "Optional Agent analysis text for HTML report section."] = "",
-    output_path: Annotated[str, "Optional HTML output path (default .forge/cache/report.html)."] = "",
+    output_path: Annotated[
+        str, "Optional HTML output path (default .forge/cache/report.html)."
+    ] = "",
 ) -> str:
     result = report_impl(
         project_dir,
@@ -703,14 +820,14 @@ async def forge_report(
     )
     if result.get("status") == "ok" and output_format == "html" and project_dir:
         update_workflow_stage(project_dir, "report")
-    return json.dumps(result, indent=2, ensure_ascii=False)
+    return forge_json(result, indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Read last build state JSON from project cache.")
 async def get_build_state(
     project_dir: Annotated[str, "Project directory."] = "",
 ) -> str:
-    return json.dumps(load_build_state(project_dir), indent=2, ensure_ascii=False)
+    return forge_json(load_build_state(project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Scan .h/.hpp headers using libclang when available, with regex fallback.")
@@ -722,19 +839,21 @@ async def scan_headers(
     use_cache: Annotated[bool | str, "Use scan result cache (default true)."] = True,
 ) -> str:
     result = scan_headers_impl(sdk_root, include_dirs, compile_args, use_clang, use_cache)
-    return json.dumps(result, indent=2, ensure_ascii=False)
+    return forge_json(result, indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Probe an SDK root or .pc file and suggest compile_tests parameters.")
 async def probe_sdk(
     sdk_root: Annotated[str, "SDK root directory or path to a .pc file."],
 ) -> str:
-    return json.dumps(probe_sdk_impl(sdk_root), indent=2, ensure_ascii=False)
+    return forge_json(probe_sdk_impl(sdk_root), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Delete existing GTest files recursively.")
-async def delete_tests(test_dir: Annotated[str, "Directory to scan for existing test files."]) -> str:
-    return json.dumps(delete_tests_impl(test_dir), indent=2, ensure_ascii=False)
+async def delete_tests(
+    test_dir: Annotated[str, "Directory to scan for existing test files."],
+) -> str:
+    return forge_json(delete_tests_impl(test_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Compile GTest sources; auto-loads .forge.yaml/.forge.json from project.")
@@ -749,19 +868,34 @@ async def compile_tests(
     pkg_config_packages: Annotated[list[str] | str, "pkg-config package names."] = "",
     extra_cmake_snippet: Annotated[str, "Extra CMake snippet appended before link lines."] = "",
     gtest_source: Annotated[str, "GTest: auto (default), cached, fetch, or system."] = "auto",
-    gtest_version: Annotated[str, "Pin googletest tag, e.g. 1.14.0; auto picks by toolchain."] = "auto",
+    gtest_version: Annotated[
+        str, "Pin googletest tag, e.g. 1.14.0; auto picks by toolchain."
+    ] = "auto",
     coverage: Annotated[bool | str, "Enable gcov coverage flags."] = False,
     coverage_tool: Annotated[str, "Coverage tool: gcov or llvm-cov."] = "gcov",
     sanitizer: Annotated[str, "Sanitizer: none, asan, ubsan, asan+ubsan."] = "none",
     use_config: Annotated[bool | str, "Load .forge.yaml/.forge.json (default true)."] = True,
 ) -> str:
-    return json.dumps(
+    return forge_json(
         compile_tests_impl(
-            source_dir, build_dir, sdk_include_dirs, sdk_lib_dirs, link_libraries,
-            cmake_prefix_path, find_packages, pkg_config_packages, extra_cmake_snippet,
-            gtest_source, gtest_version, coverage, coverage_tool, sanitizer, use_config,
+            source_dir,
+            build_dir,
+            sdk_include_dirs,
+            sdk_lib_dirs,
+            link_libraries,
+            cmake_prefix_path,
+            find_packages,
+            pkg_config_packages,
+            extra_cmake_snippet,
+            gtest_source,
+            gtest_version,
+            coverage,
+            coverage_tool,
+            sanitizer,
+            use_config,
         ),
-        indent=2, ensure_ascii=False,
+        indent=2,
+        ensure_ascii=False,
     )
 
 
@@ -770,7 +904,7 @@ async def run_tests(
     build_dir: Annotated[str, "Build directory containing run_tests binary."],
     test_filter: Annotated[str, "Optional GTest filter pattern."] = "",
 ) -> str:
-    return json.dumps(run_tests_impl(build_dir, test_filter), indent=2, ensure_ascii=False)
+    return forge_json(run_tests_impl(build_dir, test_filter), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Collect gcov/lcov coverage from a build directory.")
@@ -779,12 +913,16 @@ async def collect_coverage(
     source_dir: Annotated[str, "Optional source directory for gcov."] = "",
     coverage_tool: Annotated[str, "gcov (default) or llvm-cov."] = "gcov",
 ) -> str:
-    return json.dumps(collect_coverage_impl(build_dir, source_dir, coverage_tool), indent=2, ensure_ascii=False)
+    return forge_json(
+        collect_coverage_impl(build_dir, source_dir, coverage_tool), indent=2, ensure_ascii=False
+    )
 
 
 @mcp.tool(description="Generate GMock templates from scan_headers JSON or SDK root.")
 async def generate_mocks(
-    scan_json: Annotated[str, "JSON from scan_headers, or sdk_root if scan_json is a directory path."] = "",
+    scan_json: Annotated[
+        str, "JSON from scan_headers, or sdk_root if scan_json is a directory path."
+    ] = "",
     sdk_root: Annotated[str, "SDK root to scan when scan_json is empty."] = "",
     class_name: Annotated[str, "Optional class name filter."] = "",
 ) -> str:
@@ -793,11 +931,11 @@ async def generate_mocks(
     elif sdk_root.strip():
         data = scan_headers_impl(sdk_root)
     else:
-        return json.dumps({"status": "error", "error": "Provide scan_json or sdk_root."}, indent=2)
+        return forge_json({"status": "error", "error": "Provide scan_json or sdk_root."}, indent=2)
     if isinstance(data, dict) and data.get("status") == "error":
-        return json.dumps(data, indent=2, ensure_ascii=False)
+        return forge_json(data, indent=2, ensure_ascii=False)
     payload = data if isinstance(data, str) else json.dumps(data)
-    return json.dumps(generate_mocks_impl(payload, class_name), indent=2, ensure_ascii=False)
+    return forge_json(generate_mocks_impl(payload, class_name), indent=2, ensure_ascii=False)
 
 
 def main() -> None:

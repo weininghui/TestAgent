@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.infra.cache import scan_cache_dir
 from sdk_forge.domain.util import cmake_path, parse_bool
+from sdk_forge.infra.cache import scan_cache_dir
 
 logger = logging.getLogger("sdk_forge.scan")
 
@@ -136,25 +136,29 @@ def _extract_enum_members(content: str, enum_name: str) -> list[dict[str, str]]:
     return members
 
 
-def _parse_template_functions(content: str, filepath: str, depths: dict[int, int], ns: str) -> list[dict]:
+def _parse_template_functions(
+    content: str, filepath: str, depths: dict[int, int], ns: str
+) -> list[dict]:
     results: list[dict] = []
     for m in _RE_TEMPLATE_FN.finditer(content):
         name = m.group(2)
         if name.startswith("_"):
             continue
         line = content[: m.start()].count("\n") + 1
-        results.append({
-            "name": name,
-            "return_type": m.group(1).strip(),
-            "params": m.group(3).strip(),
-            "line": line,
-            "kind": "function",
-            "virtual": False,
-            "static": False,
-            "is_template": True,
-            "namespace": ns,
-            "conditional": is_conditional_line(line, depths),
-        })
+        results.append(
+            {
+                "name": name,
+                "return_type": m.group(1).strip(),
+                "params": m.group(3).strip(),
+                "line": line,
+                "kind": "function",
+                "virtual": False,
+                "static": False,
+                "is_template": True,
+                "namespace": ns,
+                "conditional": is_conditional_line(line, depths),
+            }
+        )
     return results
 
 
@@ -179,17 +183,19 @@ def parse_header(content: str, filepath: str) -> HeaderFileInfo:
         line_text = content.splitlines()[line - 1] if 0 < line <= len(content.splitlines()) else ""
         is_virtual = "virtual" in line_text
         is_static = "static" in line_text
-        info.functions.append({
-            "name": name,
-            "return_type": m.group("return_type").strip(),
-            "params": m.group("params").strip(),
-            "line": line,
-            "kind": "method" if is_virtual else "function",
-            "virtual": is_virtual,
-            "static": is_static,
-            "namespace": ns,
-            "conditional": is_conditional_line(line, depths),
-        })
+        info.functions.append(
+            {
+                "name": name,
+                "return_type": m.group("return_type").strip(),
+                "params": m.group("params").strip(),
+                "line": line,
+                "kind": "method" if is_virtual else "function",
+                "virtual": is_virtual,
+                "static": is_static,
+                "namespace": ns,
+                "conditional": is_conditional_line(line, depths),
+            }
+        )
         seen_names.add(name)
     for tmpl in _parse_template_functions(content, filepath, depths, ns):
         if tmpl["name"] not in seen_names:
@@ -197,35 +203,41 @@ def parse_header(content: str, filepath: str) -> HeaderFileInfo:
             seen_names.add(tmpl["name"])
     for m in _RE_CLASS.finditer(content):
         line = content[: m.start()].count("\n") + 1
-        info.classes.append({
-            "name": m.group(2),
-            "kind": m.group(1),
-            "line": line,
-            "namespace": ns,
-            "conditional": is_conditional_line(line, depths),
-        })
+        info.classes.append(
+            {
+                "name": m.group(2),
+                "kind": m.group(1),
+                "line": line,
+                "namespace": ns,
+                "conditional": is_conditional_line(line, depths),
+            }
+        )
     for m in _RE_ENUM.finditer(content):
         line = content[: m.start()].count("\n") + 1
         enum_name = m.group(1)
-        info.enums.append({
-            "name": enum_name,
-            "line": line,
-            "namespace": ns,
-            "members": _extract_enum_members(content, enum_name),
-            "conditional": is_conditional_line(line, depths),
-        })
+        info.enums.append(
+            {
+                "name": enum_name,
+                "line": line,
+                "namespace": ns,
+                "members": _extract_enum_members(content, enum_name),
+                "conditional": is_conditional_line(line, depths),
+            }
+        )
     for m in _RE_TYPEDEF.finditer(content):
         line = content[: m.start()].count("\n") + 1
         if m.group(1) is not None and m.group(2) is not None:
             type_str, alias = m.group(1).strip(), m.group(2).strip()
         else:
             alias, type_str = m.group(3).strip(), m.group(4).strip()
-        info.typedefs.append({
-            "type": type_str,
-            "alias": alias,
-            "line": line,
-            "conditional": is_conditional_line(line, depths),
-        })
+        info.typedefs.append(
+            {
+                "type": type_str,
+                "alias": alias,
+                "line": line,
+                "conditional": is_conditional_line(line, depths),
+            }
+        )
     return info
 
 
@@ -266,40 +278,47 @@ def parse_header_clang(filepath: str, compile_args: list[str]) -> HeaderFileInfo
                 except Exception:
                     pass
                 fn_kind = "method" if kind == CursorKind.CXX_METHOD else "function"
-                info.functions.append({
-                    "name": cursor.spelling,
-                    "return_type": cursor.result_type.spelling if cursor.result_type else "",
-                    "params": ", ".join(
-                        f"{c.type.spelling} {c.spelling}".strip() for c in cursor.get_arguments()
-                    ),
-                    "line": line,
-                    "namespace": ns,
-                    "static": is_static,
-                    "virtual": is_virtual,
-                    "kind": fn_kind,
-                    "conditional": is_conditional_line(line, depths),
-                })
+                info.functions.append(
+                    {
+                        "name": cursor.spelling,
+                        "return_type": cursor.result_type.spelling if cursor.result_type else "",
+                        "params": ", ".join(
+                            f"{c.type.spelling} {c.spelling}".strip()
+                            for c in cursor.get_arguments()
+                        ),
+                        "line": line,
+                        "namespace": ns,
+                        "static": is_static,
+                        "virtual": is_virtual,
+                        "kind": fn_kind,
+                        "conditional": is_conditional_line(line, depths),
+                    }
+                )
             elif kind in (CursorKind.CLASS_DECL, CursorKind.STRUCT_DECL, CursorKind.CLASS_TEMPLATE):
-                info.classes.append({
-                    "name": cursor.spelling,
-                    "kind": "class" if kind != CursorKind.STRUCT_DECL else "struct",
-                    "line": line,
-                    "namespace": ns,
-                    "conditional": is_conditional_line(line, depths),
-                })
+                info.classes.append(
+                    {
+                        "name": cursor.spelling,
+                        "kind": "class" if kind != CursorKind.STRUCT_DECL else "struct",
+                        "line": line,
+                        "namespace": ns,
+                        "conditional": is_conditional_line(line, depths),
+                    }
+                )
             elif kind == CursorKind.ENUM_DECL:
                 members = [
                     {"name": c.spelling}
                     for c in cursor.get_children()
                     if c.kind == CursorKind.ENUM_CONSTANT_DECL and c.spelling
                 ]
-                info.enums.append({
-                    "name": cursor.spelling,
-                    "line": line,
-                    "namespace": ns,
-                    "members": members,
-                    "conditional": is_conditional_line(line, depths),
-                })
+                info.enums.append(
+                    {
+                        "name": cursor.spelling,
+                        "line": line,
+                        "namespace": ns,
+                        "members": members,
+                        "conditional": is_conditional_line(line, depths),
+                    }
+                )
             for child in cursor.get_children():
                 walk(child)
 

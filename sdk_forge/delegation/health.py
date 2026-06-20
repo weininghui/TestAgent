@@ -6,9 +6,13 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from sdk_forge.infra.config import load_forge_config
 from sdk_forge.delegation.core import list_delegations_impl
 from sdk_forge.delegation.session_nav import export_session_preview_impl
+from sdk_forge.infra.audit import audit_log
+from sdk_forge.infra.config import load_forge_config
+from sdk_forge.infra.logging_config import get_logger
+
+logger = get_logger("delegation.health")
 
 DEFAULT_STALE_SEC = 900
 DEFAULT_EXPORT_TIMEOUT_SEC = 120
@@ -173,7 +177,9 @@ def _entry_health(entry: dict[str, Any], project_dir: str, include_preview: bool
     preview = export_session_preview_impl(session_id, max_chars=2000)
     if preview.get("status") != "ok":
         row["health"] = "unknown"
-        row["issues"] = [{"kind": "export_error", "message": preview.get("error") or "export failed"}]
+        row["issues"] = [
+            {"kind": "export_error", "message": preview.get("error") or "export failed"}
+        ]
         return row
 
     analyzed = {
@@ -190,7 +196,9 @@ def _entry_health(entry: dict[str, Any], project_dir: str, include_preview: bool
     idle = analyzed.get("idle_sec")
     if row["health"] == "ok" and idle is not None and idle > stale_sec:
         row["health"] = "stale"
-        row["issues"].append({"kind": "stale", "message": f"no assistant activity for {int(idle)}s"})
+        row["issues"].append(
+            {"kind": "stale", "message": f"no assistant activity for {int(idle)}s"}
+        )
     if row["health"] in ("timeout", "tool_failure", "stale"):
         row["recovery"] = _recovery_hint(entry, row["health"])
     return row
@@ -234,6 +242,19 @@ def check_subagent_health_impl(
     pending = listing.get("pending") or []
     rows = [_entry_health(entry, project_dir, include_preview) for entry in pending]
     unhealthy = [r for r in rows if r.get("health") not in ("ok", "pending")]
+    if unhealthy:
+        logger.info(
+            "subagent health check: %d unhealthy of %d pending", len(unhealthy), len(pending)
+        )
+        for row in unhealthy:
+            audit_log(
+                "health_issue",
+                project_dir=project_dir,
+                stage="delegation",
+                agent=str(row.get("agent") or ""),
+                task_id=str(row.get("task_id") or ""),
+                detail={"health": row.get("health"), "issues": row.get("issues")},
+            )
     return {
         "status": "ok",
         "pending_count": len(pending),
@@ -266,7 +287,14 @@ def recover_stalled_subagent_impl(
     if not entry and (listing.get("pending") or []):
         entry = listing["pending"][0]
     if not entry:
-        return {"status": "not_found", "error": "no pending delegation matched"}
+        audit_log(
+            "error", project_dir=project_dir, stage="delegation", detail={"error": "not_found"}
+        )
+        return {
+            "status": "not_found",
+            "error": "no pending delegation matched",
+            "error_code": "DELEGATION_RECOVERY_FAILED",
+        }
 
     act = (action or "retry").strip().lower()
     if act == "skip":
@@ -288,6 +316,25 @@ def recover_stalled_subagent_impl(
         batch_id=entry.get("batch_id"),
         task_id=str(entry.get("task_id") or ""),
         detail={"failure": failure_reason, "recover_action": act, "timeout_recovery": True},
+    )
+    logger.info(
+        "recovery action=%s task_id=%s agent=%s workflow=%s",
+        act,
+        entry.get("task_id"),
+        entry.get("agent"),
+        advance.get("status"),
+    )
+    audit_log(
+        "recovery",
+        project_dir=project_dir,
+        stage="delegation",
+        agent=str(entry.get("agent") or ""),
+        task_id=str(entry.get("task_id") or ""),
+        detail={
+            "action": act,
+            "failure_reason": failure_reason,
+            "workflow_status": advance.get("status"),
+        },
     )
     return {
         "status": "ok",

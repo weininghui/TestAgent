@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.14.0] - 2026-06-20
+
+Production reliability: structured logging, audit trail, sub-agent auto-recovery, error codes.
+
+### Added
+- **`sdk_forge/infra/logging_config.py`**, **`trace.py`**, **`audit.py`**, **`response.py`** — run_id, JSONL audit, centralized logging
+- CLI **`--verbose`**, **`--log-file`**, **`forge health`** (`--auto-recover`, `--include-preview`)
+- **`sdk_forge/delegation/recovery.py`** — auto-recovery with backoff + circuit breaker
+- MCP **`get_forge_audit_log`**; `get_session_context` includes **`recent_audit`**
+- **`ForgeError`** + **`error_code`** on cmake/build failures
+- **[docs/RELIABILITY.md](docs/RELIABILITY.md)** — logging, audit, timeout playbook
+- **`tests/test_reliability.py`** — TestLoggingV512, TestAutoRecoveryV513, TestForgeErrorV514
+- CI: pytest-cov (50% gate), Ruff blocking, macOS smoke job
+
+### Changed
+- **`poll_forge_delegations`** — optional **`auto_recovered`** when `delegation_auto_recovery` enabled
+- Production profile defaults **`delegation_auto_recovery: true`**
+- **`run_mcp.py`** — skill sync path `test-forge` → **`sdk-forge`**
+- MCP responses inject **`run_id`** via `forge_json()`
+
 ## [5.11.0] - 2026-06-20
 
 Layered `sdk_forge` package + sub-agent **timeout recovery** for multi-agent workflows.

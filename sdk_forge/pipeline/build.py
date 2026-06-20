@@ -8,12 +8,24 @@ import sys
 import time
 from pathlib import Path
 
+from sdk_forge.domain.hint_actions import parse_cmake_error_with_actions
+from sdk_forge.domain.util import (
+    cmake_path,
+    normalize_json_list,
+    normalize_str_list,
+    run_subprocess,
+)
 from sdk_forge.infra.cache import gtest_cache_dir
 from sdk_forge.infra.compdb import export_compile_commands_impl
-from sdk_forge.domain.errors import parse_cmake_error
-from sdk_forge.domain.hint_actions import parse_cmake_error_with_actions
-from sdk_forge.infra.gtest import ensure_gtest, gtest_source_path, normalize_gtest_source, resolve_gtest_tag
-from sdk_forge.domain.util import cmake_path, normalize_json_list, normalize_str_list, run_subprocess
+from sdk_forge.infra.gtest import (
+    ensure_gtest,
+    gtest_source_path,
+    normalize_gtest_source,
+    resolve_gtest_tag,
+)
+from sdk_forge.infra.logging_config import get_logger
+
+logger = get_logger("pipeline.build")
 
 
 def gtest_cmake_block(gtest_source: str, gtest_tag: str = "v1.14.0", local_path: str = "") -> str:
@@ -110,7 +122,7 @@ def sdk_link_cmake_block(
         blocks.append("find_package(PkgConfig REQUIRED)")
         for pkg in pkg_config_packages:
             var = re.sub(r"[^A-Za-z0-9_]", "_", pkg).upper()
-            blocks.append(f'pkg_check_modules({var} REQUIRED IMPORTED_TARGET {pkg})')
+            blocks.append(f"pkg_check_modules({var} REQUIRED IMPORTED_TARGET {pkg})")
     for pkg in find_packages:
         name = str(pkg.get("name", "")).strip()
         if not name:
@@ -125,7 +137,9 @@ def sdk_link_cmake_block(
         blocks.append(extra_cmake_snippet.strip())
 
     include_dirs = ["${CMAKE_CURRENT_SOURCE_DIR}", *(cmake_path(item) for item in sdk_include_dirs)]
-    blocks.append("target_include_directories(run_tests PRIVATE\n    " + "\n    ".join(include_dirs) + "\n)")
+    blocks.append(
+        "target_include_directories(run_tests PRIVATE\n    " + "\n    ".join(include_dirs) + "\n)"
+    )
     if sdk_lib_dirs:
         blocks.append(
             "target_link_directories(run_tests PRIVATE\n    "
@@ -237,9 +251,14 @@ def compile_tests_impl(
     probe_context: dict | None = None,
     force_regenerate_cmake: bool | str = False,
 ) -> dict:
-    from sdk_forge.infra.config import compile_params_from_config, load_forge_config, merge_compile_params
     from sdk_forge.domain.util import parse_bool
+    from sdk_forge.infra.config import (
+        compile_params_from_config,
+        load_forge_config,
+        merge_compile_params,
+    )
 
+    logger.info("compile_tests start source=%s build=%s", source_dir, build_dir)
     want_config = parse_bool(use_config, default=True)
     overrides = {
         "sdk_include_dirs": sdk_include_dirs,
@@ -294,7 +313,9 @@ def compile_tests_impl(
                 "path": str(gtest_source_path(gtest_tag)),
                 "downloaded": False,
                 "method": "cmake_fetch",
-                "hint": gtest_fetch.get("error", "git prefetch failed; CMake FetchContent will retry"),
+                "hint": gtest_fetch.get(
+                    "error", "git prefetch failed; CMake FetchContent will retry"
+                ),
             }
 
     cmake_file = src_path / "CMakeLists.txt"
@@ -313,7 +334,9 @@ def compile_tests_impl(
             sdk_lib_dirs=normalize_str_list(params.get("sdk_lib_dirs")),
             link_libraries=normalize_str_list(params.get("link_libraries")),
             cmake_prefix_path=normalize_str_list(params.get("cmake_prefix_path")),
-            find_packages=[p for p in normalize_json_list(params.get("find_packages")) if isinstance(p, dict)],
+            find_packages=[
+                p for p in normalize_json_list(params.get("find_packages")) if isinstance(p, dict)
+            ],
             pkg_config_packages=normalize_str_list(params.get("pkg_config_packages")),
             extra_cmake_snippet=str(params.get("extra_cmake_snippet", "") or ""),
             gtest_source=gtest_mode,
@@ -329,7 +352,10 @@ def compile_tests_impl(
     try:
         result = run_subprocess(["cmake", str(src_path.resolve())], cwd=str(build_path.resolve()))
     except FileNotFoundError:
-        return {"error": "cmake not found. Install CMake and ensure it's in PATH.", "status": "error"}
+        return {
+            "error": "cmake not found. Install CMake and ensure it's in PATH.",
+            "status": "error",
+        }
     except subprocess.TimeoutExpired:
         return {"error": "cmake configure timed out (600s).", "status": "error"}
 
@@ -338,6 +364,7 @@ def compile_tests_impl(
         parsed = parse_cmake_error_with_actions(cmake_output, probe_context)
         return {
             "status": "cmake_error",
+            "error_code": "BUILD_LINK_ERROR",
             "stage": "configure",
             "output": cmake_output,
             "hints": parsed["hints"],
@@ -345,7 +372,9 @@ def compile_tests_impl(
         }
 
     try:
-        build_result = run_subprocess(["cmake", "--build", str(build_path.resolve())], cwd=str(build_path.resolve()))
+        build_result = run_subprocess(
+            ["cmake", "--build", str(build_path.resolve())], cwd=str(build_path.resolve())
+        )
     except subprocess.TimeoutExpired:
         return {"error": "cmake build timed out (600s).", "status": "error"}
 
@@ -356,6 +385,7 @@ def compile_tests_impl(
         parsed = parse_cmake_error_with_actions(combined, probe_context)
         return {
             "status": "cmake_error",
+            "error_code": "BUILD_LINK_ERROR",
             "stage": "build",
             "output": build_output,
             "hints": parsed["hints"],
@@ -384,4 +414,5 @@ def compile_tests_impl(
     }
     if compdb_result.get("status") == "ok":
         result["compile_commands"] = compdb_result.get("path")
+    logger.info("compile_tests end status=%s", result.get("status"))
     return result

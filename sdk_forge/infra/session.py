@@ -8,14 +8,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.infra.learn import load_learned_config
 from sdk_forge.domain.plan_gap import load_plan_gap
+from sdk_forge.infra.audit import read_audit_log
+from sdk_forge.infra.learn import load_learned_config
 from sdk_forge.infra.report import report_impl
-from sdk_forge.pipeline.retry import load_build_state
-from sdk_forge.pipeline.enrich import load_scaffold_quality
-from sdk_forge.pipeline.test_fix import load_proposals
-from sdk_forge.orchestration.workflow import load_workflow_state
 from sdk_forge.orchestration.core import get_orchestration_context
+from sdk_forge.orchestration.workflow import load_workflow_state
+from sdk_forge.pipeline.enrich import load_scaffold_quality
+from sdk_forge.pipeline.retry import load_build_state
+from sdk_forge.pipeline.test_fix import load_proposals
 
 
 def save_plan_state(project_dir: str, plan: dict[str, Any]) -> Path:
@@ -49,7 +50,9 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
     elif isinstance(plan, dict) and plan.get("sdk_root"):
         sdk_root = plan["sdk_root"]
 
-    learned = load_learned_config(sdk_root, str(root)) if sdk_root else {"status": "ok", "found": False}
+    learned = (
+        load_learned_config(sdk_root, str(root)) if sdk_root else {"status": "ok", "found": False}
+    )
 
     report_summary = {}
     if isinstance(build_state, dict) and build_state.get("status") != "error":
@@ -66,6 +69,8 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
     workflow = load_workflow_state(str(root))
     orchestration = get_orchestration_context(str(root))
 
+    recent_audit = read_audit_log(str(root), last_n=20)
+
     return {
         "status": "ok",
         "project_dir": str(root.resolve()),
@@ -80,4 +85,5 @@ def get_session_context_impl(project_dir: str = "") -> dict[str, Any]:
         "scaffold_quality": scaffold_quality if scaffold_quality.get("status") == "ok" else None,
         "compile_commands": str(compdb_path) if compdb_path.is_file() else None,
         "last_report_summary": report_summary or None,
+        "recent_audit": recent_audit.get("events") or [],
     }

@@ -72,7 +72,8 @@ def build_task_dispatches_impl(project_dir: str = "") -> dict[str, Any]:
     return {
         "status": "ok",
         "delegation_mode": "omo",
-        "delegation_concurrency": orch.get("delegation_concurrency") or delegation_concurrency(project_dir),
+        "delegation_concurrency": orch.get("delegation_concurrency")
+        or delegation_concurrency(project_dir),
         "dispatch_protocol": "omo_task_only",
         "gui_task_card": True,
         "forbidden_tools": list(FORBIDDEN_TOOLS),
@@ -104,7 +105,9 @@ def build_task_dispatches_impl(project_dir: str = "") -> dict[str, Any]:
             "必须用 tool call 调用 task，禁止在回复里写 task(...) 代码块。"
             "出现 Task 卡片=成功；出现灰色代码块=失败需重试。"
         ),
-        "orchestration_status": "needs_agent" if dispatchable else ("ok" if orch.get("merge_ready") else "idle"),
+        "orchestration_status": "needs_agent"
+        if dispatchable
+        else ("ok" if orch.get("merge_ready") else "idle"),
         "merge_ready": bool(orch.get("merge_ready")),
     }
 

@@ -4,14 +4,13 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.pipeline.codegen import render_test_p_block
-from sdk_forge.domain.plan_gap import load_plan_gap
 from sdk_forge.domain.plan_gap import _load_plan_state as load_plan_state
-from sdk_forge.pipeline.templates import _render_function_target, _safe_test_suite
+from sdk_forge.domain.plan_gap import load_plan_gap
+from sdk_forge.pipeline.codegen import render_test_p_block
+from sdk_forge.pipeline.templates import _safe_test_suite
 
 
 def coverage_expand_impl(
@@ -67,7 +66,9 @@ def coverage_expand_impl(
         block = render_test_p_block(target, _safe_test_suite(sym))
         if not block:
             continue
-        expanded = block.replace("INSTANTIATE_TEST_SUITE_P(Forge,", "INSTANTIATE_TEST_SUITE_P(ForgeExpand,")
+        expanded = block.replace(
+            "INSTANTIATE_TEST_SUITE_P(Forge,", "INSTANTIATE_TEST_SUITE_P(ForgeExpand,"
+        )
         path.write_text(content.rstrip() + "\n\n// coverage_expand\n" + expanded, encoding="utf-8")
         appended.append(str(path.resolve()))
 

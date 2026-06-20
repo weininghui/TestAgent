@@ -107,11 +107,13 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
             body += "<ul>" + "".join(f"<li>{_esc(h)}</li>" for h in hints[:6]) + "</ul>"
         parts.append(_section("Toolchain", body))
     elif not run and status not in ("ok", "test_failures"):
-        parts.append(_section(
-            "Toolchain",
-            "<p><em>No test run recorded. Do not infer PASS from generated source files alone — "
-            "run <code>build_tests</code> after installing a C++ compiler.</em></p>",
-        ))
+        parts.append(
+            _section(
+                "Toolchain",
+                "<p><em>No test run recorded. Do not infer PASS from generated source files alone — "
+                "run <code>build_tests</code> after installing a C++ compiler.</em></p>",
+            )
+        )
 
     if run:
         results = (
@@ -132,7 +134,7 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
     if coverage_pct is not None:
         cov_body = f"<p>Line coverage: <strong>{_esc(coverage_pct)}%</strong></p>"
         if cached_cov.get("html_report_dir"):
-            cov_body += f'<p>Coverage HTML: <code>{_esc(cached_cov["html_report_dir"])}</code></p>'
+            cov_body += f"<p>Coverage HTML: <code>{_esc(cached_cov['html_report_dir'])}</code></p>"
         parts.append(_section("Coverage", cov_body))
 
     if run.get("status") == "test_failures":
@@ -164,7 +166,9 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
             )
         parts.append(_section("Plan Gap", f"<ul>{''.join(items)}</ul>"))
 
-    quality = state.get("scaffold_quality") or (plan_gap.get("scaffold_quality") if plan_gap else None)
+    quality = state.get("scaffold_quality") or (
+        plan_gap.get("scaffold_quality") if plan_gap else None
+    )
     if quality:
         ratio = quality.get("placeholder_ratio")
         body = (
@@ -175,10 +179,14 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
             body += "<p><em>Needs Agent enrichment before relying on results.</em></p>"
         files = quality.get("files") or []
         if files:
-            body += "<ul>" + "".join(
-                f"<li><code>{_esc(f.get('file'))}</code> — placeholders: {_esc(f.get('total', 0))}</li>"
-                for f in files[:10]
-            ) + "</ul>"
+            body += (
+                "<ul>"
+                + "".join(
+                    f"<li><code>{_esc(f.get('file'))}</code> — placeholders: {_esc(f.get('total', 0))}</li>"
+                    for f in files[:10]
+                )
+                + "</ul>"
+            )
         parts.append(_section("用例质量", body))
 
     assertion_q = state.get("assertion_quality") or state.get("assertion_gate")
@@ -186,25 +194,44 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
         assertion_q = assertion_q.get("quality")
     elif state.get("assertion_gate") and not assertion_q:
         assertion_q = state.get("assertion_gate")
-    if isinstance(assertion_q, dict) and (assertion_q.get("score") is not None or assertion_q.get("weak_tests")):
-        score = assertion_q.get("score", assertion_q.get("quality", {}).get("score") if isinstance(assertion_q.get("quality"), dict) else None)
+    if isinstance(assertion_q, dict) and (
+        assertion_q.get("score") is not None or assertion_q.get("weak_tests")
+    ):
+        score = assertion_q.get(
+            "score",
+            assertion_q.get("quality", {}).get("score")
+            if isinstance(assertion_q.get("quality"), dict)
+            else None,
+        )
         body = f"<p>Assertion quality score: <strong>{_esc(score)}</strong>/100</p>"
-        weak = assertion_q.get("weak_tests") or (assertion_q.get("quality") or {}).get("weak_tests") or []
+        weak = (
+            assertion_q.get("weak_tests")
+            or (assertion_q.get("quality") or {}).get("weak_tests")
+            or []
+        )
         if weak:
-            body += "<ul>" + "".join(
-                f"<li><code>{_esc(w.get('file', '?'))}</code> {_esc(w.get('name', '?'))} "
-                f"— {_esc(', '.join(w.get('issues') or []))}</li>"
-                for w in weak[:15]
-            ) + "</ul>"
-            body += "<p><em>Enrich prompt: fix weak/tautology tests before production merge.</em></p>"
+            body += (
+                "<ul>"
+                + "".join(
+                    f"<li><code>{_esc(w.get('file', '?'))}</code> {_esc(w.get('name', '?'))} "
+                    f"— {_esc(', '.join(w.get('issues') or []))}</li>"
+                    for w in weak[:15]
+                )
+                + "</ul>"
+            )
+            body += (
+                "<p><em>Enrich prompt: fix weak/tautology tests before production merge.</em></p>"
+            )
         parts.append(_section("断言质量", body))
 
     ag = state.get("assertion_gate") or {}
     if ag and not ag.get("skipped") and ag.get("passed") is False:
-        parts.append(_section(
-            "Assertion Gate",
-            f"<p class='badge badge-fail'>BLOCKED</p><p>{_esc('; '.join(ag.get('block_reasons') or []))}</p>",
-        ))
+        parts.append(
+            _section(
+                "Assertion Gate",
+                f"<p class='badge badge-fail'>BLOCKED</p><p>{_esc('; '.join(ag.get('block_reasons') or []))}</p>",
+            )
+        )
 
     proposal_items = (state.get("proposals") or {}).get("proposals") or []
     if proposal_items:
@@ -242,22 +269,28 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
         parts.append(_section("GTest", body))
 
     if compile_info.get("sanitizer") and compile_info.get("sanitizer") not in ("none", ""):
-        parts.append(_section("Sanitizer", f"<p>Mode: <code>{_esc(compile_info['sanitizer'])}</code></p>"))
+        parts.append(
+            _section("Sanitizer", f"<p>Mode: <code>{_esc(compile_info['sanitizer'])}</code></p>")
+        )
 
     gate = state.get("quality_gate") or {}
     if gate:
         passed = gate.get("passed")
         label = "passed" if passed else "failed/warn"
-        parts.append(_section(
-            "Quality Gate",
-            f"<p>Mode: <code>{_esc(gate.get('mode', 'warn'))}</code> — "
-            f"<strong>{label}</strong> "
-            f"(ratio: {_esc(gate.get('ratio'))}, max: {_esc(gate.get('max_placeholder_ratio'))})</p>",
-        ))
+        parts.append(
+            _section(
+                "Quality Gate",
+                f"<p>Mode: <code>{_esc(gate.get('mode', 'warn'))}</code> — "
+                f"<strong>{label}</strong> "
+                f"(ratio: {_esc(gate.get('ratio'))}, max: {_esc(gate.get('max_placeholder_ratio'))})</p>",
+            )
+        )
 
     workflow = state.get("workflow") or {}
     history = workflow.get("history") or []
-    gate_history = [h for h in history if h.get("quality_gate") is not None or h.get("stage") == "quality_gate"]
+    gate_history = [
+        h for h in history if h.get("quality_gate") is not None or h.get("stage") == "quality_gate"
+    ]
     if gate_history:
         items = []
         for h in gate_history[-5:]:
@@ -271,25 +304,32 @@ def format_report_html(state: dict[str, Any], agent_summary: str = "") -> str:
     if not bench and bench_path.is_file():
         try:
             import json as _json
+
             bench = _json.loads(bench_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             bench = {}
     if bench.get("placeholder_ratio") is not None:
-        parts.append(_section(
-            "Benchmark",
-            f"<p>Placeholder ratio: <strong>{_esc(bench.get('placeholder_ratio'))}</strong> — "
-            f"build: <code>{_esc(bench.get('build_status'))}</code>, "
-            f"pass rate: {_esc(bench.get('test_pass_rate'))}</p>",
-        ))
+        parts.append(
+            _section(
+                "Benchmark",
+                f"<p>Placeholder ratio: <strong>{_esc(bench.get('placeholder_ratio'))}</strong> — "
+                f"build: <code>{_esc(bench.get('build_status'))}</code>, "
+                f"pass rate: {_esc(bench.get('test_pass_rate'))}</p>",
+            )
+        )
 
     learned = state.get("learned") or {}
     if learned.get("path"):
-        parts.append(_section("Learned Config", f"<p>Saved to <code>{_esc(learned['path'])}</code></p>"))
+        parts.append(
+            _section("Learned Config", f"<p>Saved to <code>{_esc(learned['path'])}</code></p>")
+        )
 
     if status not in ("ok",):
         hints = compile_info.get("hints") or []
         if hints:
-            parts.append(_section("Hints", f"<ul>{''.join(f'<li>{_esc(h)}</li>' for h in hints)}</ul>"))
+            parts.append(
+                _section("Hints", f"<ul>{''.join(f'<li>{_esc(h)}</li>' for h in hints)}</ul>")
+            )
 
     parts.append('<p class="footer">Generated by SDK Forge</p>')
     parts.extend(["</body>", "</html>"])

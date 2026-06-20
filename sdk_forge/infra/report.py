@@ -8,12 +8,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.pipeline.enrich import load_scaffold_quality
 from sdk_forge.domain.plan_gap import load_plan_gap
 from sdk_forge.infra.report_html import format_report_html
+from sdk_forge.orchestration.workflow import load_workflow_state
+from sdk_forge.pipeline.enrich import load_scaffold_quality
 from sdk_forge.pipeline.retry import load_build_state
 from sdk_forge.pipeline.test_fix import load_proposals, parse_test_failures
-from sdk_forge.orchestration.workflow import load_workflow_state
 
 
 def _enrich_report_state(project_dir: str, state: dict[str, Any]) -> dict[str, Any]:
@@ -42,6 +42,7 @@ def _enrich_report_state(project_dir: str, state: dict[str, Any]) -> dict[str, A
         enriched["scaffold_quality"] = gap.get("scaffold_quality")
 
     from sdk_forge.pipeline.assertion_quality import load_assertion_quality
+
     aq = load_assertion_quality(root)
     if aq.get("status") == "ok":
         enriched["assertion_quality"] = aq
@@ -96,8 +97,8 @@ def format_report_markdown(state: dict[str, Any]) -> str:
     if run:
         lines.append("## Test Results")
         lines.append("")
-        lines.append(f"| Metric | Value |")
-        lines.append(f"|--------|-------|")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
         lines.append(f"| Total | {run.get('total', 0)} |")
         lines.append(f"| Passed | {run.get('passed', 0)} |")
         lines.append(f"| Failed | {run.get('failed', 0)} |")
@@ -139,7 +140,9 @@ def format_report_markdown(state: dict[str, Any]) -> str:
                 if item.get("file"):
                     lines.append(f"  - `{item['file']}:{item.get('line', '?')}`")
                 if item.get("expected") is not None:
-                    lines.append(f"  - expected `{item.get('expected')}`, actual `{item.get('actual')}`")
+                    lines.append(
+                        f"  - expected `{item.get('expected')}`, actual `{item.get('actual')}`"
+                    )
                 if item.get("suggestion"):
                     lines.append(f"  - {item['suggestion']}")
             lines.append("")
@@ -171,8 +174,10 @@ def format_report_markdown(state: dict[str, Any]) -> str:
         lines.append("## Build Attempts")
         lines.append("")
         for att in attempts:
-            lines.append(f"- Attempt {att.get('attempt')}: **{att.get('result')}**"
-                         + (f" ({att.get('stage')})" if att.get("stage") else ""))
+            lines.append(
+                f"- Attempt {att.get('attempt')}: **{att.get('result')}**"
+                + (f" ({att.get('stage')})" if att.get("stage") else "")
+            )
             applied = att.get("actions_applied") or []
             if applied:
                 for action in applied:
@@ -240,7 +245,9 @@ def build_auto_summary(state: dict[str, Any]) -> str:
     elif status == "compiler_not_found":
         tc = state.get("toolchain") or {}
         lines.append("未检测到 C++ 编译器，测试源码已生成但未编译、未运行。")
-        lines.append("请安装 Visual Studio Build Tools（含 C++ 工作负载）或 MinGW-w64 后重新 build_tests。")
+        lines.append(
+            "请安装 Visual Studio Build Tools（含 C++ 工作负载）或 MinGW-w64 后重新 build_tests。"
+        )
         if tc.get("hint"):
             lines.append(f"详情：{tc['hint']}")
     elif not run and status not in ("ok",):
@@ -312,7 +319,9 @@ def report_impl(
 
     if output_format == "html":
         html_content = format_report_html(state, agent_summary=agent_summary)
-        html_path = Path(output_path) if output_path else Path(root) / ".forge" / "cache" / "report.html"
+        html_path = (
+            Path(output_path) if output_path else Path(root) / ".forge" / "cache" / "report.html"
+        )
         html_path.parent.mkdir(parents=True, exist_ok=True)
         html_path.write_text(html_content, encoding="utf-8")
         return {

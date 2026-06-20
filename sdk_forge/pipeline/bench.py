@@ -10,14 +10,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sdk_forge.domain.util import parse_bool
 from sdk_forge.infra.config import load_forge_config
-from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl
+from sdk_forge.infra.session import save_plan_state
 from sdk_forge.pipeline.core import build_pipeline_impl
+from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl
 from sdk_forge.pipeline.plan import suggest_test_plan_impl
 from sdk_forge.pipeline.quality_gate import run_scaffold_quality_gate
-from sdk_forge.infra.session import save_plan_state
 from sdk_forge.pipeline.templates import generate_test_skeleton_impl
-from sdk_forge.domain.util import parse_bool
 
 
 def run_bench_impl(
@@ -43,7 +43,6 @@ def run_bench_impl(
 
     tests_dir = str(root / (config.get("tests_dir") or "tests"))
     build_dir = str(root / (config.get("build_dir") or "build"))
-    tests_path = Path(tests_dir)
     build_path = Path(build_dir)
 
     plan = suggest_test_plan_impl(sdk_root=sdk)

@@ -52,8 +52,10 @@ powershell -ExecutionPolicy Bypass -File scripts/enable-auto-update.ps1
 
 设置环境变量 **`FORGE_AUTO_UPDATE=1`** 后，每次 OpenCode 启动 MCP（`run_mcp.py`）时会：
 
-1. 每 **6 小时最多一次** `git fetch` + 若落后则 `reset` 到 `origin/main`
+1. 每 **6 小时最多一次** `git fetch` + 若落后则 **`git reset --hard origin/main`**（会丢弃插件目录内所有未推送的本地修改）
 2. 再自动 `pip install -e .`（已有逻辑）
+
+> **警告：** `FORGE_AUTO_UPDATE=1` 会在落后远程时使用 **`git reset --hard`**，本地未 commit 的改动会永久丢失。仅建议在纯只读插件目录启用；开发 fork 请勿开启。
 
 **Windows（用户环境变量，永久生效）：**
 

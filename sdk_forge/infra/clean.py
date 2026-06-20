@@ -14,8 +14,17 @@ def delete_tests_impl(test_dir: str) -> dict:
         return {"error": f"Directory not found: {test_dir}", "status": "error"}
 
     patterns = [
-        "*_test.cpp", "*_test.cc", "*_test.cxx", "test_*.cpp", "test_*.cc",
-        "*_unittest.cpp", "*_unittest.cc", "*_tests.cpp", "*_tests.cc", "*Test.cpp", "*Test.cc",
+        "*_test.cpp",
+        "*_test.cc",
+        "*_test.cxx",
+        "test_*.cpp",
+        "test_*.cc",
+        "*_unittest.cpp",
+        "*_unittest.cc",
+        "*_tests.cpp",
+        "*_tests.cc",
+        "*Test.cpp",
+        "*Test.cc",
     ]
     deleted_set: set[str] = set()
     for pattern in patterns:
@@ -27,4 +36,9 @@ def delete_tests_impl(test_dir: str) -> dict:
                 except OSError as exc:
                     logger.warning("Cannot delete %s: %s", f, exc)
     deleted = sorted(deleted_set)
-    return {"status": "ok", "directory": test_dir, "deleted_count": len(deleted), "deleted_files": deleted}
+    return {
+        "status": "ok",
+        "directory": test_dir,
+        "deleted_count": len(deleted),
+        "deleted_files": deleted,
+    }

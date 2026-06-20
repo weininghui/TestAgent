@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from sdk_forge.domain.util import parse_bool
+from sdk_forge.infra.profile import resolve_forge_config
 from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl
 from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl
-from sdk_forge.infra.profile import resolve_forge_config
-from sdk_forge.domain.util import parse_bool
 
 
 def quality_gate_settings(config: dict[str, Any], profile_override: str = "") -> dict[str, Any]:
@@ -41,8 +41,12 @@ def quality_gate_settings(config: dict[str, Any], profile_override: str = "") ->
         "forge_profile": cfg.get("forge_profile", "default"),
         "assertion_quality_gate": parse_bool(cfg.get("assertion_quality_gate", True), default=True),
         "min_assertion_score": min_assertion_score,
-        "block_weak_tests": parse_bool(cfg.get("block_weak_tests", is_production), default=is_production),
-        "block_agent_markers": parse_bool(cfg.get("block_agent_markers", is_production), default=is_production),
+        "block_weak_tests": parse_bool(
+            cfg.get("block_weak_tests", is_production), default=is_production
+        ),
+        "block_agent_markers": parse_bool(
+            cfg.get("block_agent_markers", is_production), default=is_production
+        ),
         "coverage_gate": parse_bool(cfg.get("coverage_gate", is_production), default=is_production),
         "min_line_coverage_pct": min_line_coverage_pct,
     }
@@ -123,7 +127,11 @@ def run_assertion_quality_gate(
             block_reasons.append(f"{len(agent_tests)} test(s) still contain // AGENT:")
 
     if settings["block_weak_tests"]:
-        weak_only = [t for t in weak_tests if "weak" in (t.get("issues") or []) or "tautology" in (t.get("issues") or [])]
+        weak_only = [
+            t
+            for t in weak_tests
+            if "weak" in (t.get("issues") or []) or "tautology" in (t.get("issues") or [])
+        ]
         if weak_only:
             block_reasons.append(f"{len(weak_only)} weak/tautology test(s)")
 

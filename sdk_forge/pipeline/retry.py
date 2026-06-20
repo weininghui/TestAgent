@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.pipeline.build import compile_tests_impl
+from sdk_forge.domain.util import parse_bool
 from sdk_forge.infra.config import (
     apply_actions_to_params,
     compile_params_from_config,
@@ -16,10 +16,10 @@ from sdk_forge.infra.config import (
     save_forge_config,
 )
 from sdk_forge.infra.learn import learn_from_build, merge_learned_into_params
+from sdk_forge.infra.toolchain import compiler_gate_result
+from sdk_forge.pipeline.build import compile_tests_impl
 from sdk_forge.pipeline.probe import probe_sdk_impl
 from sdk_forge.pipeline.run import run_tests_impl
-from sdk_forge.infra.toolchain import compiler_gate_result
-from sdk_forge.domain.util import parse_bool
 
 
 def _params_to_compile_kwargs(params: dict[str, Any]) -> dict[str, Any]:
@@ -42,10 +42,18 @@ def _params_to_compile_kwargs(params: dict[str, Any]) -> dict[str, Any]:
 def _sync_params_to_config(config: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
     updated = dict(config)
     for key in (
-        "sdk_include_dirs", "sdk_lib_dirs", "link_libraries",
-        "cmake_prefix_path", "pkg_config_packages", "find_packages",
-        "extra_cmake_snippet", "gtest_source", "gtest_version",
-        "coverage", "coverage_tool", "sanitizer",
+        "sdk_include_dirs",
+        "sdk_lib_dirs",
+        "link_libraries",
+        "cmake_prefix_path",
+        "pkg_config_packages",
+        "find_packages",
+        "extra_cmake_snippet",
+        "gtest_source",
+        "gtest_version",
+        "coverage",
+        "coverage_tool",
+        "sanitizer",
     ):
         if key in params:
             updated[key] = params[key]
@@ -80,13 +88,16 @@ def build_with_retry_impl(
     if sdk:
         probe = probe_sdk_impl(sdk)
         if probe.get("status") == "ok":
-            params = merge_compile_params(params, {
-                "sdk_include_dirs": probe.get("sdk_include_dirs", []),
-                "sdk_lib_dirs": probe.get("sdk_lib_dirs", []),
-                "link_libraries": probe.get("link_libraries", []),
-                "cmake_prefix_path": probe.get("cmake_prefix_path", []),
-                "pkg_config_packages": probe.get("pkg_config_packages", []),
-            })
+            params = merge_compile_params(
+                params,
+                {
+                    "sdk_include_dirs": probe.get("sdk_include_dirs", []),
+                    "sdk_lib_dirs": probe.get("sdk_lib_dirs", []),
+                    "link_libraries": probe.get("link_libraries", []),
+                    "cmake_prefix_path": probe.get("cmake_prefix_path", []),
+                    "pkg_config_packages": probe.get("pkg_config_packages", []),
+                },
+            )
 
     if sdk:
         params = merge_learned_into_params(params, sdk, str(start))
@@ -100,15 +111,17 @@ def build_with_retry_impl(
         blocked = compiler_gate_result()
 
     if blocked:
-        blocked.update({
-            "config_file": config.get("_config_path"),
-            "source_dir": src,
-            "build_dir": bld,
-            "sdk_root": sdk or None,
-            "attempts": [],
-            "auto_fixed": False,
-            "retries_used": 0,
-        })
+        blocked.update(
+            {
+                "config_file": config.get("_config_path"),
+                "source_dir": src,
+                "build_dir": bld,
+                "sdk_root": sdk or None,
+                "attempts": [],
+                "auto_fixed": False,
+                "retries_used": 0,
+            }
+        )
         if toolchain_setup:
             blocked["toolchain_setup"] = toolchain_setup
         return blocked

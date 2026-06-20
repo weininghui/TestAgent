@@ -47,9 +47,9 @@ def _opencode_config_root() -> Path | None:
 
 
 def _sync_opencode_assets() -> None:
-    """Copy forge agents + test-forge skill into OpenCode user config."""
+    """Copy forge agents + sdk-forge skill into OpenCode user config."""
     agents_src = ROOT / ".opencode" / "agents"
-    skill_src = ROOT / ".opencode" / "skills" / "test-forge" / "SKILL.md"
+    skill_src = ROOT / ".opencode" / "skills" / "sdk-forge" / "SKILL.md"
     base = _opencode_config_root()
     if not base:
         return
@@ -62,7 +62,7 @@ def _sync_opencode_assets() -> None:
             except OSError:
                 pass
     if skill_src.is_file():
-        skill_dst = base / "skills" / "test-forge"
+        skill_dst = base / "skills" / "sdk-forge"
         skill_dst.mkdir(parents=True, exist_ok=True)
         try:
             shutil.copy2(skill_src, skill_dst / "SKILL.md")
@@ -120,7 +120,13 @@ def _maybe_git_auto_update() -> None:
         )
         count = int((behind.stdout or "0").strip() or "0")
         if count > 0:
-            subprocess.run(["git", "checkout", "main"], cwd=str(ROOT), capture_output=True, timeout=30, check=False)
+            subprocess.run(
+                ["git", "checkout", "main"],
+                cwd=str(ROOT),
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
             subprocess.run(
                 ["git", "reset", "--hard", "origin/main"],
                 cwd=str(ROOT),
@@ -163,6 +169,11 @@ def _ensure_editable_package() -> None:
 
 
 def main() -> None:
+    from sdk_forge.infra.logging_config import configure_forge_logging
+    from sdk_forge.infra.trace import new_run_id, set_run_id
+
+    configure_forge_logging()
+    set_run_id(new_run_id())
     _maybe_git_auto_update()
     _ensure_runtime_deps()
     _ensure_editable_package()

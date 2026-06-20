@@ -59,7 +59,9 @@ def cmake_path(path: str) -> str:
     return str(Path(path).resolve()).replace("\\", "/")
 
 
-def run_subprocess(cmd: list[str], cwd: str | None = None, timeout: int = 600) -> subprocess.CompletedProcess[str]:
+def run_subprocess(
+    cmd: list[str], cwd: str | None = None, timeout: int = 600
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
         cwd=cwd,

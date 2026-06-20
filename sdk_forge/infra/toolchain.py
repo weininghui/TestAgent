@@ -5,7 +5,6 @@ C/C++ 工具链检测与安装指引。
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -54,10 +53,10 @@ def _find_cl_via_vswhere() -> str | None:
 
 def _windows_install_hints() -> list[str]:
     return [
-        "Install Visual Studio 2022 Build Tools with workload \"Desktop development with C++\" "
+        'Install Visual Studio 2022 Build Tools with workload "Desktop development with C++" '
         "(includes cl.exe and Windows SDK).",
         "Or install MinGW-w64 / MSYS2 and add g++ to PATH.",
-        "After install, open \"x64 Native Tools Command Prompt for VS\" or restart the terminal.",
+        'After install, open "x64 Native Tools Command Prompt for VS" or restart the terminal.',
         "Run forge doctor to verify cxx_compiler before build_tests.",
     ]
 
@@ -80,7 +79,12 @@ def check_cxx_toolchain() -> dict[str, Any]:
         for name in ("g++", "clang++"):
             alt = shutil.which(name)
             if alt:
-                info = {"kind": name.replace("++", ""), "major": None, "version": "", "available": True}
+                info = {
+                    "kind": name.replace("++", ""),
+                    "major": None,
+                    "version": "",
+                    "available": True,
+                }
                 path = alt
                 break
 
@@ -99,8 +103,10 @@ def check_cxx_toolchain() -> dict[str, Any]:
 
     available = bool(info.get("available"))
     kind = info.get("kind") or "unknown"
-    hints = [] if available else (
-        _windows_install_hints() if sys.platform == "win32" else _linux_install_hints()
+    hints = (
+        []
+        if available
+        else (_windows_install_hints() if sys.platform == "win32" else _linux_install_hints())
     )
 
     message = ""
@@ -109,7 +115,7 @@ def check_cxx_toolchain() -> dict[str, Any]:
         if info.get("on_path") is False:
             hint = (
                 f"MSVC found at {path} but cl.exe is not on PATH. "
-                "Use \"x64 Native Tools Command Prompt for VS\" or add VC\\Tools\\...\\bin to PATH."
+                'Use "x64 Native Tools Command Prompt for VS" or add VC\\Tools\\...\\bin to PATH.'
             )
         else:
             hint = f"C++ compiler ready ({kind})."
@@ -150,11 +156,13 @@ def compiler_gate_result() -> dict[str, Any] | None:
         "status": "compiler_not_found",
         "error": tc.get("message") or "C++ compiler not found",
         "hints": tc.get("hints") or [tc.get("hint", "")],
-        "actions": [{
-            "type": "setup_toolchain",
-            "hint": "Run setup_cxx_toolchain(confirm=true) or: forge setup-toolchain --confirm",
-            "methods": detect_installers().get("options") or [],
-        }],
+        "actions": [
+            {
+                "type": "setup_toolchain",
+                "hint": "Run setup_cxx_toolchain(confirm=true) or: forge setup-toolchain --confirm",
+                "methods": detect_installers().get("options") or [],
+            }
+        ],
         "toolchain": tc,
         "compile": {
             "status": "compiler_not_found",

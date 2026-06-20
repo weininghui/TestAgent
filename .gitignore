@@ -24,6 +24,8 @@ out/
 # Development / IDE
 .omo/
 .pytest_cache/
+.coverage
+htmlcov/
 .opencode/node_modules/
 .vscode/
 .idea/

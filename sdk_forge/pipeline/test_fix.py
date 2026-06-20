@@ -97,21 +97,27 @@ def parse_test_failures(run_result: dict[str, Any]) -> dict[str, Any]:
     for item in failures:
         test_name = item.get("test", "")
         if item.get("expected") is not None or item.get("actual") is not None:
-            actions.append({
-                "type": "review_assertion",
-                "test": test_name,
-                "hint": f"EXPECT mismatch — expected {item.get('expected')!r}, actual {item.get('actual')!r}",
-                "file": item.get("file"),
-                "line": item.get("line"),
-            })
+            actions.append(
+                {
+                    "type": "review_assertion",
+                    "test": test_name,
+                    "hint": f"EXPECT mismatch — expected {item.get('expected')!r}, actual {item.get('actual')!r}",
+                    "file": item.get("file"),
+                    "line": item.get("line"),
+                }
+            )
             item["suggestion"] = "Review test inputs and SDK behavior; update EXPECT_* in source"
         else:
-            actions.append({
-                "type": "review_test",
-                "test": test_name,
-                "hint": "Test failed — inspect output section for this RUN block",
-            })
-            item.setdefault("suggestion", "Read GTest output near [ RUN ] / [ FAILED ] for this test")
+            actions.append(
+                {
+                    "type": "review_test",
+                    "test": test_name,
+                    "hint": "Test failed — inspect output section for this RUN block",
+                }
+            )
+            item.setdefault(
+                "suggestion", "Read GTest output near [ RUN ] / [ FAILED ] for this test"
+            )
 
     return {
         "status": "ok",
@@ -236,18 +242,20 @@ def propose_test_fixes_impl(
             suggested = _suggest_assertion_line(current, str(expected), str(actual))
             reason = "Expected/Actual mismatch from GTest"
 
-        proposals.append({
-            "type": "propose_assertion_fix",
-            "requires_confirmation": True,
-            "test": failure.get("test"),
-            "file": str(file_path.name),
-            "path": str(file_path.resolve()),
-            "line": line_no,
-            "current": current.strip(),
-            "suggested": (suggested or current).strip(),
-            "reason": reason,
-            "context": _read_line_context(file_path, int(line_no)),
-        })
+        proposals.append(
+            {
+                "type": "propose_assertion_fix",
+                "requires_confirmation": True,
+                "test": failure.get("test"),
+                "file": str(file_path.name),
+                "path": str(file_path.resolve()),
+                "line": line_no,
+                "current": current.strip(),
+                "suggested": (suggested or current).strip(),
+                "reason": reason,
+                "context": _read_line_context(file_path, int(line_no)),
+            }
+        )
 
     result = {
         "status": "ok",
@@ -331,18 +339,22 @@ def apply_proposed_fixes_impl(
                     f"Line {line_no} changed since proposal for {prop.get('test')} — re-run propose_test_fixes"
                 )
                 continue
-            indent = lines[line_no - 1][: len(lines[line_no - 1]) - len(lines[line_no - 1].lstrip())]
+            indent = lines[line_no - 1][
+                : len(lines[line_no - 1]) - len(lines[line_no - 1].lstrip())
+            ]
             new_line = suggested if suggested.endswith("\n") else suggested + "\n"
             if not new_line.startswith(indent) and indent:
                 new_line = indent + new_line.lstrip()
             lines[line_no - 1] = new_line
             file_path.write_text("".join(lines), encoding="utf-8")
-            applied.append({
-                "index": idx,
-                "test": prop.get("test"),
-                "file": str(file_path),
-                "line": line_no,
-            })
+            applied.append(
+                {
+                    "index": idx,
+                    "test": prop.get("test"),
+                    "file": str(file_path),
+                    "line": line_no,
+                }
+            )
         except OSError as exc:
             errors.append(f"{file_path.name}: {exc}")
 

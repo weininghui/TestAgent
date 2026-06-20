@@ -201,7 +201,6 @@ def generate_test_skeleton_impl(
     out.mkdir(parents=True, exist_ok=True)
     do_overwrite = parse_bool(overwrite, default=False)
     do_group = parse_bool(group_by_header, default=False)
-    do_skip_existing = parse_bool(skip_existing, default=False)
 
     written: list[str] = []
     skipped: list[str] = []

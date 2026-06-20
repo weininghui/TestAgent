@@ -9,11 +9,25 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-_INT_TYPES = frozenset({
-    "int", "int8_t", "int16_t", "int32_t", "int64_t",
-    "uint8_t", "uint16_t", "uint32_t", "uint64_t",
-    "size_t", "ssize_t", "long", "short", "unsigned", "unsigned int",
-})
+_INT_TYPES = frozenset(
+    {
+        "int",
+        "int8_t",
+        "int16_t",
+        "int32_t",
+        "int64_t",
+        "uint8_t",
+        "uint16_t",
+        "uint32_t",
+        "uint64_t",
+        "size_t",
+        "ssize_t",
+        "long",
+        "short",
+        "unsigned",
+        "unsigned int",
+    }
+)
 _FLOAT_TYPES = frozenset({"float", "double", "long double"})
 
 
@@ -54,13 +68,15 @@ def parse_params(params: str) -> list[ParamInfo]:
             continue
         name = tokens[-1] if len(tokens) > 1 else "arg"
         type_name = " ".join(tokens[:-1]) if len(tokens) > 1 else tokens[0]
-        result.append(ParamInfo(
-            type_name=type_name.strip(),
-            name=name.strip(),
-            is_pointer=is_pointer,
-            is_const=is_const,
-            is_ref=is_ref,
-        ))
+        result.append(
+            ParamInfo(
+                type_name=type_name.strip(),
+                name=name.strip(),
+                is_pointer=is_pointer,
+                is_const=is_const,
+                is_ref=is_ref,
+            )
+        )
     return result
 
 
@@ -244,7 +260,7 @@ def _smart_function_body(symbol: str, scenario: dict[str, Any], target: dict[str
         if ret_kind == "void" or return_type == "void":
             return f"    {_format_call(symbol, [], namespace)};\n    SUCCEED();"
         if ret_kind == "string":
-            return f'    auto result = {_format_call(symbol, [], namespace)};\n    EXPECT_FALSE(result.empty());'
+            return f"    auto result = {_format_call(symbol, [], namespace)};\n    EXPECT_FALSE(result.empty());"
         return f"    // AGENT: fill assertions for {symbol}()\n    auto result = {_format_call(symbol, [], namespace)};\n    (void)result;"
 
     if len(params) == 1:
@@ -294,11 +310,13 @@ def _smart_function_body(symbol: str, scenario: dict[str, Any], target: dict[str
         if scenario_name == "overflow":
             return f"    EXPECT_EQ({_format_call(symbol, ['2147483647', '1'], namespace)}, {_format_call(symbol, ['2147483647', '1'], namespace)});"
         if scenario_name == "error":
-            sanitizer = (target.get("sanitizer") or scenario.get("requires_sanitizer") or "none").lower()
+            sanitizer = (
+                target.get("sanitizer") or scenario.get("requires_sanitizer") or "none"
+            ).lower()
             if sanitizer in ("asan", "asan+ubsan", "ubsan") and any(p.is_pointer for p in params):
                 return (
                     f"    // ASan: null pointer — enable with sanitizer in .forge.yaml\n"
-                    f"    // {_format_call(symbol, ['nullptr'] + ['1'] * max(0, len(params)-1), namespace)};"
+                    f"    // {_format_call(symbol, ['nullptr'] + ['1'] * max(0, len(params) - 1), namespace)};"
                 )
             if op == "div":
                 call = _format_call(symbol, ["1", "0"], namespace)
@@ -316,9 +334,14 @@ def _smart_function_body(symbol: str, scenario: dict[str, Any], target: dict[str
         if scenario_name == "boundary":
             return f"    {_format_call(symbol, [empty_lit], namespace)};  // empty string"
 
-    if "<typename T>" in (target.get("params") or "") or "template" in (target.get("return_type") or "").lower():
+    if (
+        "<typename T>" in (target.get("params") or "")
+        or "template" in (target.get("return_type") or "").lower()
+    ):
         if scenario_name == "normal":
-            return f"    EXPECT_EQ({namespace + '::' if namespace else ''}{symbol}<int>(5, 0, 10), 5);"
+            return (
+                f"    EXPECT_EQ({namespace + '::' if namespace else ''}{symbol}<int>(5, 0, 10), 5);"
+            )
         if scenario_name == "boundary":
             return (
                 f"    EXPECT_EQ({namespace + '::' if namespace else ''}{symbol}<int>(-1, 0, 10), 0);\n"
@@ -415,8 +438,14 @@ def render_enum_body(
                 key = str(name).lower()
                 lines.append(f'    EXPECT_EQ({parser}("{key}"), {qual}::{name});')
             else:
-                lines.append(f"    EXPECT_EQ(static_cast<int>({qual}::{name}), static_cast<int>({qual}::{name}));")
-        return "\n".join(lines) if lines else f"    EXPECT_EQ(static_cast<int>({qual}::{members[0].get('name')}), static_cast<int>({qual}::{members[0].get('name')}));"
+                lines.append(
+                    f"    EXPECT_EQ(static_cast<int>({qual}::{name}), static_cast<int>({qual}::{name}));"
+                )
+        return (
+            "\n".join(lines)
+            if lines
+            else f"    EXPECT_EQ(static_cast<int>({qual}::{members[0].get('name')}), static_cast<int>({qual}::{members[0].get('name')}));"
+        )
     if scenario.get("name") == "boundary" and members and len(members) > 1:
         m = members[-1]
         if parser:
@@ -449,16 +478,24 @@ def render_test_p_block(target: dict[str, Any], suite: str) -> str:
 
     qual = f"{namespace}::{symbol}" if namespace else symbol
     fixture = f"{suite}Param"
-    if kind == "int" and len(params) >= 2 and all(classify_type(p.type_name) == "int" for p in params[:2]):
-        pairs = ["std::make_tuple(0, 1)", "std::make_tuple(-1, 1)", "std::make_tuple(2147483647, 1)"]
+    if (
+        kind == "int"
+        and len(params) >= 2
+        and all(classify_type(p.type_name) == "int" for p in params[:2])
+    ):
+        pairs = [
+            "std::make_tuple(0, 1)",
+            "std::make_tuple(-1, 1)",
+            "std::make_tuple(2147483647, 1)",
+        ]
         fixture2 = f"{suite}Param2"
         lines = [
             f"typedef std::tuple<int, int> {fixture2}Tuple;",
             f"class {fixture2} : public ::testing::TestWithParam<{fixture2}Tuple> {{}};",
             f"TEST_P({fixture2}, IntPairBoundary) {{",
-            f"    auto p = GetParam();",
-            f"    int a = std::get<0>(p);",
-            f"    int b = std::get<1>(p);",
+            "    auto p = GetParam();",
+            "    int a = std::get<0>(p);",
+            "    int b = std::get<1>(p);",
             f"    EXPECT_EQ({qual}(a, b), {qual}(a, b));",
             "}",
             f"INSTANTIATE_TEST_SUITE_P(Forge, {fixture2}, ::testing::Values({', '.join(pairs)}));",
@@ -470,7 +507,7 @@ def render_test_p_block(target: dict[str, Any], suite: str) -> str:
         lines = [
             f"class {fixture} : public ::testing::TestWithParam<int> {{}};",
             f"TEST_P({fixture}, BoundaryValues) {{",
-            f"    int v = GetParam();",
+            "    int v = GetParam();",
             f"    EXPECT_EQ({qual}(v, 1), {qual}(v, 1));",
             "}",
             f"INSTANTIATE_TEST_SUITE_P(Forge, {fixture}, ::testing::Values({', '.join(values)}));",
@@ -482,16 +519,18 @@ def render_test_p_block(target: dict[str, Any], suite: str) -> str:
         f"struct {fixture}String {{ std::string input; }};",
         f"class {fixture} : public ::testing::TestWithParam<{fixture}String> {{}};",
         f"TEST_P({fixture}, StringBoundary) {{",
-        f"    auto p = GetParam();",
-        f"    (void)p;",
+        "    auto p = GetParam();",
+        "    (void)p;",
         f"    // AGENT: {qual}(p.input)",
         "}",
     ]
-    inst = ", ".join(f'{{{v}}}' for v in values)
-    lines.extend([
-        f"INSTANTIATE_TEST_SUITE_P(Forge, {fixture}, ::testing::Values({inst}));",
-        "",
-    ])
+    inst = ", ".join(f"{{{v}}}" for v in values)
+    lines.extend(
+        [
+            f"INSTANTIATE_TEST_SUITE_P(Forge, {fixture}, ::testing::Values({inst}));",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

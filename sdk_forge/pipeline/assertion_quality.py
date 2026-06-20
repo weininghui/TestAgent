@@ -45,13 +45,15 @@ def _extract_test_blocks(content: str) -> list[dict[str, Any]]:
                     break
         body = content[start + 1 : end]
         line = content[: match.start()].count("\n") + 1
-        blocks.append({
-            "suite": suite,
-            "case": case,
-            "name": f"{suite}.{case}",
-            "line": line,
-            "body": body,
-        })
+        blocks.append(
+            {
+                "suite": suite,
+                "case": case,
+                "name": f"{suite}.{case}",
+                "line": line,
+                "body": body,
+            }
+        )
     return blocks
 
 
@@ -153,18 +155,24 @@ def analyze_assertion_quality_impl(
                 weak_tests.append({**entry, "file": path.name})
 
         avg_score = round(file_score_sum / max(len(blocks), 1), 1) if blocks else 100
-        per_file.append({
-            "file": path.name,
-            "path": str(path.resolve()),
-            "test_count": len(blocks),
-            "score": avg_score,
-            "tests": file_tests,
-        })
+        per_file.append(
+            {
+                "file": path.name,
+                "path": str(path.resolve()),
+                "test_count": len(blocks),
+                "score": avg_score,
+                "tests": file_tests,
+            }
+        )
 
-    overall = round(
-        sum(f["score"] for f in per_file) / max(len(per_file), 1),
-        1,
-    ) if per_file else 100
+    overall = (
+        round(
+            sum(f["score"] for f in per_file) / max(len(per_file), 1),
+            1,
+        )
+        if per_file
+        else 100
+    )
 
     result = {
         "status": "ok",

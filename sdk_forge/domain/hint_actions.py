@@ -7,13 +7,15 @@ from typing import Any
 
 from sdk_forge.domain.errors import parse_cmake_error
 
-ACTION_TYPES = frozenset({
-    "merge_link_libraries",
-    "merge_sdk_include_dirs",
-    "merge_sdk_lib_dirs",
-    "merge_cmake_prefix_path",
-    "merge_pkg_config_packages",
-})
+ACTION_TYPES = frozenset(
+    {
+        "merge_link_libraries",
+        "merge_sdk_include_dirs",
+        "merge_sdk_lib_dirs",
+        "merge_cmake_prefix_path",
+        "merge_pkg_config_packages",
+    }
+)
 
 
 def _action(action_type: str, values: list[str], reason: str = "") -> dict[str, Any]:
@@ -57,10 +59,13 @@ def parse_cmake_error_with_actions(
         symbol = m.group(1) if m else ""
         libs = _guess_lib_from_symbol(symbol, probe)
         if libs:
-            actions.append(_action(
-                "merge_link_libraries", libs,
-                f"Link library for symbol '{symbol}'" if symbol else "Add SDK link library",
-            ))
+            actions.append(
+                _action(
+                    "merge_link_libraries",
+                    libs,
+                    f"Link library for symbol '{symbol}'" if symbol else "Add SDK link library",
+                )
+            )
         probe_libs = probe.get("link_libraries") or []
         for lib in probe_libs:
             actions.append(_action("merge_link_libraries", [lib], "From probe_sdk suggestion"))
@@ -84,10 +89,13 @@ def parse_cmake_error_with_actions(
         header = f"{m.group(1)}.h{m.group(2) or ''}" if m else ""
         probe_includes = probe.get("sdk_include_dirs") or []
         if probe_includes:
-            actions.append(_action(
-                "merge_sdk_include_dirs", list(probe_includes),
-                f"Include path for '{header}'" if header else "From probe_sdk",
-            ))
+            actions.append(
+                _action(
+                    "merge_sdk_include_dirs",
+                    list(probe_includes),
+                    f"Include path for '{header}'" if header else "From probe_sdk",
+                )
+            )
 
     if "could not find" in lower and "find_package" in lower:
         prefix = probe.get("cmake_prefix_path") or []

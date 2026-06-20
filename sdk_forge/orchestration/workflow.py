@@ -25,7 +25,9 @@ STAGES = (
 )
 
 
-def update_workflow_stage(project_dir: str, stage: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
+def update_workflow_stage(
+    project_dir: str, stage: str, detail: dict[str, Any] | None = None
+) -> dict[str, Any]:
     if stage not in STAGES:
         return {"status": "error", "error": f"Unknown stage: {stage}. Valid: {', '.join(STAGES)}"}
 
@@ -121,7 +123,9 @@ def _load_state_raw(project_dir: str) -> dict[str, Any]:
 
 def _save_state_raw(project_dir: str, state: dict[str, Any]) -> None:
     state["updated_at"] = datetime.now(timezone.utc).isoformat()
-    _workflow_path(project_dir).write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    _workflow_path(project_dir).write_text(
+        json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def get_enrich_round(project_dir: str = "") -> int:
@@ -149,10 +153,16 @@ def clear_agent_runs(project_dir: str = "", agent: str = "") -> dict[str, Any]:
     else:
         state["agent_runs"] = []
     _save_state_raw(project_dir, state)
-    return {"status": "ok", "cleared_agent": agent or "all", "remaining_runs": len(state["agent_runs"])}
+    return {
+        "status": "ok",
+        "cleared_agent": agent or "all",
+        "remaining_runs": len(state["agent_runs"]),
+    }
 
 
-def set_review_verdict(project_dir: str, verdict: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
+def set_review_verdict(
+    project_dir: str, verdict: str, detail: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Store forge-review outcome: pass | block."""
     v = verdict.strip().lower()
     if v not in ("pass", "block"):
@@ -178,7 +188,9 @@ def clear_review_verdict(project_dir: str = "") -> None:
     _save_state_raw(project_dir, state)
 
 
-def save_scan_batch_result(project_dir: str, batch_id: int, scan_result: dict[str, Any]) -> dict[str, Any]:
+def save_scan_batch_result(
+    project_dir: str, batch_id: int, scan_result: dict[str, Any]
+) -> dict[str, Any]:
     """Store one parallel scan batch result in workflow.json."""
     state = _load_state_raw(project_dir)
     batches = state.setdefault("scan_batches", {})

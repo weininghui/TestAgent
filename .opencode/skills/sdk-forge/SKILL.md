@@ -55,7 +55,11 @@ multi_agent_batch_size: auto
 scan_batch_size: 8
 auto_oracle_draft: true
 max_enrich_rounds: 3
+delegation_auto_recovery: true   # production default (v5.13)
+delegation_auto_recovery_max: 2
 ```
+
+Reliability: [docs/RELIABILITY.md](../../docs/RELIABILITY.md) — logging, audit, `forge health --auto-recover`.
 
 See [docs/DELEGATION.md](../../docs/DELEGATION.md).
 

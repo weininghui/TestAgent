@@ -36,7 +36,9 @@ def _is_noise_symbol(name: str, kind: str = "function") -> bool:
 
 
 def _target_priority(target: dict[str, Any]) -> tuple[int, str]:
-    kind_rank = {"function": 0, "enum": 1, "class": 2, "struct": 2}.get(target.get("kind", "function"), 3)
+    kind_rank = {"function": 0, "enum": 1, "class": 2, "struct": 2}.get(
+        target.get("kind", "function"), 3
+    )
     conditional_rank = 1 if target.get("conditional") else 0
     mock_rank = 1 if target.get("needs_mock") else 0
     return (kind_rank, conditional_rank, mock_rank, str(target.get("symbol", "")).lower())
@@ -86,7 +88,7 @@ def _extract_enum_members(text: str, enum_name: str) -> list[dict[str, str]]:
 
 def _find_parser_for_enum(functions: list[dict], enum_name: str) -> str:
     for fn in functions:
-        ret = (fn.get("return_type") or "")
+        ret = fn.get("return_type") or ""
         if enum_name in ret and "string" in (fn.get("params") or "").lower():
             return fn.get("name", "")
     for fn in functions:
@@ -104,32 +106,45 @@ def _function_scenarios(fn: dict[str, Any]) -> list[dict[str, Any]]:
         {"name": "boundary", "description": "edge values (0, max, empty)", "priority": "medium"},
     ]
     if parsed and classify_type(parsed[0].type_name) == "int":
-        scenarios.append({"name": "overflow", "description": "integer overflow edge", "priority": "low"})
+        scenarios.append(
+            {"name": "overflow", "description": "integer overflow edge", "priority": "low"}
+        )
     if parsed and classify_type(parsed[0].type_name) == "string":
-        scenarios.append({"name": "empty_input", "description": "empty string input", "priority": "medium"})
+        scenarios.append(
+            {"name": "empty_input", "description": "empty string input", "priority": "medium"}
+        )
     if _has_pointer(params):
-        scenarios.append({
-            "name": "error",
-            "description": "null pointer / invalid buffer",
-            "priority": "high",
-            "requires_sanitizer": True,
-        })
+        scenarios.append(
+            {
+                "name": "error",
+                "description": "null pointer / invalid buffer",
+                "priority": "high",
+                "requires_sanitizer": True,
+            }
+        )
     else:
-        scenarios.append({
-            "name": "error",
-            "description": "invalid input / error return path",
-            "priority": "low",
-        })
+        scenarios.append(
+            {
+                "name": "error",
+                "description": "invalid input / error return path",
+                "priority": "low",
+            }
+        )
     return scenarios
 
 
 def _class_scenarios(cls: dict[str, Any], file_info: dict[str, Any]) -> list[dict[str, Any]]:
     virtual_methods = [
-        fn for fn in file_info.get("functions", [])
+        fn
+        for fn in file_info.get("functions", [])
         if fn.get("virtual") and fn.get("class") == cls.get("name")
     ]
     scenarios: list[dict[str, Any]] = [
-        {"name": "construction", "description": "default or parameterized construction", "priority": "high"},
+        {
+            "name": "construction",
+            "description": "default or parameterized construction",
+            "priority": "high",
+        },
         {"name": "methods", "description": "exercise public methods", "priority": "high"},
         {"name": "copy_move", "description": "copy/move semantics", "priority": "low"},
         {"name": "destructor", "description": "RAII teardown", "priority": "low"},
@@ -141,7 +156,9 @@ def _class_scenarios(cls: dict[str, Any], file_info: dict[str, Any]) -> list[dic
         },
     ]
     if virtual_methods:
-        scenarios.append({"name": "mock", "description": "use GMock for virtual methods", "priority": "high"})
+        scenarios.append(
+            {"name": "mock", "description": "use GMock for virtual methods", "priority": "high"}
+        )
     return scenarios
 
 
@@ -191,8 +208,14 @@ def suggest_test_plan_impl(
     sanitizer = str((config or {}).get("sanitizer") or "none").lower()
     targets: list[dict[str, Any]] = []
     summary = {
-        "functions": 0, "classes": 0, "enums": 0, "virtual": 0,
-        "conditional": 0, "filtered": 0, "parameterized": 0, "deduped": 0,
+        "functions": 0,
+        "classes": 0,
+        "enums": 0,
+        "virtual": 0,
+        "conditional": 0,
+        "filtered": 0,
+        "parameterized": 0,
+        "deduped": 0,
     }
 
     for file_info in scan_data.get("files", []):
@@ -202,7 +225,8 @@ def suggest_test_plan_impl(
         functions = file_info.get("functions", [])
         class_names = {cls.get("name") for cls in file_info.get("classes", []) if cls.get("name")}
         method_names = {
-            fn.get("name") for fn in functions
+            fn.get("name")
+            for fn in functions
             if fn.get("kind") == "method" or fn.get("class") in class_names
         }
 
@@ -222,21 +246,23 @@ def suggest_test_plan_impl(
             use_tp = _should_use_test_p(fn)
             if use_tp:
                 summary["parameterized"] += 1
-            targets.append({
-                "symbol": symbol,
-                "kind": "function",
-                "file": filename,
-                "return_type": fn.get("return_type", ""),
-                "params": fn.get("params", ""),
-                "namespace": fn.get("namespace") or namespace,
-                "is_template": bool(fn.get("is_template")),
-                "sanitizer": sanitizer,
-                "scenarios": _function_scenarios(fn),
-                "conditional": conditional,
-                "needs_mock": False,
-                "use_test_p": use_tp,
-                "suggested_compile_args": ["-DFEATURE_ENABLED"] if conditional else [],
-            })
+            targets.append(
+                {
+                    "symbol": symbol,
+                    "kind": "function",
+                    "file": filename,
+                    "return_type": fn.get("return_type", ""),
+                    "params": fn.get("params", ""),
+                    "namespace": fn.get("namespace") or namespace,
+                    "is_template": bool(fn.get("is_template")),
+                    "sanitizer": sanitizer,
+                    "scenarios": _function_scenarios(fn),
+                    "conditional": conditional,
+                    "needs_mock": False,
+                    "use_test_p": use_tp,
+                    "suggested_compile_args": ["-DFEATURE_ENABLED"] if conditional else [],
+                }
+            )
             summary["functions"] += 1
 
         virtual_in_file = [fn for fn in functions if fn.get("virtual")]
@@ -251,24 +277,28 @@ def suggest_test_plan_impl(
                 methods = virtual_in_file
                 has_virtual = True
             else:
-                methods = [fn for fn in virtual_in_file if name.lower() in (fn.get("name") or "").lower()]
+                methods = [
+                    fn for fn in virtual_in_file if name.lower() in (fn.get("name") or "").lower()
+                ]
                 has_virtual = bool(methods) or bool(virtual_in_file and len(class_names) == 1)
             conditional = bool(cls.get("conditional"))
             if has_virtual:
                 summary["virtual"] += 1
             if conditional:
                 summary["conditional"] += 1
-            targets.append({
-                "symbol": name,
-                "kind": cls.get("kind", "class"),
-                "file": filename,
-                "namespace": namespace,
-                "methods": [m.get("name") for m in methods if m.get("name")],
-                "scenarios": _class_scenarios(cls, file_info),
-                "conditional": conditional,
-                "needs_mock": has_virtual,
-                "suggested_compile_args": ["-DFEATURE_ENABLED"] if conditional else [],
-            })
+            targets.append(
+                {
+                    "symbol": name,
+                    "kind": cls.get("kind", "class"),
+                    "file": filename,
+                    "namespace": namespace,
+                    "methods": [m.get("name") for m in methods if m.get("name")],
+                    "scenarios": _class_scenarios(cls, file_info),
+                    "conditional": conditional,
+                    "needs_mock": has_virtual,
+                    "suggested_compile_args": ["-DFEATURE_ENABLED"] if conditional else [],
+                }
+            )
             summary["classes"] += 1
 
         for enum_info in file_info.get("enums", []):
@@ -277,17 +307,19 @@ def suggest_test_plan_impl(
                 continue
             members = enum_info.get("members") or _extract_enum_members(header_text, enum_name)
             parser = _find_parser_for_enum(functions, enum_name)
-            targets.append({
-                "symbol": enum_name,
-                "kind": "enum",
-                "file": filename,
-                "namespace": enum_info.get("namespace") or namespace,
-                "enum_members": members,
-                "parser_function": parser,
-                "scenarios": _enum_scenarios(),
-                "conditional": bool(enum_info.get("conditional")),
-                "needs_mock": False,
-            })
+            targets.append(
+                {
+                    "symbol": enum_name,
+                    "kind": "enum",
+                    "file": filename,
+                    "namespace": enum_info.get("namespace") or namespace,
+                    "enum_members": members,
+                    "parser_function": parser,
+                    "scenarios": _enum_scenarios(),
+                    "conditional": bool(enum_info.get("conditional")),
+                    "needs_mock": False,
+                }
+            )
             summary["enums"] += 1
 
         for td in file_info.get("typedefs", []):
@@ -296,21 +328,33 @@ def suggest_test_plan_impl(
             if "(*)" in type_str or "(*" in type_str:
                 if _is_noise_symbol(alias, "function"):
                     continue
-                targets.append({
-                    "symbol": alias,
-                    "kind": "typedef",
-                    "file": filename,
-                    "namespace": namespace,
-                    "typedef_type": type_str,
-                    "scenarios": [{"name": "normal", "description": "function pointer smoke", "priority": "low"}],
-                    "conditional": bool(td.get("conditional")),
-                    "needs_mock": False,
-                })
+                targets.append(
+                    {
+                        "symbol": alias,
+                        "kind": "typedef",
+                        "file": filename,
+                        "namespace": namespace,
+                        "typedef_type": type_str,
+                        "scenarios": [
+                            {
+                                "name": "normal",
+                                "description": "function pointer smoke",
+                                "priority": "low",
+                            }
+                        ],
+                        "conditional": bool(td.get("conditional")),
+                        "needs_mock": False,
+                    }
+                )
 
     seen: set[tuple[str, str, str]] = set()
     deduped: list[dict[str, Any]] = []
     for target in targets:
-        key = (str(target.get("symbol", "")), str(target.get("kind", "")), str(target.get("file", "")))
+        key = (
+            str(target.get("symbol", "")),
+            str(target.get("kind", "")),
+            str(target.get("file", "")),
+        )
         if key in seen:
             summary["deduped"] += 1
             continue

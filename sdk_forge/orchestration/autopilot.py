@@ -7,20 +7,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from sdk_forge.domain.plan_gap import _load_plan_state as load_plan_state
+from sdk_forge.domain.test_files import list_test_file_basenames
+from sdk_forge.infra.audit import audit_log
 from sdk_forge.infra.config import load_forge_config, save_forge_config
 from sdk_forge.infra.doctor import doctor_impl
-from sdk_forge.pipeline.init import init_project_impl
-from sdk_forge.orchestration.core import get_orchestration_context
-from sdk_forge.pipeline.plan import suggest_test_plan_impl
-from sdk_forge.domain.plan_gap import _load_plan_state as load_plan_state
+from sdk_forge.infra.logging_config import get_logger
 from sdk_forge.infra.profile import resolve_forge_config
+from sdk_forge.infra.session import save_plan_state
+from sdk_forge.infra.toolchain_install import ensure_toolchain_impl
+from sdk_forge.orchestration.core import get_orchestration_context
+from sdk_forge.orchestration.workflow import update_workflow_stage
+from sdk_forge.pipeline.init import init_project_impl
+from sdk_forge.pipeline.plan import suggest_test_plan_impl
 from sdk_forge.pipeline.retry import load_build_state
 from sdk_forge.pipeline.scan import scan_headers_impl
-from sdk_forge.infra.session import save_plan_state
 from sdk_forge.pipeline.templates import generate_test_skeleton_impl
-from sdk_forge.domain.test_files import list_test_file_basenames
-from sdk_forge.infra.toolchain_install import ensure_toolchain_impl
-from sdk_forge.orchestration.workflow import update_workflow_stage
+
+logger = get_logger("orchestration.autopilot")
 
 
 def _resolve_project_dir(sdk_root: str, project_dir: str) -> Path:
@@ -61,8 +65,11 @@ def run_autopilot_impl(
     steps: list[str] = []
 
     if auto_init and not (root / ".forge.yaml").is_file():
+        logger.info("autopilot stage_start init project=%s", root)
+        audit_log("stage_start", project_dir=str(root), stage="init")
         init_project_impl(str(root), sdk_root=sdk_root or "../sdk")
         steps.append("init")
+        audit_log("stage_end", project_dir=str(root), stage="init")
 
     if sdk_root and (root / ".forge.yaml").is_file():
         cfg = load_forge_config(start=root)
@@ -89,6 +96,8 @@ def run_autopilot_impl(
     plan = load_plan_state(str(root))
     has_plan = plan.get("status") != "error" and bool(plan.get("targets"))
     if not has_plan and sdk_root:
+        logger.info("autopilot stage_start scan+plan sdk=%s", sdk_root)
+        audit_log("stage_start", project_dir=str(root), stage="scan")
         scan = scan_headers_impl(sdk_root, use_cache=True)
         if scan.get("status") == "ok":
             plan = suggest_test_plan_impl(scan_json=scan, sdk_root=sdk_root)
@@ -96,10 +105,13 @@ def run_autopilot_impl(
                 save_plan_state(str(root), plan)
                 update_workflow_stage(str(root), "plan")
                 steps.append("scan+plan")
+        audit_log("stage_end", project_dir=str(root), stage="scan")
 
     test_files = list_test_file_basenames(str(root))
     plan_ok = plan.get("status") == "ok" and bool(plan.get("targets"))
     if not test_files and plan_ok:
+        logger.info("autopilot stage_start scaffold project=%s", root)
+        audit_log("stage_start", project_dir=str(root), stage="scaffold")
         tests_dir = root / "tests"
         tests_dir.mkdir(parents=True, exist_ok=True)
         scaffold = generate_test_skeleton_impl(
@@ -112,6 +124,7 @@ def run_autopilot_impl(
         if scaffold.get("status") == "ok":
             update_workflow_stage(str(root), "scaffold")
             steps.append("scaffold")
+        audit_log("stage_end", project_dir=str(root), stage="scaffold")
 
     orchestration = get_orchestration_context(str(root))
     next_actions = orchestration.get("next_actions") or []

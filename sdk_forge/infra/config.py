@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-
 FORGE_CONFIG_NAMES = (".forge.yaml", ".forge.yml", ".forge.json")
 
 
@@ -35,7 +34,9 @@ def _parse_yaml(text: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def load_forge_config(path: str | Path | None = None, start: str | Path | None = None) -> dict[str, Any]:
+def load_forge_config(
+    path: str | Path | None = None, start: str | Path | None = None
+) -> dict[str, Any]:
     config_path: Path | None
     if path:
         config_path = Path(path)
@@ -101,11 +102,16 @@ def compile_params_from_config(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def merge_compile_params(config_params: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+def merge_compile_params(
+    config_params: dict[str, Any], overrides: dict[str, Any]
+) -> dict[str, Any]:
     merged = dict(config_params)
     list_keys = (
-        "sdk_include_dirs", "sdk_lib_dirs", "link_libraries",
-        "cmake_prefix_path", "pkg_config_packages",
+        "sdk_include_dirs",
+        "sdk_lib_dirs",
+        "link_libraries",
+        "cmake_prefix_path",
+        "pkg_config_packages",
     )
     for key in list_keys:
         base = list(merged.get(key) or [])
@@ -114,11 +120,19 @@ def merge_compile_params(config_params: dict[str, Any], overrides: dict[str, Any
             continue
         if isinstance(extra, str):
             from sdk_forge.domain.util import normalize_str_list
+
             extra_list = normalize_str_list(extra)
         else:
             extra_list = list(extra)
         merged[key] = list(dict.fromkeys([*base, *extra_list]))
-    for key in ("extra_cmake_snippet", "gtest_source", "gtest_version", "coverage_tool", "sanitizer", "find_packages"):
+    for key in (
+        "extra_cmake_snippet",
+        "gtest_source",
+        "gtest_version",
+        "coverage_tool",
+        "sanitizer",
+        "find_packages",
+    ):
         if overrides.get(key) not in (None, "", []):
             merged[key] = overrides[key]
     if overrides.get("coverage") is not None:
@@ -150,7 +164,9 @@ def apply_actions_to_params(
         if not values:
             continue
         existing = overrides.get(param_key, params.get(param_key, []))
-        overrides[param_key] = list(dict.fromkeys([*list(existing or []), *[str(v) for v in values]]))
+        overrides[param_key] = list(
+            dict.fromkeys([*list(existing or []), *[str(v) for v in values]])
+        )
     return merge_compile_params(params, overrides)
 
 
@@ -162,19 +178,44 @@ def save_forge_config(config: dict[str, Any]) -> dict[str, Any]:
 
     path = Path(config_path)
     keys_to_save = (
-        "sdk_root", "tests_dir", "build_dir",
-        "sdk_include_dirs", "sdk_lib_dirs", "link_libraries",
-        "cmake_prefix_path", "pkg_config_packages", "find_packages",
-        "extra_cmake_snippet", "gtest_source", "gtest_version",
-        "coverage", "coverage_tool", "sanitizer",
-        "scaffold_quality_gate", "max_placeholder_ratio", "quality_gate_mode", "auto_report",
-        "multi_agent_batch_size", "forge_profile", "autopilot_profile",
-        "max_enrich_rounds", "auto_golden_snapshot", "max_agent_retries",
-        "scan_batch_size", "auto_oracle_draft",
+        "sdk_root",
+        "tests_dir",
+        "build_dir",
+        "sdk_include_dirs",
+        "sdk_lib_dirs",
+        "link_libraries",
+        "cmake_prefix_path",
+        "pkg_config_packages",
+        "find_packages",
+        "extra_cmake_snippet",
+        "gtest_source",
+        "gtest_version",
+        "coverage",
+        "coverage_tool",
+        "sanitizer",
+        "scaffold_quality_gate",
+        "max_placeholder_ratio",
+        "quality_gate_mode",
+        "auto_report",
+        "multi_agent_batch_size",
+        "forge_profile",
+        "autopilot_profile",
+        "max_enrich_rounds",
+        "auto_golden_snapshot",
+        "max_agent_retries",
+        "scan_batch_size",
+        "auto_oracle_draft",
         "delegation_concurrency",
         "delegation_stale_sec",
-        "min_assertion_score", "block_weak_tests", "block_agent_markers",
-        "assertion_quality_gate", "coverage_gate", "min_line_coverage_pct",
+        "delegation_auto_recovery",
+        "delegation_auto_recovery_max",
+        "delegation_retry_backoff_sec",
+        "min_assertion_score",
+        "block_weak_tests",
+        "block_agent_markers",
+        "assertion_quality_gate",
+        "coverage_gate",
+        "min_line_coverage_pct",
     )
     payload = {k: config[k] for k in keys_to_save if k in config}
 
@@ -183,8 +224,10 @@ def save_forge_config(config: dict[str, Any]) -> dict[str, Any]:
     else:
         try:
             import yaml  # type: ignore[import-untyped]
-        except ImportError as exc:
+        except ImportError:
             return {"status": "error", "error": "PyYAML required to save .forge.yaml"}
-        path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
+        path.write_text(
+            yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8"
+        )
 
     return {"status": "ok", "config_file": str(path.resolve())}

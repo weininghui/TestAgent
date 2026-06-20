@@ -27,61 +27,75 @@ def detect_installers() -> dict[str, Any]:
 
     if sys.platform == "win32":
         if _which("winget"):
-            options.append({
-                "method": "winget-msvc",
-                "label": "Visual Studio 2022 Build Tools (MSVC, recommended for yaml-cpp)",
-                "manager": "winget",
-                "requires_admin": True,
-                "estimated_minutes": 20,
-            })
-            options.append({
-                "method": "winget-mingw",
-                "label": "WinLibs MinGW-w64 (g++, faster install)",
-                "manager": "winget",
-                "requires_admin": False,
-                "estimated_minutes": 5,
-            })
+            options.append(
+                {
+                    "method": "winget-msvc",
+                    "label": "Visual Studio 2022 Build Tools (MSVC, recommended for yaml-cpp)",
+                    "manager": "winget",
+                    "requires_admin": True,
+                    "estimated_minutes": 20,
+                }
+            )
+            options.append(
+                {
+                    "method": "winget-mingw",
+                    "label": "WinLibs MinGW-w64 (g++, faster install)",
+                    "manager": "winget",
+                    "requires_admin": False,
+                    "estimated_minutes": 5,
+                }
+            )
         if _which("choco"):
-            options.append({
-                "method": "choco-mingw",
-                "label": "MinGW via Chocolatey",
-                "manager": "choco",
-                "requires_admin": True,
-                "estimated_minutes": 10,
-            })
+            options.append(
+                {
+                    "method": "choco-mingw",
+                    "label": "MinGW via Chocolatey",
+                    "manager": "choco",
+                    "requires_admin": True,
+                    "estimated_minutes": 10,
+                }
+            )
     elif sys.platform == "darwin":
         if _which("brew"):
-            options.append({
-                "method": "brew-llvm",
-                "label": "LLVM/clang++ via Homebrew",
-                "manager": "brew",
+            options.append(
+                {
+                    "method": "brew-llvm",
+                    "label": "LLVM/clang++ via Homebrew",
+                    "manager": "brew",
+                    "requires_admin": False,
+                    "estimated_minutes": 10,
+                }
+            )
+        options.append(
+            {
+                "method": "xcode-cli",
+                "label": "Xcode Command Line Tools (clang++)",
+                "manager": "xcode-select",
                 "requires_admin": False,
-                "estimated_minutes": 10,
-            })
-        options.append({
-            "method": "xcode-cli",
-            "label": "Xcode Command Line Tools (clang++)",
-            "manager": "xcode-select",
-            "requires_admin": False,
-            "estimated_minutes": 15,
-        })
+                "estimated_minutes": 15,
+            }
+        )
     else:
         if _which("apt-get"):
-            options.append({
-                "method": "apt-build-essential",
-                "label": "build-essential + cmake (Debian/Ubuntu)",
-                "manager": "apt",
-                "requires_admin": True,
-                "estimated_minutes": 5,
-            })
+            options.append(
+                {
+                    "method": "apt-build-essential",
+                    "label": "build-essential + cmake (Debian/Ubuntu)",
+                    "manager": "apt",
+                    "requires_admin": True,
+                    "estimated_minutes": 5,
+                }
+            )
         if _which("dnf"):
-            options.append({
-                "method": "dnf-gcc",
-                "label": "gcc-c++ + cmake (Fedora/RHEL)",
-                "manager": "dnf",
-                "requires_admin": True,
-                "estimated_minutes": 5,
-            })
+            options.append(
+                {
+                    "method": "dnf-gcc",
+                    "label": "gcc-c++ + cmake (Fedora/RHEL)",
+                    "manager": "dnf",
+                    "requires_admin": True,
+                    "estimated_minutes": 5,
+                }
+            )
 
     return {
         "platform": sys.platform,
@@ -109,19 +123,29 @@ def _build_install_command(method: str) -> tuple[list[str], int, str] | None:
     if method == "winget-msvc":
         return (
             [
-                "winget", "install", "-e", "--id", "Microsoft.VisualStudio.2022.BuildTools",
-                "--accept-package-agreements", "--accept-source-agreements",
+                "winget",
+                "install",
+                "-e",
+                "--id",
+                "Microsoft.VisualStudio.2022.BuildTools",
+                "--accept-package-agreements",
+                "--accept-source-agreements",
                 "--override",
                 "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended",
             ],
             3600,
-            "Restart terminal or use \"x64 Native Tools Command Prompt for VS\", then run forge doctor.",
+            'Restart terminal or use "x64 Native Tools Command Prompt for VS", then run forge doctor.',
         )
     if method == "winget-mingw":
         return (
             [
-                "winget", "install", "-e", "--id", "BrechtSanders.WinLibs.POSIX.UCRT",
-                "--accept-package-agreements", "--accept-source-agreements",
+                "winget",
+                "install",
+                "-e",
+                "--id",
+                "BrechtSanders.WinLibs.POSIX.UCRT",
+                "--accept-package-agreements",
+                "--accept-source-agreements",
             ],
             900,
             "Add MinGW bin directory to PATH if g++ is not found, then run forge doctor.",
@@ -150,9 +174,17 @@ def _build_install_command(method: str) -> tuple[list[str], int, str] | None:
             base = ["sudo"] + base
         return (base, 600, "Run forge doctor to verify g++.")
     if method == "brew-llvm":
-        return (["brew", "install", "llvm", "cmake"], 900, "Ensure $(brew --prefix llvm)/bin is on PATH.")
+        return (
+            ["brew", "install", "llvm", "cmake"],
+            900,
+            "Ensure $(brew --prefix llvm)/bin is on PATH.",
+        )
     if method == "xcode-cli":
-        return (["xcode-select", "--install"], 60, "Complete the GUI dialog, then run forge doctor.")
+        return (
+            ["xcode-select", "--install"],
+            60,
+            "Complete the GUI dialog, then run forge doctor.",
+        )
     return None
 
 

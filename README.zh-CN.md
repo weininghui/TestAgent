@@ -8,7 +8,7 @@
 
 面向 C/C++ SDK 的 OpenCode 插件与 **独立 CLI**（`forge`）：扫描头文件、生成 GTest 用例、链接真实 SDK 编译运行，并输出 HTML 报告。
 
-**当前版本：[v5.11.0](docs/releases/RELEASE_NOTES_v5.11.0.md)** — 分层包结构 + 多 agent 超时恢复。
+**当前版本：[v5.14.0](docs/releases/RELEASE_NOTES_v5.14.0.md)** — 生产级可靠性：日志、audit、子 Agent 自动恢复。
 
 上一版：[v5.10.0](docs/releases/RELEASE_NOTES_v5.10.0.md) — 仅保留 OpenCode `task()` 派发，对齐 GUI Task 卡片。
 
@@ -296,7 +296,7 @@ python -m pytest tests/ -v
 ## 发布
 
 - [全部 Release](https://github.com/weininghui/TestAgent/releases)
-- 最新：[RELEASE_NOTES_v5.11.0.md](docs/releases/RELEASE_NOTES_v5.11.0.md)
+- 最新：[RELEASE_NOTES_v5.14.0.md](docs/releases/RELEASE_NOTES_v5.14.0.md)
 
 ## 许可证
 

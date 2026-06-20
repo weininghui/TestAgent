@@ -27,11 +27,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-asyncio
+          pip install pytest pytest-asyncio pytest-cov
           pip install -e .
 
       - name: Run unit tests
-        run: python -m pytest tests/ -v -k "not TestCompileAndRun and not TestCoveragePipeline and not TestCliIntegration"
+        run: python -m pytest tests/ -v -k "not TestCompileAndRun and not TestCoveragePipeline and not TestCliIntegration" --cov=sdk_forge --cov-report=term-missing --cov-fail-under=50
 
       - name: Bench metrics (no build)
         run: forge bench --project-dir examples/yaml_cpp_bench --no-build --no-clean
@@ -133,6 +133,31 @@ jobs:
           python -m pytest tests/ -v -k "TestCompileAndRun and not pkg_config and not test_medium"
           python -m pytest tests/ -v -k TestCliIntegration
 
+  integration-macos:
+    name: Python + CLI smoke (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+          pip install -e .
+
+      - name: Run fast unit tests
+        run: python -m pytest tests/ -v -k "not TestCompileAndRun and not TestCoveragePipeline and not TestCliIntegration"
+
+      - name: Forge doctor smoke
+        run: forge doctor
+
   scan-clang:
     name: libclang scan (optional)
     runs-on: ubuntu-latest
@@ -162,7 +187,6 @@ jobs:
   lint:
     name: Ruff lint
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

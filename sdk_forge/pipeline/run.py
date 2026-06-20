@@ -6,8 +6,8 @@ import re
 import subprocess
 from pathlib import Path
 
-from sdk_forge.pipeline.build import find_test_binary
 from sdk_forge.domain.util import run_subprocess
+from sdk_forge.pipeline.build import find_test_binary
 
 
 def run_tests_impl(build_dir: str, test_filter: str = "") -> dict:
@@ -15,7 +15,10 @@ def run_tests_impl(build_dir: str, test_filter: str = "") -> dict:
     binary = find_test_binary(build_path)
 
     if binary is None or not binary.exists():
-        return {"error": f"Test binary not found in {build_dir}. Run compile_tests first.", "status": "error"}
+        return {
+            "error": f"Test binary not found in {build_dir}. Run compile_tests first.",
+            "status": "error",
+        }
 
     cmd = [str(binary)]
     if test_filter:

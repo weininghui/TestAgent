@@ -59,6 +59,13 @@ max_agent_retries: 2
 - 等待通知后 **`background_output(task_id)`** → **`advance_forge_workflow`**
 - 并行 scan / oracle 前置 / review gate / build↔enrich 回环仍有效
 
+## v5.14 可靠性（超时 / 自动恢复）
+
+- 轮询 **`poll_forge_delegations`**：若 **`auto_recovered`** 非空 → **`get_task_dispatch_plan`** 重派 `task()`
+- 手动兜底：**`check_subagent_health`** → **`recover_stalled_subagent(action=retry)`**
+- 审计：**`get_forge_audit_log`** 或 **`get_session_context.recent_audit`**；JSON 含 **`run_id`**
+- 详见 [RELIABILITY.md](RELIABILITY.md)
+
 ## 单 Agent Fallback
 
 子 agent 不可用时，编排器可降级为直接调用 MCP：`ensure_forge_environment` → scan → plan → scaffold → enrich → `build_tests(max_retries=3)`。

@@ -6,20 +6,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
+from sdk_forge.domain.util import parse_bool
 from sdk_forge.infra.config import load_forge_config
+from sdk_forge.infra.logging_config import get_logger
+from sdk_forge.infra.profile import resolve_forge_config
+from sdk_forge.infra.report import auto_generate_report
+from sdk_forge.orchestration.workflow import update_workflow_stage
 from sdk_forge.pipeline.coverage import collect_coverage_impl
 from sdk_forge.pipeline.coverage_expand import coverage_expand_impl
-from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
-from sdk_forge.infra.profile import resolve_forge_config
 from sdk_forge.pipeline.quality_gate import (
     run_assertion_quality_gate,
     run_coverage_gate,
     run_scaffold_quality_gate,
 )
-from sdk_forge.infra.report import auto_generate_report
 from sdk_forge.pipeline.retry import build_with_retry_impl, save_build_state
-from sdk_forge.domain.util import parse_bool
-from sdk_forge.orchestration.workflow import update_workflow_stage
+
+logger = get_logger("pipeline.core")
 
 
 def build_pipeline_impl(
@@ -35,6 +38,7 @@ def build_pipeline_impl(
     profile: str = "",
 ) -> dict:
     """Run full build; quality gates, save state, auto HTML report."""
+    logger.info("build_pipeline start project=%s profile=%s", project_dir, profile)
     cache_root = project_dir or ""
     if not cache_root and source_dir:
         cache_root = str(Path(source_dir).parent)
@@ -68,9 +72,12 @@ def build_pipeline_impl(
         if not assertion_gate.get("passed") and assertion_gate.get("mode") == "block":
             return {
                 "status": "assertion_quality_blocked",
-                "error": "; ".join(assertion_gate.get("block_reasons") or [
-                    f"Assertion score {assertion_gate.get('score')} below minimum",
-                ]),
+                "error": "; ".join(
+                    assertion_gate.get("block_reasons")
+                    or [
+                        f"Assertion score {assertion_gate.get('score')} below minimum",
+                    ]
+                ),
                 "assertion_gate": {
                     "passed": False,
                     "score": assertion_gate.get("score"),
@@ -81,10 +88,14 @@ def build_pipeline_impl(
             }
 
         if not quality_gate.get("skipped"):
-            update_workflow_stage(cache_root, "quality_gate", {
-                "scaffold_passed": quality_gate.get("passed"),
-                "assertion_passed": assertion_gate.get("passed"),
-            })
+            update_workflow_stage(
+                cache_root,
+                "quality_gate",
+                {
+                    "scaffold_passed": quality_gate.get("passed"),
+                    "assertion_passed": assertion_gate.get("passed"),
+                },
+            )
 
     result = build_with_retry_impl(
         project_dir=project_dir,
@@ -168,4 +179,5 @@ def build_pipeline_impl(
             except OSError:
                 pass
 
+    logger.info("build_pipeline end status=%s", result.get("status"))
     return result

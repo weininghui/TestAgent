@@ -56,8 +56,6 @@ def _scan_test_files(tests_dir: Path) -> dict[str, dict[str, Any]]:
 
 
 def _expected_cases(target: dict[str, Any]) -> list[str]:
-    symbol = target.get("symbol", "")
-    suite = _safe_test_suite(str(symbol))
     return [_safe_scenario(str(s.get("name", "Case"))) for s in (target.get("scenarios") or [])]
 
 
@@ -115,7 +113,9 @@ def analyze_plan_gap_impl(
                 break
 
     test_map = _scan_test_files(tests_path)
-    plan_symbols = {str(t.get("symbol", "")).lower(): t for t in (plan.get("targets") or []) if t.get("symbol")}
+    plan_symbols = {
+        str(t.get("symbol", "")).lower(): t for t in (plan.get("targets") or []) if t.get("symbol")
+    }
 
     missing_targets: list[dict[str, Any]] = []
     partial_targets: list[dict[str, Any]] = []
@@ -124,36 +124,35 @@ def analyze_plan_gap_impl(
     for key, target in plan_symbols.items():
         entry = test_map.get(key)
         if not entry:
-            missing_targets.append({
-                "symbol": target.get("symbol"),
-                "kind": target.get("kind"),
-                "file": target.get("file"),
-            })
+            missing_targets.append(
+                {
+                    "symbol": target.get("symbol"),
+                    "kind": target.get("kind"),
+                    "file": target.get("file"),
+                }
+            )
             continue
 
         suite = _safe_test_suite(str(target.get("symbol", "")))
         present_cases = set(entry["suites"].get(suite, []))
-        expected = _expected_cases(target)
         missing_scenarios = [
             s.get("name", "")
             for s in (target.get("scenarios") or [])
             if _safe_scenario(str(s.get("name", "Case"))) not in present_cases
         ]
         if missing_scenarios:
-            partial_targets.append({
-                "symbol": target.get("symbol"),
-                "kind": target.get("kind"),
-                "test_file": entry["file"],
-                "missing_scenarios": missing_scenarios,
-            })
+            partial_targets.append(
+                {
+                    "symbol": target.get("symbol"),
+                    "kind": target.get("kind"),
+                    "test_file": entry["file"],
+                    "missing_scenarios": missing_scenarios,
+                }
+            )
         else:
             covered_targets.append(str(target.get("symbol")))
 
-    unplanned_tests = [
-        info["file"]
-        for key, info in test_map.items()
-        if key not in plan_symbols
-    ]
+    unplanned_tests = [info["file"] for key, info in test_map.items() if key not in plan_symbols]
 
     quality_files: list[dict[str, Any]] = []
     placeholder_total = 0
@@ -174,14 +173,16 @@ def analyze_plan_gap_impl(
                 and re.sub(r"[^a-z0-9_]", "_", str(t.get("symbol", "")).lower()).strip("_") == sym
                 for t in (plan.get("targets") or [])
             )
-            quality_files.append({
-                "file": path.name,
-                "path": str(path.resolve()),
-                **counts,
-                "has_test_p": "TEST_P" in text,
-                "has_instantiate": "INSTANTIATE_TEST_SUITE_P" in text,
-                "missing_test_p": needs_test_p and "TEST_P" not in text,
-            })
+            quality_files.append(
+                {
+                    "file": path.name,
+                    "path": str(path.resolve()),
+                    **counts,
+                    "has_test_p": "TEST_P" in text,
+                    "has_instantiate": "INSTANTIATE_TEST_SUITE_P" in text,
+                    "missing_test_p": needs_test_p and "TEST_P" not in text,
+                }
+            )
 
     placeholder_ratio = round(placeholder_total / max(line_total, 1), 4)
 

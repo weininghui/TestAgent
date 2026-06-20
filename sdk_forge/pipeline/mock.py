@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
 
 
 def _mock_method_name(name: str) -> str:
@@ -45,31 +44,37 @@ def generate_mocks_impl(scan_result: dict | str, class_name: str = "") -> dict:
             params = fn.get("params") or ""
             mock_cls = f"Mock{cls}"
             method = fn.get("name", "method")
-            const_suffix = " const" if fn.get("kind") == "method" and "const" in params.split(")")[-1] else ""
+            const_suffix = (
+                " const" if fn.get("kind") == "method" and "const" in params.split(")")[-1] else ""
+            )
             if fn.get("kind") == "method" and params.rstrip().endswith("const"):
                 const_suffix = " const"
             param_types = _params_for_mock(params)
             ns = fn.get("namespace", "")
             ns_prefix = f"{ns}::" if ns else ""
-            header_lines.extend([
-                f"class {mock_cls} : public {ns_prefix}{cls} {{",
-                "public:",
-                f"    MOCK_METHOD({ret}, {method}, ({param_types}){const_suffix}, (override));",
-                "};",
-                "",
-            ])
+            header_lines.extend(
+                [
+                    f"class {mock_cls} : public {ns_prefix}{cls} {{",
+                    "public:",
+                    f"    MOCK_METHOD({ret}, {method}, ({param_types}){const_suffix}, (override));",
+                    "};",
+                    "",
+                ]
+            )
             out_name = f"mock_{cls}.hpp"
             output_files.append(out_name)
-            mocks.append({
-                "class": cls,
-                "namespace": ns,
-                "mock_class": mock_cls,
-                "method": method,
-                "return_type": ret,
-                "params": params,
-                "file": file_info.get("file"),
-                "output_file": out_name,
-            })
+            mocks.append(
+                {
+                    "class": cls,
+                    "namespace": ns,
+                    "mock_class": mock_cls,
+                    "method": method,
+                    "return_type": ret,
+                    "params": params,
+                    "file": file_info.get("file"),
+                    "output_file": out_name,
+                }
+            )
 
     if not mocks:
         return {

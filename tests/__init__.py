@@ -1,1 +1,1 @@
-﻿"""SDK Forge test suite."""
+"""SDK Forge test suite."""

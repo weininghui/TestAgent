@@ -10,7 +10,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.orchestration.core import delegation_concurrency, delegation_mode, get_orchestration_context
+from sdk_forge.infra.audit import audit_log
+from sdk_forge.infra.logging_config import get_logger
+from sdk_forge.orchestration.core import (
+    delegation_concurrency,
+    get_orchestration_context,
+)
+
+logger = get_logger("delegation.core")
 
 _TASK_ID_RE = re.compile(
     r"(?:Background Task ID|Task ID|task_id|background_task_id)[:\s]+([a-zA-Z0-9_-]+)",
@@ -58,8 +65,10 @@ def parse_omo_task_result_impl(text: str) -> dict[str, Any]:
     meta = _parse_task_metadata_block(raw)
     task_match = _TASK_ID_RE.search(raw)
     session_match = _SESSION_ID_RE.search(raw)
-    task_id = meta.get("background_task_id") or meta.get("task_id") or (
-        task_match.group(1) if task_match else ""
+    task_id = (
+        meta.get("background_task_id")
+        or meta.get("task_id")
+        or (task_match.group(1) if task_match else "")
     )
     session_id = meta.get("session_id") or ""
     if session_match and not session_id:
@@ -161,7 +170,9 @@ def _navigation_hint(entry: dict[str, Any]) -> dict[str, Any]:
             "call sync_delegation_sessions or get_subagent_dashboard"
         )
         hints["cli_resume"] = "opencode session list"
-        hints["gui"] = "先调用 get_subagent_dashboard 自动匹配 session_id，再到左侧 Session 列表点击"
+        hints["gui"] = (
+            "先调用 get_subagent_dashboard 自动匹配 session_id，再到左侧 Session 列表点击"
+        )
         hints["sync"] = "sync_delegation_sessions(project_dir=...)"
     if entry.get("pid"):
         hints["pid"] = entry["pid"]
@@ -198,6 +209,15 @@ def register_delegation_impl(
     delegations.append(entry)
     state["delegations"] = delegations
     path = _save_state(project_dir, state)
+    logger.info("delegation registered task_id=%s agent=%s batch=%s", task_id, agent, batch_id)
+    audit_log(
+        "delegation_register",
+        project_dir=project_dir,
+        stage="delegation",
+        agent=agent,
+        task_id=str(task_id),
+        detail={"batch_id": batch_id, "title": title},
+    )
     return {
         "status": "ok",
         "delegation": entry,
@@ -280,12 +300,22 @@ def list_delegations_impl(project_dir: str = "") -> dict[str, Any]:
 def poll_forge_delegations_impl(project_dir: str = "") -> dict[str, Any]:
     """Return pending vs completed delegations for primary forge polling."""
     from sdk_forge.delegation.health import check_subagent_health_impl
+    from sdk_forge.delegation.recovery import try_auto_recover_all
 
     listing = list_delegations_impl(project_dir)
     orch = get_orchestration_context(project_dir)
     completed_agents = orch.get("completed_agents") or {}
     pending_nav = [_navigation_hint(d) for d in listing["pending"]]
     health = check_subagent_health_impl(project_dir, include_preview=False)
+    auto_recovery_result: dict[str, Any] | None = None
+    if health.get("needs_recovery"):
+        auto_recovery_result = try_auto_recover_all(project_dir, force=False)
+        if auto_recovery_result.get("recovered"):
+            health = check_subagent_health_impl(project_dir, include_preview=False)
+            logger.info(
+                "auto-recovered %d delegations",
+                len(auto_recovery_result.get("recovered") or []),
+            )
     return {
         "status": "ok",
         "pending_delegations": listing["pending"],
@@ -293,13 +323,16 @@ def poll_forge_delegations_impl(project_dir: str = "") -> dict[str, Any]:
         "pending_count": listing["pending_count"],
         "unhealthy_count": health.get("unhealthy_count", 0),
         "needs_recovery": health.get("needs_recovery") or [],
+        "auto_recovered": (auto_recovery_result or {}).get("recovered") or [],
+        "auto_recovery_skipped": (auto_recovery_result or {}).get("skipped") or [],
+        "circuit_open": (auto_recovery_result or {}).get("circuit_open") or [],
         "completed_agents": completed_agents,
         "stage_timeline": orch.get("stage_timeline"),
         "navigation": {
             "pending": pending_nav,
             "tui_parent_child": "Down=enter child session, Up=return to forge primary",
             "session_list": "opencode session list",
-            "timeout_recovery": "check_subagent_health / recover_stalled_subagent(action=retry)",
+            "timeout_recovery": "poll auto_recovered or check_subagent_health / recover_stalled_subagent(action=retry)",
         },
     }
 
@@ -341,7 +374,9 @@ def get_delegation_plan_impl(project_dir: str = "") -> dict[str, Any]:
         "foreground_actions": foreground,
         "blocked_actions": [a for a in actions if a.get("blocked")],
         "merge_ready": bool(orch.get("merge_ready")),
-        "orchestration_status": "needs_agent" if dispatchable else ("ok" if orch.get("merge_ready") else "idle"),
+        "orchestration_status": "needs_agent"
+        if dispatchable
+        else ("ok" if orch.get("merge_ready") else "idle"),
         "dispatch_protocol": task_plan.get("dispatch_protocol"),
         "gui_task_card": True,
         "task_dispatches": task_plan.get("task_dispatches"),

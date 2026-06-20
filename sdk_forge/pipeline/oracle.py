@@ -4,12 +4,16 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.pipeline.golden import _dump_yaml, find_golden_path, init_golden_template, load_golden_cases
 from sdk_forge.domain.plan_gap import _load_plan_state as load_plan_state
+from sdk_forge.pipeline.golden import (
+    _dump_yaml,
+    find_golden_path,
+    init_golden_template,
+    load_golden_cases,
+)
 
 
 def _default_expect_for_scenario(scenario: str, symbol: str) -> Any:
@@ -73,18 +77,19 @@ def draft_golden_from_plan_impl(
             cases.append(entry)
 
         if not cases:
-            cases.append({
-                "name": "Normal",
-                "args": [],
-                "comment": f"TODO: oracle draft for {symbol}",
-            })
+            cases.append(
+                {
+                    "name": "Normal",
+                    "args": [],
+                    "comment": f"TODO: oracle draft for {symbol}",
+                }
+            )
 
         entry = drafted.setdefault(symbol, {"cases": []})
         if not isinstance(entry, dict):
             entry = {"cases": []}
             drafted[symbol] = entry
-        existing_cases = entry.setdefault("cases", [])
-        existing_names = {str(c.get("name")) for c in existing_cases if isinstance(c, dict)}
+        entry.setdefault("cases", [])
 
         merged_entry = existing.setdefault(symbol, {"cases": []})
         if not isinstance(merged_entry, dict):

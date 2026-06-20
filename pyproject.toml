@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sdk-forge"
-version = "5.11.0"
+version = "5.14.0"
 description = "SDK Forge — OpenCode plugin and CLI for automated C/C++ GTest generation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,6 +25,7 @@ yaml = ["pyyaml>=6.0"]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
     "ruff>=0.8.0",
     "pre-commit>=4.0.0",
     "build>=1.0.0",
@@ -54,3 +55,6 @@ src = ["sdk_forge", "mcp_server.py", "run_mcp.py", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/test_mcp_server.py" = ["E402"]

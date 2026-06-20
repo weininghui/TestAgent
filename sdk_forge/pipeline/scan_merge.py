@@ -5,10 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from sdk_forge.infra.session import save_plan_state
+from sdk_forge.orchestration.workflow import (
+    clear_scan_batches,
+    get_scan_batches,
+    update_workflow_stage,
+)
 from sdk_forge.pipeline.plan import suggest_test_plan_impl
 from sdk_forge.pipeline.scan import header_to_summary
-from sdk_forge.infra.session import save_plan_state
-from sdk_forge.orchestration.workflow import clear_scan_batches, get_scan_batches, update_workflow_stage
 
 
 def _merge_scan_dicts(batches: list[dict[str, Any]], sdk_root: str) -> dict[str, Any]:
@@ -79,6 +83,7 @@ def scan_headers_subset_impl(
     use_cache: bool | str = False,
 ) -> dict[str, Any]:
     """Scan only the listed header basenames under sdk_root."""
+    from sdk_forge.domain.util import normalize_str_list, parse_bool
     from sdk_forge.pipeline.scan import (
         CLANG_AVAILABLE,
         HeaderFileInfo,
@@ -87,7 +92,6 @@ def scan_headers_subset_impl(
         parse_header,
         parse_header_clang,
     )
-    from sdk_forge.domain.util import normalize_str_list, parse_bool
 
     sdk_path = Path(sdk_root)
     if not sdk_path.is_dir():

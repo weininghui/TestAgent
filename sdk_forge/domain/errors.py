@@ -3,6 +3,46 @@
 from __future__ import annotations
 
 import re
+from typing import Any
+
+
+class ForgeError(Exception):
+    """Structured forge error with code and hints. / 结构化 Forge 错误。"""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "FORGE_ERROR",
+        stage: str = "",
+        hints: list[str] | None = None,
+        recoverable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.stage = stage
+        self.hints = hints or []
+        self.recoverable = recoverable
+
+
+def forge_error_to_dict(exc: BaseException, run_id: str = "") -> dict[str, Any]:
+    """Convert exception to JSON error dict. / 将异常转为 JSON 错误 dict。"""
+    if isinstance(exc, ForgeError):
+        return {
+            "status": "error",
+            "error": str(exc),
+            "error_code": exc.code,
+            "stage": exc.stage,
+            "hints": exc.hints,
+            "recoverable": exc.recoverable,
+            "run_id": run_id,
+        }
+    return {
+        "status": "error",
+        "error": str(exc),
+        "error_code": "FORGE_ERROR",
+        "run_id": run_id,
+    }
 
 
 def parse_cmake_error(output: str) -> list[str]:
@@ -14,10 +54,14 @@ def parse_cmake_error(output: str) -> list[str]:
         hints.append("Link error: add missing library via --link or pkg_config_packages.")
         m = re.search(r"undefined reference to [`']?(\w+)", text)
         if m:
-            hints.append(f"Missing symbol '{m.group(1)}' — verify link_libraries includes the SDK lib name.")
+            hints.append(
+                f"Missing symbol '{m.group(1)}' — verify link_libraries includes the SDK lib name."
+            )
 
     if "cannot find -l" in lower or "cannot open file" in lower and ".lib" in lower:
-        hints.append("Library not found: set sdk_lib_dirs to the directory containing the .a/.lib file.")
+        hints.append(
+            "Library not found: set sdk_lib_dirs to the directory containing the .a/.lib file."
+        )
         m = re.search(r"cannot find -l(\S+)", text)
         if m:
             hints.append(f"Add --link {m.group(1)} and --lib-dir pointing to the built SDK.")
@@ -33,12 +77,18 @@ def parse_cmake_error(output: str) -> list[str]:
         hints.append("Alternatively use pkg_config_packages if a .pc file is available.")
 
     if "pkg_check_modules" in lower or "package '" in lower and "not found" in lower:
-        hints.append("pkg-config package not found: install the dev package or set PKG_CONFIG_PATH.")
+        hints.append(
+            "pkg-config package not found: install the dev package or set PKG_CONFIG_PATH."
+        )
 
     if "cmake was unable to find a build program" in lower or "no cmake_cxx_compiler" in lower:
-        hints.append("No C++ compiler detected: install g++/MSVC Build Tools and ensure cmake is in PATH.")
+        hints.append(
+            "No C++ compiler detected: install g++/MSVC Build Tools and ensure cmake is in PATH."
+        )
 
     if not hints:
-        hints.append("Review the CMake output above; run probe_sdk on the SDK root for suggested paths.")
+        hints.append(
+            "Review the CMake output above; run probe_sdk on the SDK root for suggested paths."
+        )
 
     return list(dict.fromkeys(hints))

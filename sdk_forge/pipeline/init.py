@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 FORGE_YAML_TEMPLATE = """# SDK Forge project config (v4.1)
 sdk_root: {sdk_root}
 tests_dir: {tests_dir}
@@ -90,6 +89,7 @@ def init_project_impl(
         )
 
     from sdk_forge.pipeline.golden import init_golden_template
+
     golden_path = init_golden_template(str(root))
 
     return {

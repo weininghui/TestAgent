@@ -8,11 +8,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.infra.config import load_forge_config, resolve_path
 from sdk_forge.domain.plan_gap import _load_plan_state as load_plan_state
-from sdk_forge.infra.profile import resolve_forge_config
-from sdk_forge.pipeline.retry import load_build_state
 from sdk_forge.domain.test_files import list_test_file_basenames, resolve_tests_dir
+from sdk_forge.infra.config import load_forge_config, resolve_path
+from sdk_forge.infra.profile import resolve_forge_config
 from sdk_forge.orchestration.workflow import (
     clear_agent_runs,
     clear_review_verdict,
@@ -21,12 +20,15 @@ from sdk_forge.orchestration.workflow import (
     increment_enrich_round,
     load_workflow_state,
 )
+from sdk_forge.pipeline.retry import load_build_state
 
 _RE_AGENT = re.compile(r"//\s*AGENT:|//\s*TODO:", re.IGNORECASE)
-_BUILD_ENRICH_BLOCK_STATUSES = frozenset({
-    "assertion_quality_blocked",
-    "scaffold_quality_blocked",
-})
+_BUILD_ENRICH_BLOCK_STATUSES = frozenset(
+    {
+        "assertion_quality_blocked",
+        "scaffold_quality_blocked",
+    }
+)
 
 
 def list_test_files(project_dir: str = "", tests_dir: str = "") -> list[str]:
@@ -51,7 +53,10 @@ def files_needing_enrich(project_dir: str = "", tests_dir: str = "") -> list[str
 
 def files_needing_assertion_fix(project_dir: str = "") -> list[str]:
     """Test files with weak/tautology/agent issues from assertion quality cache."""
-    from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl, load_assertion_quality
+    from sdk_forge.pipeline.assertion_quality import (
+        analyze_assertion_quality_impl,
+        load_assertion_quality,
+    )
 
     root = str(Path(project_dir or Path.cwd()).resolve())
     aq = load_assertion_quality(root)
@@ -209,7 +214,9 @@ def _error_attempts(workflow: dict[str, Any], agent: str, batch_id: int | None =
     return count
 
 
-def _last_run_status(workflow: dict[str, Any], agent: str, batch_id: int | None = None) -> str | None:
+def _last_run_status(
+    workflow: dict[str, Any], agent: str, batch_id: int | None = None
+) -> str | None:
     bid = -1 if batch_id is None else batch_id
     last: str | None = None
     for run in workflow.get("agent_runs") or []:
@@ -288,16 +295,18 @@ def _append_scan_actions(
     dispatch = pending if parallel else pending[:1]
     for batch in dispatch:
         files = batch["files"]
-        next_actions.append({
-            "agent": "forge-scan",
-            "batch_id": batch["batch_id"],
-            "files": files,
-            "parallel": parallel and len(dispatch) > 1,
-            "prompt_hint": (
-                f"Scan batch {batch['batch_id']} headers={','.join(files)} "
-                f"sdk_root={sdk_root} project_dir={root}"
-            ),
-        })
+        next_actions.append(
+            {
+                "agent": "forge-scan",
+                "batch_id": batch["batch_id"],
+                "files": files,
+                "parallel": parallel and len(dispatch) > 1,
+                "prompt_hint": (
+                    f"Scan batch {batch['batch_id']} headers={','.join(files)} "
+                    f"sdk_root={sdk_root} project_dir={root}"
+                ),
+            }
+        )
 
 
 def _all_enrich_batches_done(completed: dict[str, set[int]], batches: list[dict[str, Any]]) -> bool:
@@ -318,32 +327,36 @@ def _append_enrich_actions(
     prefix = "Retry enrich" if retry else "Enrich"
     if parallel:
         for batch in pending:
-            next_actions.append({
+            next_actions.append(
+                {
+                    "agent": "forge-enrich",
+                    "batch_id": batch["batch_id"],
+                    "files": batch["files"],
+                    "parallel": True,
+                    "retry": retry,
+                    "enrich_round": enrich_round,
+                    "prompt_hint": (
+                        f"{prefix} round {enrich_round} batch {batch['batch_id']} "
+                        f"files={','.join(batch['files'])} project_dir={root}"
+                    ),
+                }
+            )
+    else:
+        batch = pending[0]
+        next_actions.append(
+            {
                 "agent": "forge-enrich",
                 "batch_id": batch["batch_id"],
                 "files": batch["files"],
-                "parallel": True,
+                "parallel": False,
                 "retry": retry,
                 "enrich_round": enrich_round,
                 "prompt_hint": (
                     f"{prefix} round {enrich_round} batch {batch['batch_id']} "
                     f"files={','.join(batch['files'])} project_dir={root}"
                 ),
-            })
-    else:
-        batch = pending[0]
-        next_actions.append({
-            "agent": "forge-enrich",
-            "batch_id": batch["batch_id"],
-            "files": batch["files"],
-            "parallel": False,
-            "retry": retry,
-            "enrich_round": enrich_round,
-            "prompt_hint": (
-                f"{prefix} round {enrich_round} batch {batch['batch_id']} "
-                f"files={','.join(batch['files'])} project_dir={root}"
-            ),
-        })
+            }
+        )
 
 
 def _append_simple_action(
@@ -459,21 +472,33 @@ def _dispatch_stage_agent(
         return False
     if _should_retry_agent(workflow, agent, batch_id, max_retries):
         _append_simple_action(
-            next_actions, agent, root,
+            next_actions,
+            agent,
+            root,
             f"Retry {hint} project_dir={root}",
-            retry=True, batch_id=batch_id, files=files,
+            retry=True,
+            batch_id=batch_id,
+            files=files,
         )
         return True
     if _last_run_status(workflow, agent, batch_id) == "error":
         _append_simple_action(
-            next_actions, agent, root,
+            next_actions,
+            agent,
+            root,
             f"Blocked: {agent} failed after {max_retries} retries project_dir={root}",
-            blocked=True, batch_id=batch_id, files=files,
+            blocked=True,
+            batch_id=batch_id,
+            files=files,
         )
         return True
     _append_simple_action(
-        next_actions, agent, root, f"{hint} project_dir={root}",
-        batch_id=batch_id, files=files,
+        next_actions,
+        agent,
+        root,
+        f"{hint} project_dir={root}",
+        batch_id=batch_id,
+        files=files,
     )
     return True
 
@@ -541,50 +566,80 @@ def get_orchestration_context(project_dir: str = "") -> dict[str, Any]:
 
     if not _agent_done(completed, "forge-env"):
         _dispatch_stage_agent(
-            next_actions, workflow, completed, agent_retries,
-            "forge-env", root, "Ensure toolchain",
+            next_actions,
+            workflow,
+            completed,
+            agent_retries,
+            "forge-env",
+            root,
+            "Ensure toolchain",
         )
     elif not has_plan:
         if scan_batches:
             pending_scan = [
-                b for b in scan_batches
-                if not _agent_done(completed, "forge-scan", b["batch_id"])
+                b for b in scan_batches if not _agent_done(completed, "forge-scan", b["batch_id"])
             ]
             if pending_scan:
                 parallel_scan = scan_bs > 1 and len(scan_batches) > 1
                 dispatch = pending_scan if parallel_scan else pending_scan[:1]
                 for batch in dispatch:
-                    if _should_retry_agent(workflow, "forge-scan", batch["batch_id"], agent_retries):
+                    if _should_retry_agent(
+                        workflow, "forge-scan", batch["batch_id"], agent_retries
+                    ):
                         _append_simple_action(
-                            next_actions, "forge-scan", root,
+                            next_actions,
+                            "forge-scan",
+                            root,
                             f"Retry scan batch {batch['batch_id']} sdk_root={sdk_root}",
-                            retry=True, batch_id=batch["batch_id"], files=batch["files"],
+                            retry=True,
+                            batch_id=batch["batch_id"],
+                            files=batch["files"],
                         )
                     elif _last_run_status(workflow, "forge-scan", batch["batch_id"]) == "error":
                         _append_simple_action(
-                            next_actions, "forge-scan", root,
+                            next_actions,
+                            "forge-scan",
+                            root,
                             f"Blocked: scan batch {batch['batch_id']} failed",
-                            blocked=True, batch_id=batch["batch_id"], files=batch["files"],
+                            blocked=True,
+                            batch_id=batch["batch_id"],
+                            files=batch["files"],
                         )
                     else:
                         _append_scan_actions(
-                            next_actions, [batch], root, sdk_root, parallel_scan,
+                            next_actions,
+                            [batch],
+                            root,
+                            sdk_root,
+                            parallel_scan,
                         )
             elif _all_scan_batches_done(completed, scan_batches):
                 _append_simple_action(
-                    next_actions, "forge-scan", root,
+                    next_actions,
+                    "forge-scan",
+                    root,
                     "Merge scan batches failed — check scan_batches in workflow.json",
                     blocked=True,
                 )
         else:
             _dispatch_stage_agent(
-                next_actions, workflow, completed, agent_retries,
-                "forge-scan", root, "Scan SDK and save plan",
+                next_actions,
+                workflow,
+                completed,
+                agent_retries,
+                "forge-scan",
+                root,
+                "Scan SDK and save plan",
             )
     elif not has_tests:
         _dispatch_stage_agent(
-            next_actions, workflow, completed, agent_retries,
-            "forge-scaffold", root, "Generate smart scaffold",
+            next_actions,
+            workflow,
+            completed,
+            agent_retries,
+            "forge-scaffold",
+            root,
+            "Generate smart scaffold",
         )
     elif enrich_targets:
         if (
@@ -594,73 +649,127 @@ def get_orchestration_context(project_dir: str = "") -> dict[str, Any]:
             and not completed.get("forge-enrich")
         ):
             _dispatch_stage_agent(
-                next_actions, workflow, completed, agent_retries,
-                "forge-oracle", root, "Draft golden cases from plan",
+                next_actions,
+                workflow,
+                completed,
+                agent_retries,
+                "forge-oracle",
+                root,
+                "Draft golden cases from plan",
             )
         else:
-            pending = [b for b in enrich_batches if not _agent_done(completed, "forge-enrich", b["batch_id"])]
+            pending = [
+                b
+                for b in enrich_batches
+                if not _agent_done(completed, "forge-enrich", b["batch_id"])
+            ]
             if pending:
                 dispatch_batches = pending if batch_size > 1 else pending[:1]
                 ready: list[dict[str, Any]] = []
                 for batch in dispatch_batches:
-                    if _should_retry_agent(workflow, "forge-enrich", batch["batch_id"], agent_retries):
-                        _append_enrich_actions(next_actions, [batch], batch_size, root, enrich_round, retry=True)
+                    if _should_retry_agent(
+                        workflow, "forge-enrich", batch["batch_id"], agent_retries
+                    ):
+                        _append_enrich_actions(
+                            next_actions, [batch], batch_size, root, enrich_round, retry=True
+                        )
                     elif _last_run_status(workflow, "forge-enrich", batch["batch_id"]) == "error":
                         _append_simple_action(
-                            next_actions, "forge-enrich", root,
+                            next_actions,
+                            "forge-enrich",
+                            root,
                             f"Blocked: enrich batch {batch['batch_id']} failed",
-                            blocked=True, batch_id=batch["batch_id"], files=batch["files"],
+                            blocked=True,
+                            batch_id=batch["batch_id"],
+                            files=batch["files"],
                         )
                     else:
                         ready.append(batch)
                 if ready and not any(a.get("retry") or a.get("blocked") for a in next_actions):
                     _append_enrich_actions(next_actions, ready, batch_size, root, enrich_round)
             elif _all_enrich_batches_done(completed, enrich_batches):
-                retry_actions, assertion_gate_preview, enrich_targets, enrich_batches, enrich_round = (
-                    _maybe_retry_enrich_after_assertion(
-                        str(root), root, batch_size, enrich_round, max_rounds, config,
-                    )
+                (
+                    retry_actions,
+                    assertion_gate_preview,
+                    enrich_targets,
+                    enrich_batches,
+                    enrich_round,
+                ) = _maybe_retry_enrich_after_assertion(
+                    str(root),
+                    root,
+                    batch_size,
+                    enrich_round,
+                    max_rounds,
+                    config,
                 )
                 if retry_actions:
                     next_actions.extend(retry_actions)
                 elif not assertion_gate_preview.get("passed") and enrich_round >= max_rounds:
                     _append_simple_action(
-                        next_actions, "forge-review", root,
+                        next_actions,
+                        "forge-review",
+                        root,
                         f"Assertion gate failed after {max_rounds} enrich rounds",
                         blocked=True,
                     )
                 elif not _agent_done(completed, "forge-review"):
                     _dispatch_stage_agent(
-                        next_actions, workflow, completed, agent_retries,
-                        "forge-review", root, "Production readiness review",
+                        next_actions,
+                        workflow,
+                        completed,
+                        agent_retries,
+                        "forge-review",
+                        root,
+                        "Production readiness review",
                     )
                 elif review_verdict == "block":
                     _append_simple_action(
-                        next_actions, "forge-review", root,
+                        next_actions,
+                        "forge-review",
+                        root,
                         "Review blocked merge — fix issues and re-run forge-review with review_verdict=pass",
                         blocked=True,
                     )
                 elif review_verdict != "pass":
                     _dispatch_stage_agent(
-                        next_actions, workflow, completed, agent_retries,
-                        "forge-review", root,
+                        next_actions,
+                        workflow,
+                        completed,
+                        agent_retries,
+                        "forge-review",
+                        root,
                         "Production readiness review (must set review_verdict=pass)",
                     )
                 elif not _agent_done(completed, "forge-build"):
-                    profile = config.get("autopilot_profile") or config.get("forge_profile") or "production"
+                    profile = (
+                        config.get("autopilot_profile")
+                        or config.get("forge_profile")
+                        or "production"
+                    )
                     _dispatch_stage_agent(
-                        next_actions, workflow, completed, agent_retries,
-                        "forge-build", root, f"Build profile={profile}",
+                        next_actions,
+                        workflow,
+                        completed,
+                        agent_retries,
+                        "forge-build",
+                        root,
+                        f"Build profile={profile}",
                     )
     elif build_blocked and enrich_round < max_rounds:
         build_redispatch, _, _, enrich_round = _maybe_build_enrich_redispatch(
-            str(root), root, batch_size, enrich_round, max_rounds,
+            str(root),
+            root,
+            batch_size,
+            enrich_round,
+            max_rounds,
         )
         if build_redispatch:
             next_actions.extend(build_redispatch)
         else:
             _append_simple_action(
-                next_actions, "forge-build", root,
+                next_actions,
+                "forge-build",
+                root,
                 f"Build blocked ({build_blocked}) — fix tests or raise max_enrich_rounds",
                 blocked=True,
             )
@@ -670,46 +779,75 @@ def get_orchestration_context(project_dir: str = "") -> dict[str, Any]:
 
         analyze_assertion_quality_impl(str(root))
         assertion_gate_preview = run_assertion_quality_gate(str(root), config)
-        needs_review = (
-            config.get("forge_profile") == "production"
-            or not assertion_gate_preview.get("passed")
-        )
+        needs_review = config.get(
+            "forge_profile"
+        ) == "production" or not assertion_gate_preview.get("passed")
         if needs_review:
             _dispatch_stage_agent(
-                next_actions, workflow, completed, agent_retries,
-                "forge-review", root, "Production readiness review",
+                next_actions,
+                workflow,
+                completed,
+                agent_retries,
+                "forge-review",
+                root,
+                "Production readiness review",
             )
         elif review_verdict == "block":
             _append_simple_action(
-                next_actions, "forge-review", root, "Review blocked merge",
+                next_actions,
+                "forge-review",
+                root,
+                "Review blocked merge",
                 blocked=True,
             )
         elif not _agent_done(completed, "forge-build") or not has_build:
             profile = config.get("autopilot_profile") or config.get("forge_profile") or "default"
             _dispatch_stage_agent(
-                next_actions, workflow, completed, agent_retries,
-                "forge-build", root, f"Build profile={profile}",
+                next_actions,
+                workflow,
+                completed,
+                agent_retries,
+                "forge-build",
+                root,
+                f"Build profile={profile}",
             )
     elif review_verdict == "pass" and not _agent_done(completed, "forge-build"):
         profile = config.get("autopilot_profile") or config.get("forge_profile") or "production"
         _dispatch_stage_agent(
-            next_actions, workflow, completed, agent_retries,
-            "forge-build", root, f"Build profile={profile}",
+            next_actions,
+            workflow,
+            completed,
+            agent_retries,
+            "forge-build",
+            root,
+            f"Build profile={profile}",
         )
     elif _agent_done(completed, "forge-review") and review_verdict != "pass":
         _dispatch_stage_agent(
-            next_actions, workflow, completed, agent_retries,
-            "forge-review", root, "Re-run review with review_verdict=pass or block",
+            next_actions,
+            workflow,
+            completed,
+            agent_retries,
+            "forge-review",
+            root,
+            "Re-run review with review_verdict=pass or block",
         )
     elif not _agent_done(completed, "forge-build") or not has_build:
         profile = config.get("autopilot_profile") or config.get("forge_profile") or "default"
         _dispatch_stage_agent(
-            next_actions, workflow, completed, agent_retries,
-            "forge-build", root, f"Build profile={profile}",
+            next_actions,
+            workflow,
+            completed,
+            agent_retries,
+            "forge-build",
+            root,
+            f"Build profile={profile}",
         )
 
-    needs_enrichment = bool(needing) or bool(weak_files) or (
-        scaffold_quality.get("status") == "ok" and scaffold_quality.get("needs_enrichment")
+    needs_enrichment = (
+        bool(needing)
+        or bool(weak_files)
+        or (scaffold_quality.get("status") == "ok" and scaffold_quality.get("needs_enrichment"))
     )
 
     merge_ready = (

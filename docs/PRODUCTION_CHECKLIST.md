@@ -37,6 +37,18 @@ forge build --project-dir ./my_tests --profile production
 | Tests compile & run | `build_tests status=ok` |
 | Coverage (production) | Line coverage ≥ 80% or documented gap |
 | HTML report | Open `.forge/cache/report.html` — Assertion Quality section green |
+| Reliability | `forge health --project-dir ./my_tests` — no unhealthy pending delegations; see [RELIABILITY.md](RELIABILITY.md) |
+| Audit trail | `.forge/cache/audit.jsonl` exists after autopilot; `run_id` in CLI/MCP JSON for correlation |
+
+## Reliability (v5.12+)
+
+```bash
+forge health --project-dir ./my_tests
+forge health --project-dir ./my_tests --auto-recover   # force retry stalled sub-agents
+forge session --project-dir ./my_tests                 # includes recent_audit
+```
+
+See [RELIABILITY.md](RELIABILITY.md) for logging, auto-recovery, and error codes.
 
 ## `.forge.yaml` production profile
 
@@ -45,6 +57,7 @@ forge_profile: production
 max_enrich_rounds: 3
 autopilot_profile: production
 auto_golden_snapshot: true
+delegation_auto_recovery: true
 # or use CLI: forge build --profile production
 ```
 

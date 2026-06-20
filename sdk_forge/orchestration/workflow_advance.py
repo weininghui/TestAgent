@@ -54,7 +54,9 @@ def advance_forge_workflow_impl(
 
     first = next_actions[0] if next_actions else {}
     background = [a for a in next_actions if a.get("run_in_background") and not a.get("blocked")]
-    foreground = [a for a in next_actions if not a.get("run_in_background") and not a.get("blocked")]
+    foreground = [
+        a for a in next_actions if not a.get("run_in_background") and not a.get("blocked")
+    ]
     return {
         "status": status,
         "next_agent": first.get("agent"),

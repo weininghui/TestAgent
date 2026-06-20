@@ -9,11 +9,11 @@ import re
 from pathlib import Path
 from typing import Any
 
-from sdk_forge.pipeline.codegen import count_placeholders
-from sdk_forge.infra.compdb import get_compile_commands_impl
-from sdk_forge.domain.test_files import match_test_file, parse_test_files_filter, resolve_tests_dir
-from sdk_forge.domain.plan_gap import _symbol_from_test_file
 from sdk_forge.domain.plan_gap import _load_plan_state as load_plan_state
+from sdk_forge.domain.plan_gap import _symbol_from_test_file
+from sdk_forge.domain.test_files import match_test_file, parse_test_files_filter, resolve_tests_dir
+from sdk_forge.infra.compdb import get_compile_commands_impl
+from sdk_forge.pipeline.codegen import count_placeholders
 
 _RE_AGENT = re.compile(r"^\s*//\s*AGENT:", re.MULTILINE)
 _RE_TEST = re.compile(r"TEST\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)")
@@ -38,11 +38,13 @@ def _find_agent_markers(content: str) -> list[dict[str, Any]]:
     markers: list[dict[str, Any]] = []
     for i, line in enumerate(content.splitlines(), start=1):
         if "// AGENT:" in line or "// TODO:" in line:
-            markers.append({
-                "line": i,
-                "text": line.strip(),
-                "kind": "agent" if "AGENT:" in line else "todo",
-            })
+            markers.append(
+                {
+                    "line": i,
+                    "text": line.strip(),
+                    "kind": "agent" if "AGENT:" in line else "todo",
+                }
+            )
     return markers
 
 
@@ -109,30 +111,35 @@ def enrich_test_cases_impl(
 
         sym_name = target.get("symbol") if target else sym_key
         from sdk_forge.pipeline.golden import golden_to_enrich_hints, load_golden_cases
+
         golden = load_golden_cases(str(root), symbol=sym_name or sym_key)
         golden_cases = golden.get("cases") or []
         oracle_hints = golden_to_enrich_hints(sym_name or sym_key, golden_cases)
 
-        briefs.append({
-            "symbol": sym_name,
-            "test_file": str(path.resolve()),
-            "header_file": target.get("file") if target else None,
-            "header_excerpt": _read_header_excerpt(sdk_root, target.get("file", "") if target else ""),
-            "scenarios": target.get("scenarios") if target else [],
-            "golden_cases": golden_cases,
-            "oracle_hints": oracle_hints,
-            "missing_golden": not golden_cases and bool(markers),
-            "compile_macros": compile_macros[:10],
-            "markers": markers,
-            "placeholder_counts": counts,
-            "suites": suites,
-            "suggestions": [
-                "Replace // AGENT: lines with real EXPECT_* assertions",
-                "Use golden_cases / oracle_hints when present",
-                "Use header excerpt for valid inputs and return values",
-                "Re-run analyze_assertion_quality after edits",
-            ],
-        })
+        briefs.append(
+            {
+                "symbol": sym_name,
+                "test_file": str(path.resolve()),
+                "header_file": target.get("file") if target else None,
+                "header_excerpt": _read_header_excerpt(
+                    sdk_root, target.get("file", "") if target else ""
+                ),
+                "scenarios": target.get("scenarios") if target else [],
+                "golden_cases": golden_cases,
+                "oracle_hints": oracle_hints,
+                "missing_golden": not golden_cases and bool(markers),
+                "compile_macros": compile_macros[:10],
+                "markers": markers,
+                "placeholder_counts": counts,
+                "suites": suites,
+                "suggestions": [
+                    "Replace // AGENT: lines with real EXPECT_* assertions",
+                    "Use golden_cases / oracle_hints when present",
+                    "Use header excerpt for valid inputs and return values",
+                    "Re-run analyze_assertion_quality after edits",
+                ],
+            }
+        )
 
     result = {
         "status": "ok",
@@ -179,12 +186,14 @@ def analyze_scaffold_quality_impl(
         placeholder_total += counts["total"]
         line_total += lines
         test_count += tests
-        files.append({
-            "file": path.name,
-            "path": str(path.resolve()),
-            "test_count": tests,
-            **counts,
-        })
+        files.append(
+            {
+                "file": path.name,
+                "path": str(path.resolve()),
+                "test_count": tests,
+                **counts,
+            }
+        )
 
     ratio = round(placeholder_total / max(line_total, 1), 4)
     result = {

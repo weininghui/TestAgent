@@ -7,7 +7,6 @@ import re
 import shutil
 import subprocess
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from sdk_forge.delegation.core import (
@@ -51,9 +50,7 @@ def _run_opencode_json(args: list[str], timeout: int = 90) -> tuple[Any | None, 
 
 
 def list_opencode_sessions_impl(max_count: int = 100) -> dict[str, Any]:
-    data, err = _run_opencode_json(
-        ["session", "list", "--format", "json", "-n", str(max_count)]
-    )
+    data, err = _run_opencode_json(["session", "list", "--format", "json", "-n", str(max_count)])
     if err:
         return {"status": "error", "error": err, "sessions": []}
     sessions = data if isinstance(data, list) else []
@@ -133,7 +130,9 @@ def _build_session_preview(data: dict[str, Any], session_id: str, max_chars: int
         "last_role": last_role,
         "last_user_snippet": (last_user[:200] + "...") if len(last_user) > 200 else last_user,
         "live_preview": preview,
-        "updated_at": info.get("time", {}).get("updated") if isinstance(info.get("time"), dict) else None,
+        "updated_at": info.get("time", {}).get("updated")
+        if isinstance(info.get("time"), dict)
+        else None,
         "health": health.get("health"),
         "issues": health.get("issues") or [],
     }
@@ -251,7 +250,9 @@ def get_subagent_dashboard_impl(
         rows.append(row)
 
     pending_rows = [r for r in rows if r.get("status") == "pending"]
-    unhealthy = [r for r in rows if r.get("health") in ("timeout", "tool_failure", "stale", "unknown")]
+    unhealthy = [
+        r for r in rows if r.get("health") in ("timeout", "tool_failure", "stale", "unknown")
+    ]
     return {
         "status": "ok",
         "sync": sync,

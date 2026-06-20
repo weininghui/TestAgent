@@ -8,34 +8,47 @@ import argparse
 import json
 import sys
 
-from sdk_forge.pipeline.build import compile_tests_impl
+from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
 from sdk_forge.infra.clean import delete_tests_impl
-from sdk_forge.pipeline.coverage import collect_coverage_impl
+from sdk_forge.infra.compdb import export_compile_commands_impl, get_compile_commands_impl
 from sdk_forge.infra.doctor import doctor_impl
+from sdk_forge.infra.report import report_impl
+from sdk_forge.infra.session import get_session_context_impl, save_plan_state
+from sdk_forge.infra.trace import inject_run_id
+from sdk_forge.orchestration.workflow import update_workflow_stage
+from sdk_forge.pipeline.bench import run_bench_impl
+from sdk_forge.pipeline.build import compile_tests_impl
+from sdk_forge.pipeline.core import build_pipeline_impl
+from sdk_forge.pipeline.coverage import collect_coverage_impl
+from sdk_forge.pipeline.coverage_expand import coverage_expand_impl
+from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl
 from sdk_forge.pipeline.init import init_project_impl
 from sdk_forge.pipeline.mock import generate_mocks_impl
-from sdk_forge.pipeline.core import build_pipeline_impl
-from sdk_forge.infra.compdb import export_compile_commands_impl, get_compile_commands_impl
 from sdk_forge.pipeline.plan import suggest_test_plan_impl
-from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
 from sdk_forge.pipeline.probe import probe_sdk_impl
-from sdk_forge.infra.report import report_impl
 from sdk_forge.pipeline.run import run_tests_impl
 from sdk_forge.pipeline.scan import scan_headers_impl
-from sdk_forge.infra.session import get_session_context_impl, save_plan_state
-from sdk_forge.pipeline.coverage_expand import coverage_expand_impl
-from sdk_forge.pipeline.bench import run_bench_impl
-from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl
 from sdk_forge.pipeline.templates import generate_test_skeleton_impl
-from sdk_forge.pipeline.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
-from sdk_forge.orchestration.workflow import update_workflow_stage
-from sdk_forge.domain.util import normalize_str_list, parse_bool
+from sdk_forge.pipeline.test_fix import (
+    analyze_test_failures_impl,
+    apply_proposed_fixes_impl,
+    propose_test_fixes_impl,
+)
 
 
 def _emit(result: dict, quiet: bool = False) -> int:
     if quiet and result.get("status") in ("ok", "test_failures"):
-        keys = ("status", "total", "passed", "failed", "binary_path", "line_coverage_pct", "mock_count")
+        keys = (
+            "status",
+            "total",
+            "passed",
+            "failed",
+            "binary_path",
+            "line_coverage_pct",
+            "mock_count",
+        )
         result = {k: result[k] for k in keys if k in result}
+    inject_run_id(result)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     status = result.get("status", "error")
     if status == "ok":
@@ -109,6 +122,7 @@ def cmd_coverage(args: argparse.Namespace) -> int:
     result = collect_coverage_impl(args.build_dir, args.source_dir or "", args.coverage_tool)
     if args.project_dir and result.get("status") == "ok":
         from sdk_forge.pipeline.coverage import save_coverage_cache
+
         path = save_coverage_cache(args.project_dir, result)
         if path:
             result["saved_to"] = path
@@ -166,6 +180,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 def cmd_assert_quality(args: argparse.Namespace) -> int:
     from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl
+
     return _emit(
         analyze_assertion_quality_impl(
             project_dir=args.project_dir or "",
@@ -178,17 +193,20 @@ def cmd_assert_quality(args: argparse.Namespace) -> int:
 
 def cmd_golden_verify(args: argparse.Namespace) -> int:
     from sdk_forge.pipeline.golden import verify_golden_in_tests
+
     return _emit(verify_golden_in_tests(args.project_dir or ""), args.quiet)
 
 
 def cmd_golden_init(args: argparse.Namespace) -> int:
     from sdk_forge.pipeline.golden import init_golden_template
+
     path = init_golden_template(args.project_dir or ".")
     return _emit({"status": "ok", "golden_file": str(path)}, args.quiet)
 
 
 def cmd_golden_snapshot(args: argparse.Namespace) -> int:
     from sdk_forge.pipeline.golden import snapshot_golden_from_plan_impl
+
     return _emit(
         snapshot_golden_from_plan_impl(
             args.project_dir or "",
@@ -202,6 +220,7 @@ def cmd_golden_snapshot(args: argparse.Namespace) -> int:
 
 def cmd_autopilot(args: argparse.Namespace) -> int:
     from sdk_forge.orchestration.autopilot import run_autopilot_impl
+
     return _emit(
         run_autopilot_impl(
             sdk_root=args.sdk_root or "",
@@ -225,7 +244,9 @@ def cmd_plan(args: argparse.Namespace) -> int:
         max_targets=args.max_targets,
     )
     if args.output:
-        open(args.output, "w", encoding="utf-8").write(json.dumps(result, indent=2, ensure_ascii=False))
+        open(args.output, "w", encoding="utf-8").write(
+            json.dumps(result, indent=2, ensure_ascii=False)
+        )
     if args.project_dir and result.get("status") == "ok":
         save_plan_state(args.project_dir, result)
         update_workflow_stage(args.project_dir, "plan")
@@ -359,6 +380,22 @@ def cmd_session(args: argparse.Namespace) -> int:
     return _emit(get_session_context_impl(args.project_dir or ""), args.quiet)
 
 
+def cmd_health(args: argparse.Namespace) -> int:
+    from sdk_forge.delegation.health import check_subagent_health_impl
+    from sdk_forge.delegation.recovery import try_auto_recover_all
+
+    project_dir = args.project_dir or ""
+    if args.auto_recover:
+        recovered = try_auto_recover_all(project_dir, force=True)
+        result = check_subagent_health_impl(project_dir, include_preview=args.include_preview)
+        result["auto_recovered"] = recovered.get("recovered", [])
+        result["auto_recovery_skipped"] = recovered.get("skipped", [])
+        result["circuit_open"] = recovered.get("circuit_open", [])
+    else:
+        result = check_subagent_health_impl(project_dir, include_preview=args.include_preview)
+    return _emit(result, args.quiet)
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     agent_summary = args.agent_summary or ""
     if args.agent_summary_file:
@@ -381,6 +418,8 @@ def cmd_report(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="forge", description="SDK Forge CLI")
     parser.add_argument("--quiet", action="store_true", help="Minimal JSON output")
+    parser.add_argument("--verbose", action="store_true", help="DEBUG logging to stderr")
+    parser.add_argument("--log-file", default="", help="Also write logs to this file")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_scan = sub.add_parser("scan", help="Scan SDK headers")
@@ -405,9 +444,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_compile.add_argument("--pkg-config", action="append", default=[])
     p_compile.add_argument("--find-package", action="append", default=[])
     p_compile.add_argument("--cmake-snippet", default="")
-    p_compile.add_argument("--from-probe", default="", help="SDK root to probe for auto include/lib/link")
-    p_compile.add_argument("--gtest-source", default="auto", choices=["auto", "cached", "fetch", "system"])
-    p_compile.add_argument("--gtest-version", default="auto", help="Pin googletest tag, e.g. 1.14.0 or v1.13.0")
+    p_compile.add_argument(
+        "--from-probe", default="", help="SDK root to probe for auto include/lib/link"
+    )
+    p_compile.add_argument(
+        "--gtest-source", default="auto", choices=["auto", "cached", "fetch", "system"]
+    )
+    p_compile.add_argument(
+        "--gtest-version", default="auto", help="Pin googletest tag, e.g. 1.14.0 or v1.13.0"
+    )
     p_compile.add_argument("--coverage", action="store_true")
     p_compile.add_argument("--coverage-tool", default="gcov")
     p_compile.add_argument("--sanitizer", default="none", help="none, asan, ubsan, asan+ubsan")
@@ -449,8 +494,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--method",
         default="auto",
         choices=[
-            "auto", "winget-msvc", "winget-mingw", "choco-mingw",
-            "apt-build-essential", "dnf-gcc", "brew-llvm", "xcode-cli",
+            "auto",
+            "winget-msvc",
+            "winget-mingw",
+            "choco-mingw",
+            "apt-build-essential",
+            "dnf-gcc",
+            "brew-llvm",
+            "xcode-cli",
         ],
         help="Install method (default: auto = best for platform)",
     )
@@ -473,16 +524,26 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("--build-dir", default="")
     p_build.add_argument("--sdk-root", default="")
     p_build.add_argument("--no-run", action="store_true")
-    p_build.add_argument("--retry", type=int, default=1, help="Max compile attempts with auto-fix (default 1)")
-    p_build.add_argument("--auto-fix-config", action="store_true", help="Write applied fixes back to .forge config")
-    p_build.add_argument("--skip-quality-gate", action="store_true", help="Skip scaffold quality gate check")
-    p_build.add_argument("--profile", default="", choices=["", "default", "production"], help="Forge profile preset")
+    p_build.add_argument(
+        "--retry", type=int, default=1, help="Max compile attempts with auto-fix (default 1)"
+    )
+    p_build.add_argument(
+        "--auto-fix-config", action="store_true", help="Write applied fixes back to .forge config"
+    )
+    p_build.add_argument(
+        "--skip-quality-gate", action="store_true", help="Skip scaffold quality gate check"
+    )
+    p_build.add_argument(
+        "--profile", default="", choices=["", "default", "production"], help="Forge profile preset"
+    )
     p_build.set_defaults(func=cmd_build)
 
     p_assert = sub.add_parser("assert-quality", help="Analyze semantic assertion quality in tests")
     p_assert.add_argument("--project-dir", default="")
     p_assert.add_argument("--tests-dir", default="")
-    p_assert.add_argument("--test-files", default="", help="Comma-separated test basenames or paths")
+    p_assert.add_argument(
+        "--test-files", default="", help="Comma-separated test basenames or paths"
+    )
     p_assert.set_defaults(func=cmd_assert_quality)
 
     p_golden = sub.add_parser("golden", help="Golden oracle cases")
@@ -496,25 +557,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_gs = g_sub.add_parser("snapshot", help="Snapshot EXPECT_EQ cases from tests into golden.yaml")
     p_gs.add_argument("--project-dir", default="")
     p_gs.add_argument("--from-last-build", action="store_true", help="Require last_build.json")
-    p_gs.add_argument("--no-merge", action="store_true", help="Replace golden.yaml instead of merging")
+    p_gs.add_argument(
+        "--no-merge", action="store_true", help="Replace golden.yaml instead of merging"
+    )
     p_gs.add_argument("--confirm", action="store_true", help="Write golden.yaml (default dry-run)")
     p_gs.set_defaults(func=cmd_golden_snapshot)
 
-    p_autopilot = sub.add_parser("autopilot", help="Hands-off autopilot through orchestration next_actions")
+    p_autopilot = sub.add_parser(
+        "autopilot", help="Hands-off autopilot through orchestration next_actions"
+    )
     p_autopilot.add_argument("sdk_root", nargs="?", default="", help="SDK root to scan")
     p_autopilot.add_argument("--project-dir", default="", help="Forge project directory")
     p_autopilot.add_argument("--profile", default="production", choices=["default", "production"])
-    p_autopilot.add_argument("--max-enrich-rounds", type=int, default=None, help="Override max enrich rounds")
+    p_autopilot.add_argument(
+        "--max-enrich-rounds", type=int, default=None, help="Override max enrich rounds"
+    )
     p_autopilot.add_argument("--no-init", action="store_true", help="Do not auto-init project")
     p_autopilot.set_defaults(func=cmd_autopilot)
 
     p_plan = sub.add_parser("plan", help="Suggest structured test plan from SDK scan")
     p_plan.add_argument("sdk_root", nargs="?", default="")
-    p_plan.add_argument("--scan-file", default="", help="Use existing scan JSON instead of scanning")
+    p_plan.add_argument(
+        "--scan-file", default="", help="Use existing scan JSON instead of scanning"
+    )
     p_plan.add_argument("--include", action="append", default=[])
     p_plan.add_argument("--output", default="")
-    p_plan.add_argument("--project-dir", default="", help="Save plan to .forge/cache/last_plan.json")
-    p_plan.add_argument("--max-targets", type=int, default=0, help="Limit plan targets for large SDKs")
+    p_plan.add_argument(
+        "--project-dir", default="", help="Save plan to .forge/cache/last_plan.json"
+    )
+    p_plan.add_argument(
+        "--max-targets", type=int, default=0, help="Limit plan targets for large SDKs"
+    )
     p_plan.set_defaults(func=cmd_plan)
 
     p_scaffold = sub.add_parser("scaffold", help="Generate GTest skeleton from plan or SDK scan")
@@ -525,7 +598,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_scaffold.add_argument("--overwrite", action="store_true")
     p_scaffold.add_argument("--fidelity", default="smart", choices=["smart", "skeleton"])
     p_scaffold.add_argument("--group-by-header", action="store_true")
-    p_scaffold.add_argument("--skip-existing", action="store_true", help="Only write missing target files")
+    p_scaffold.add_argument(
+        "--skip-existing", action="store_true", help="Only write missing target files"
+    )
     p_scaffold.set_defaults(func=cmd_scaffold)
 
     p_analyze = sub.add_parser("analyze", help="Analyze GTest failures from build dir")
@@ -557,13 +632,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_enrich.add_argument("--project-dir", default="")
     p_enrich.add_argument("--symbol", default="")
     p_enrich.add_argument("--tests-dir", default="")
-    p_enrich.add_argument("--test-files", default="", help="Comma-separated test basenames or paths")
+    p_enrich.add_argument(
+        "--test-files", default="", help="Comma-separated test basenames or paths"
+    )
     p_enrich.set_defaults(func=cmd_enrich)
 
     p_quality = sub.add_parser("quality", help="Analyze scaffold placeholder ratio")
     p_quality.add_argument("--project-dir", default="")
     p_quality.add_argument("--tests-dir", default="")
-    p_quality.add_argument("--test-files", default="", help="Comma-separated test basenames or paths")
+    p_quality.add_argument(
+        "--test-files", default="", help="Comma-separated test basenames or paths"
+    )
     p_quality.set_defaults(func=cmd_quality)
 
     p_cov_expand = sub.add_parser("coverage-expand", help="Append TEST_P for low-coverage symbols")
@@ -589,13 +668,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_session.add_argument("--project-dir", default="")
     p_session.set_defaults(func=cmd_session)
 
+    p_health = sub.add_parser("health", help="Check sub-agent health; optional auto-recover")
+    p_health.add_argument("--project-dir", default="")
+    p_health.add_argument(
+        "--include-preview", action="store_true", help="Export live session preview"
+    )
+    p_health.add_argument(
+        "--auto-recover",
+        action="store_true",
+        help="Retry stalled delegations (respects delegation_auto_recovery config unless forced)",
+    )
+    p_health.set_defaults(func=cmd_health)
+
     p_report = sub.add_parser("report", help="Generate markdown/HTML/JSON report from last build")
     p_report.add_argument("--project-dir", default="")
     p_report.add_argument("--state-file", default="")
     p_report.add_argument("--format", default="markdown", choices=["markdown", "json", "html"])
     p_report.add_argument("--output", default="", help="Write report body to this file")
     p_report.add_argument("--agent-summary", default="", help="Agent analysis text for HTML report")
-    p_report.add_argument("--agent-summary-file", default="", help="File with Agent analysis for HTML")
+    p_report.add_argument(
+        "--agent-summary-file", default="", help="File with Agent analysis for HTML"
+    )
     p_report.set_defaults(func=cmd_report)
 
     return parser
@@ -604,6 +697,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+    from sdk_forge.infra.logging_config import configure_forge_logging
+    from sdk_forge.infra.trace import new_run_id, set_run_id
+
+    level = "DEBUG" if args.verbose else None
+    configure_forge_logging(level=level, log_file=args.log_file or None)
+    set_run_id(new_run_id())
     code = args.func(args)
     sys.exit(code)
 

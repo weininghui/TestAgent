@@ -56,7 +56,10 @@ def get_compile_commands_impl(project_dir: str = "") -> dict[str, Any]:
     root = Path(project_dir or Path.cwd()).resolve()
     path = root / ".forge" / "cache" / "compile_commands.json"
     if not path.is_file():
-        return {"status": "error", "error": "No cached compile_commands.json — run compile/build first"}
+        return {
+            "status": "error",
+            "error": "No cached compile_commands.json — run compile/build first",
+        }
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:

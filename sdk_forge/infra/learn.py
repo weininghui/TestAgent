@@ -72,8 +72,11 @@ def learn_from_build(state: dict[str, Any], project_dir: str = "") -> dict[str, 
 
     params = {}
     for key in (
-        "sdk_include_dirs", "sdk_lib_dirs", "link_libraries",
-        "cmake_prefix_path", "pkg_config_packages",
+        "sdk_include_dirs",
+        "sdk_lib_dirs",
+        "link_libraries",
+        "cmake_prefix_path",
+        "pkg_config_packages",
     ):
         val = state.get(key)
         if val:
@@ -86,11 +89,13 @@ def learn_from_build(state: dict[str, Any], project_dir: str = "") -> dict[str, 
     for att in state.get("attempts") or []:
         applied = att.get("actions_applied") or []
         if applied:
-            fix_history.append({
-                "attempt": att.get("attempt"),
-                "result": att.get("result"),
-                "actions": applied,
-            })
+            fix_history.append(
+                {
+                    "attempt": att.get("attempt"),
+                    "result": att.get("result"),
+                    "actions": applied,
+                }
+            )
 
     payload = {
         "sdk_root": sdk_root,
@@ -107,9 +112,14 @@ def learn_from_build(state: dict[str, Any], project_dir: str = "") -> dict[str, 
 
 def _extract_params_from_state(state: dict[str, Any]) -> dict[str, Any]:
     keys = (
-        "sdk_include_dirs", "sdk_lib_dirs", "link_libraries",
-        "cmake_prefix_path", "pkg_config_packages", "find_packages",
-        "gtest_source", "gtest_version",
+        "sdk_include_dirs",
+        "sdk_lib_dirs",
+        "link_libraries",
+        "cmake_prefix_path",
+        "pkg_config_packages",
+        "find_packages",
+        "gtest_source",
+        "gtest_version",
     )
     result: dict[str, Any] = {}
     for key in keys:
@@ -121,7 +131,9 @@ def _extract_params_from_state(state: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def merge_learned_into_params(params: dict[str, Any], sdk_root: str, project_dir: str = "") -> dict[str, Any]:
+def merge_learned_into_params(
+    params: dict[str, Any], sdk_root: str, project_dir: str = ""
+) -> dict[str, Any]:
     learned = load_learned_params(sdk_root, project_dir)
     if not learned:
         return params

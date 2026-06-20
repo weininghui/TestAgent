@@ -25,6 +25,9 @@ PRODUCTION_PRESETS: dict[str, Any] = {
     "autopilot_profile": "production",
     "auto_golden_snapshot": True,
     "delegation_concurrency": 4,
+    "delegation_auto_recovery": True,
+    "delegation_auto_recovery_max": 2,
+    "delegation_retry_backoff_sec": 30,
 }
 
 

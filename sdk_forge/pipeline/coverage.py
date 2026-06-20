@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 import subprocess
@@ -12,7 +13,9 @@ from typing import Any
 from sdk_forge.domain.util import run_subprocess
 
 
-def collect_coverage_impl(build_dir: str, source_dir: str = "", coverage_tool: str = "gcov") -> dict:
+def collect_coverage_impl(
+    build_dir: str, source_dir: str = "", coverage_tool: str = "gcov"
+) -> dict:
     build_path = Path(build_dir)
     if not build_path.is_dir():
         return {"error": f"Build directory not found: {build_dir}", "status": "error"}
@@ -46,7 +49,14 @@ def collect_coverage_impl(build_dir: str, source_dir: str = "", coverage_tool: s
         info_file = build_path / "coverage.info"
         try:
             run_subprocess(
-                ["lcov", "--capture", "--directory", str(build_path), "--output-file", str(info_file)],
+                [
+                    "lcov",
+                    "--capture",
+                    "--directory",
+                    str(build_path),
+                    "--output-file",
+                    str(info_file),
+                ],
                 cwd=str(build_path),
             )
             summary = run_subprocess(["lcov", "--summary", str(info_file)], cwd=str(build_path))
@@ -70,10 +80,12 @@ def collect_coverage_impl(build_dir: str, source_dir: str = "", coverage_tool: s
             covered = sum(1 for ln in lines if ln.strip().startswith("1:"))
             total = sum(1 for ln in lines if ln.strip() and ln.strip()[0].isdigit())
             if total:
-                files_summary.append({
-                    "file": Path(gcov).name,
-                    "line_coverage_pct": round(100.0 * covered / total, 1),
-                })
+                files_summary.append(
+                    {
+                        "file": Path(gcov).name,
+                        "line_coverage_pct": round(100.0 * covered / total, 1),
+                    }
+                )
         except OSError:
             continue
 

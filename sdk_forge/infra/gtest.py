@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from sdk_forge.infra.cache import gtest_cache_dir
 from sdk_forge.domain.util import run_subprocess
+from sdk_forge.infra.cache import gtest_cache_dir
 
 GTEST_REPO = "https://github.com/google/googletest.git"
 
@@ -48,7 +47,7 @@ def detect_compiler() -> dict:
                     errors="replace",
                     timeout=10,
                 )
-                text = (result.stderr or result.stdout or "")
+                text = result.stderr or result.stdout or ""
                 msvc = re.search(r"(\d{2})\d{2}", text)
                 major = int(msvc.group(1)) if msvc else None
                 return {
@@ -91,7 +90,14 @@ def detect_compiler() -> dict:
                         "path": path,
                         "on_path": True,
                     }
-        return {"kind": "msvc", "major": None, "version": "", "available": False, "path": "", "on_path": False}
+        return {
+            "kind": "msvc",
+            "major": None,
+            "version": "",
+            "available": False,
+            "path": "",
+            "on_path": False,
+        }
 
     for kind, names in (("gcc", ("g++", "gcc")), ("clang", ("clang++", "clang"))):
         for name in names:
@@ -109,7 +115,13 @@ def detect_compiler() -> dict:
                     "binary": name,
                 }
             except (subprocess.TimeoutExpired, OSError):
-                return {"kind": kind, "major": None, "version": "", "available": True, "binary": name}
+                return {
+                    "kind": kind,
+                    "major": None,
+                    "version": "",
+                    "available": True,
+                    "binary": name,
+                }
 
     return {"kind": "unknown", "major": None, "version": "", "available": False}
 

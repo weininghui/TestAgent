@@ -44,7 +44,9 @@ def load_golden_cases(project_dir: str = "", symbol: str = "") -> dict[str, Any]
     if main and main.parent.name != "golden":
         try:
             text = main.read_text(encoding="utf-8")
-            merged.update(_parse_yaml(text) if main.suffix in (".yaml", ".yml") else json.loads(text))
+            merged.update(
+                _parse_yaml(text) if main.suffix in (".yaml", ".yml") else json.loads(text)
+            )
         except (OSError, json.JSONDecodeError, RuntimeError):
             pass
 
@@ -64,10 +66,19 @@ def load_golden_cases(project_dir: str = "", symbol: str = "") -> dict[str, Any]
         key = symbol.lower().replace("-", "_")
         for k, v in merged.items():
             if k.lower().replace("-", "_") == key:
-                return {"status": "ok", "symbol": k, "cases": (v.get("cases") if isinstance(v, dict) else v) or []}
+                return {
+                    "status": "ok",
+                    "symbol": k,
+                    "cases": (v.get("cases") if isinstance(v, dict) else v) or [],
+                }
         return {"status": "ok", "symbol": symbol, "cases": []}
 
-    return {"status": "ok", "project_dir": str(root), "symbols": list(merged.keys()), "golden": merged}
+    return {
+        "status": "ok",
+        "project_dir": str(root),
+        "symbols": list(merged.keys()),
+        "golden": merged,
+    }
 
 
 def golden_to_enrich_hints(symbol: str, cases: list[dict[str, Any]]) -> list[str]:
@@ -242,12 +253,14 @@ def _extract_expect_eq_cases(content: str, default_symbol: str = "") -> list[dic
             expect = _parse_literal(expect_expr)
             if expect is None or (isinstance(expect, str) and expect == call_expr):
                 continue
-            cases.append({
-                "name": scenario,
-                "args": args,
-                "expect": expect,
-                "symbol": symbol,
-            })
+            cases.append(
+                {
+                    "name": scenario,
+                    "args": args,
+                    "expect": expect,
+                    "symbol": symbol,
+                }
+            )
     return cases
 
 
@@ -325,11 +338,13 @@ def snapshot_golden_from_plan_impl(
             if name in existing_names:
                 skipped += 1
                 continue
-            existing_cases.append({
-                "name": name,
-                "args": case.get("args", []),
-                "expect": case.get("expect"),
-            })
+            existing_cases.append(
+                {
+                    "name": name,
+                    "args": case.get("args", []),
+                    "expect": case.get("expect"),
+                }
+            )
             existing_names.add(name)
             added += 1
 
