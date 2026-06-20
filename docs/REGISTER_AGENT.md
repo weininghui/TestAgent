@@ -436,11 +436,9 @@ Test Forge 将流水线拆分为 **1 个 primary 编排器 + 5 个 subagent**：
 ### 编排器工作流
 
 ```
-get_session_context(project_dir)
-  → orchestration.next_actions
-  → task(agent="forge-env", prompt="project_dir=...")
-  → record_agent_run(...)
-  → 重复直到 next_actions 为空
+get_task_dispatch_plan(project_dir=...)
+  → parallel_dispatches: task(subagent_type=..., load_skills=[], description=..., run_in_background=true)
+  → register_from_omo_task_result → advance_forge_workflow
 ```
 
 ### enrich 并行
@@ -466,15 +464,20 @@ project_dir=/path/to/project batch_id=0 test_files=foo_test.cpp,bar_test.cpp
 
 复制 [examples/oh-my-openagent.multi-agent.json](examples/oh-my-openagent.multi-agent.json) 到 `~/.config/opencode/oh-my-openagent.json`，为 scan/scaffold 配快模型，enrich/build 配强模型。
 
-### task() 语法
-
-OpenCode 原生：
+### task() 语法（v5.9 — OMO，对齐 OpenCode GUI Task 卡片）
 
 ```
-task(agent="forge-enrich", prompt="project_dir=... batch_id=0 test_files=a_test.cpp")
+plan = get_task_dispatch_plan(project_dir=...)
+task(
+  subagent_type="forge-enrich",
+  load_skills=[],
+  description="Enrich batch 0",
+  prompt="project_dir=... batch_id=0 test_files=a_test.cpp",
+  run_in_background=true,
+)
 ```
 
-若版本不支持 `agent=` 参数，可在 `opencode.json` 的 `command` 字段配置 `subtask: true` 作为 fallback（见方式四）。
+**禁止** `task(agent=...)`、`title=`、`call_omo_agent`。
 
 ---
 

@@ -4,33 +4,29 @@ SDK Forge v5.5+ adds **background delegation**. v5.6 adds **session navigation**
 
 ## Delegation modes
 
-| Mode | When to use |
-|------|-------------|
-| `omo` | oh-my-openagent installed (default production) |
-| `cli` | Spawn `opencode run --agent forge-*` subprocesses (no OMO UI) |
-| `inline` | Sync `task(subagent_type=...)` fallback (v5.3) |
+| Mode | When to use | OpenCode GUI Task card |
+|------|-------------|------------------------|
+| `omo` or `task` | oh-my-openagent installed (default production) | Yes — use `get_task_dispatch_plan` |
+| `cli` | `opencode run` subprocess fallback | No |
+| `inline` | Sync fallback (v5.3) | No |
 
-## OMO-native task() — required for clickable sub-sessions (v5.7)
+## OMO-native task() — required for GUI Task cards (v5.9)
 
-oh-my-openagent publishes `metadata.sessionId` via `publishToolMetadata` when you use its **`task`** tool correctly:
+OpenCode GUI renders **Explore-style Task cards** only for OMO **`task()`** — not `call_omo_agent`.
 
 ```
-task(
-  subagent_type="forge-enrich",
-  load_skills=[],
-  description="Enrich batch 0",
-  prompt="...",
-  run_in_background=true,
-)
-register_from_omo_task_result(omo_result_text=result, agent="forge-enrich", ...)
+plan = get_task_dispatch_plan(project_dir=...)
+# Fire all plan.parallel_dispatches in ONE turn
+task(subagent_type=..., load_skills=[], description=..., prompt=..., run_in_background=true)
+register_from_omo_task_result(...)
 ```
 
-**Do NOT use** `task(agent=...)` or `title=` — OpenCode native task skips OMO metadata; TUI entries won't be clickable.
+**Do NOT use** `task(agent=...)`, `title=`, or **`call_omo_agent`** on forge primary.
 
-`call_omo_agent` is only for `explore` / `librarian`. Forge sub-agents use `task(subagent_type="forge-*")`.
+Forge uses `task(subagent_type="forge-*")` for all sub-agents. For librarian/explore research, still use `task(subagent_type="librarian", ...)` — never `call_omo_agent`.
 
 ```yaml
-delegation_mode: omo          # omo | cli | inline
+delegation_mode: omo   # alias: task
 delegation_concurrency: 4
 ```
 
@@ -60,6 +56,8 @@ Or list sessions: `opencode session list`
 
 | Tool | Role |
 |------|------|
+| `get_task_dispatch_plan` | **v5.9** — executable `task()` blocks for GUI Task cards |
+| `validate_forge_delegation_tool` | Reject `call_omo_agent` / `task(agent=)` |
 | `get_delegation_plan` | Dispatch list |
 | `register_forge_delegation` | Track task_id (+ optional session_id) |
 | `update_forge_delegation_session` | Bind session_id after OMO dispatch |
@@ -82,12 +80,12 @@ SDK Forge **does not fork OMO** — it reuses OMO as the **delegation runtime** 
 | OMO source (packages/omo-opencode) | What it does | SDK Forge equivalent |
 |-----------------------------------|--------------|----------------------|
 | `tools/delegate-task/` | `task(subagent_type, run_in_background, load_skills=[])` | `forge.md` dispatch loop |
-| `tools/call-omo-agent/` | `call_omo_agent` for explore/librarian | forge primary (research only) |
+| `tools/call-omo-agent/` | `call_omo_agent` (no GUI Task card) | **forge forbids** — use `task(subagent_type=librarian)` |
 | `features/tool-metadata-store/publish-tool-metadata.ts` | `metadata.sessionId` → clickable child session | `register_from_omo_task_result` |
 | `features/tool-metadata-store/task-metadata-contract.ts` | `<task_metadata>` block in tool output | `parse_omo_task_result_impl` (v5.8+) |
 | `tools/background-task/` | `background_output(task_id)` poll + notify | forge waits for `<system-reminder>` then `background_output` |
 | `features/background-manager/` | Parallel spawn + concurrency | `.forge.yaml` `delegation_concurrency` + OMO `background_task.defaultConcurrency` |
-| `plugin-handlers/tool-config-handler.ts` | Primary agents get `task: allow` | `oh-my-openagent.json` forge `permission.task` |
+| `plugin-handlers/tool-config-handler.ts` | Primary agents get `task: allow` | forge `task:allow`, `call_omo_agent:deny` |
 
 **OMO-native sub-agent loop** (same as Sisyphus):
 

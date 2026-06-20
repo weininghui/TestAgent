@@ -342,6 +342,8 @@ def all_parallel_done_impl(
 
 def get_delegation_plan_impl(project_dir: str = "") -> dict[str, Any]:
     """Build dispatch plan from orchestration next_actions."""
+    from sdk_forge.task_dispatch import build_task_dispatches_impl
+
     orch = get_orchestration_context(project_dir)
     actions = orch.get("next_actions") or []
     mode = orch.get("delegation_mode") or delegation_mode(project_dir)
@@ -349,6 +351,8 @@ def get_delegation_plan_impl(project_dir: str = "") -> dict[str, Any]:
     dispatchable = [a for a in actions if not a.get("blocked")]
     background = [a for a in dispatchable if a.get("run_in_background")]
     foreground = [a for a in dispatchable if not a.get("run_in_background")]
+    task_plan = build_task_dispatches_impl(project_dir)
+    gui_modes = mode in ("omo", "task")
     return {
         "status": "ok",
         "delegation_mode": mode,
@@ -359,18 +363,23 @@ def get_delegation_plan_impl(project_dir: str = "") -> dict[str, Any]:
         "blocked_actions": [a for a in actions if a.get("blocked")],
         "merge_ready": bool(orch.get("merge_ready")),
         "orchestration_status": "needs_agent" if dispatchable else ("ok" if orch.get("merge_ready") else "idle"),
+        "dispatch_protocol": task_plan.get("dispatch_protocol"),
+        "gui_task_card": gui_modes,
+        "task_dispatches": task_plan.get("task_dispatches"),
+        "forbidden_tools": task_plan.get("forbidden_tools"),
+        "forbidden_params": task_plan.get("forbidden_params"),
         "dispatch_hint": (
-            "OMO native: task(subagent_type=..., load_skills=[], description=..., "
-            "prompt=..., run_in_background=true) — NOT task(agent=...) or title="
-            if mode == "omo"
-            else "cli: dispatch_forge_delegate(agent=..., prompt=...)"
+            "OMO task(): subagent_type + load_skills=[] + description + run_in_background — "
+            "renders OpenCode GUI Task card. NEVER call_omo_agent or task(agent=)."
+            if gui_modes
+            else "cli: dispatch_forge_delegate — no GUI Task card"
             if mode == "cli"
-            else "inline: task(subagent_type=...) sync"
+            else "inline: sync task — no OMO GUI Task card"
         ),
         "omo_task_template": {
             "load_skills": [],
             "note": "Use OMO task tool with subagent_type + description + run_in_background",
-        } if mode == "omo" else None,
+        } if gui_modes else None,
     }
 
 

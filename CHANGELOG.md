@@ -1,5 +1,22 @@
 # Changelog
 
+## [5.9.0] - 2026-06-20
+
+Align forge delegation with **OpenCode GUI Task cards** — OMO `task()` only, forbid `call_omo_agent`.
+
+### Added
+- **`sdk_forge/task_dispatch.py`** — `build_omo_task_call`, `get_task_dispatch_plan_impl`, `validate_delegation_tool_text_impl`
+- MCP: **`get_task_dispatch_plan`**, **`validate_forge_delegation_tool`**
+- `get_delegation_plan` returns **`task_dispatches`**, `dispatch_protocol`, `forbidden_tools`
+- `delegation_mode: task` alias for `omo`
+- **`TestTaskDispatchV59`**
+
+### Changed
+- [`.opencode/agents/forge.md`](.opencode/agents/forge.md) — v5.9 hard ban on `call_omo_agent`; single-turn parallel fire via `get_task_dispatch_plan`
+- [`apply_delegation_metadata`](sdk_forge/orchestration.py) — parallel forces `run_in_background=true`; drops public `title` field
+- [`oh-my-openagent.multi-agent.json`](docs/examples/oh-my-openagent.multi-agent.json) — forge `call_omo_agent: deny`
+- Docs: DELEGATION, REGISTER_AGENT, SKILL, README — OMO `task(subagent_type=...)` syntax
+
 ## [5.8.0] - 2026-06-20
 
 Sub-agent **live dashboard** — see what child agents are doing and jump into their chat sessions.

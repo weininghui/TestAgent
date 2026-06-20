@@ -195,7 +195,7 @@ Full list and registration: [REGISTER_AGENT.md](docs/REGISTER_AGENT.md)
 
 ## Multi-agent architecture (v4.6+, v5.5 background delegation)
 
-Primary **forge** dispatches sub-agents via oh-my-openagent `task(run_in_background=true)` for parallel enrich/scan batches, then `background_output` → `advance_forge_workflow`. See [docs/DELEGATION.md](docs/DELEGATION.md).
+Primary **forge** dispatches via OMO `task()` (`get_task_dispatch_plan`) for OpenCode GUI Task cards; parallel enrich uses `run_in_background=true`. See [docs/DELEGATION.md](docs/DELEGATION.md).
 
 | Agent | Role |
 |-------|------|

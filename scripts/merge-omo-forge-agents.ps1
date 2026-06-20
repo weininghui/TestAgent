@@ -31,6 +31,6 @@ $backup = "$OmoPath.bak.$(Get-Date -Format 'yyyyMMdd-HHmmss')"
 Copy-Item $OmoPath $backup
 $omo | ConvertTo-Json -Depth 10 | Set-Content -Encoding UTF8 $OmoPath
 
-Write-Host "Merged forge agents into $OmoPath"
+Write-Host "Merged forge agents + permission (task:allow, call_omo_agent:deny) into $OmoPath"
 Write-Host "Backup: $backup"
 Write-Host "Restart OpenCode to reload oh-my-openagent config."

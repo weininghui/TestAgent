@@ -195,7 +195,7 @@ JSON 配置示例：[`examples/forge_test_sdk/.forge.json`](examples/forge_test_
 
 ## 多 Agent 架构（v4.6+，v5.5 后台委托）
 
-编排器 **forge**（primary）通过 oh-my-openagent **`task(run_in_background=true)`** 后台并行派发 enrich/scan batch，完成后 `background_output` → `advance_forge_workflow`。详见 [docs/DELEGATION.md](docs/DELEGATION.md)。
+编排器 **forge**（primary）通过 OMO **`task()`**（`get_task_dispatch_plan`）派发子 Agent，对齐 OpenCode GUI Task 卡片；并行 enrich 使用 `run_in_background=true`。详见 [docs/DELEGATION.md](docs/DELEGATION.md)。
 
 | Agent | 职责 |
 |-------|------|

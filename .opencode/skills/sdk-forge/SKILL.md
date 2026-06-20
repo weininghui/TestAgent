@@ -28,10 +28,9 @@ Select **forge** orchestrator. Start with **`run_forge_autopilot`** then **backg
 
 ```
 run_forge_autopilot(sdk_root=..., profile=production)
-plan = get_delegation_plan(project_dir=...)
-# OMO: task(run_in_background=true/false, subagent_type=..., prompt=..., title=...)
-# register_forge_delegation → update_forge_delegation_session (if sessionId) → background_output
-# poll_forge_delegations → navigation.pending (TUI Down / opencode session list)
+plan = get_task_dispatch_plan(project_dir=...)
+# OMO task(subagent_type=..., load_skills=[], description=..., run_in_background=...)
+# register_from_omo_task_result → sync_delegation_sessions → get_subagent_dashboard
 ```
 
 ## Multi-Agent (v5.5 background)

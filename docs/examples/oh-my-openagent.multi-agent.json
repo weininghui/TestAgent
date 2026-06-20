@@ -10,7 +10,7 @@
       ],
       "permission": {
         "task": "allow",
-        "call_omo_agent": "allow"
+        "call_omo_agent": "deny"
       }
     },
     "forge-env": {

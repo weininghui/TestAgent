@@ -1440,7 +1440,9 @@ class TestDelegationV55:
             assert action["run_in_background"] is True
             assert action["subagent_type"] == "forge-enrich"
             assert action["delegation_mode"] == "omo"
-            assert "title" in action
+            assert action.get("description")
+            assert action.get("gui_task_card") is True
+            assert "title" not in action
 
     def test_serial_stage_foreground_delegation(self, tmp_path):
         from sdk_forge.orchestration import get_orchestration_context
@@ -1458,8 +1460,9 @@ class TestDelegationV55:
         (tmp_path / ".forge.yaml").write_text("delegation_mode: inline\n", encoding="utf-8")
         ctx = get_orchestration_context(str(tmp_path))
         action = ctx["next_actions"][0]
+        assert action.get("gui_task_card") is False
         assert "run_in_background" not in action
-        assert "subagent_type" not in action
+        assert "delegation_mode" not in action
 
     def test_register_poll_advance_flow(self, tmp_path):
         from sdk_forge.delegation import (
@@ -1614,8 +1617,10 @@ class TestDelegationV57:
         ctx = get_orchestration_context(str(tmp_path))
         enrich = [a for a in ctx["next_actions"] if a["agent"] == "forge-enrich"][0]
         assert enrich["load_skills"] == []
-        assert enrich["description"] == enrich["title"]
+        assert enrich["description"] == "Enrich batch 0"
         assert enrich["subagent_type"] == "forge-enrich"
+        assert enrich.get("gui_task_card") is True
+        assert "title" not in enrich
 
     def test_parse_omo_task_result(self):
         from sdk_forge.delegation import parse_omo_task_result_impl
@@ -1749,6 +1754,97 @@ class TestDelegationV58:
         raw = await get_subagent_dashboard(str(tmp_path))
         data = json.loads(raw)
         assert data["status"] == "ok"
+
+
+class TestTaskDispatchV59:
+    def test_build_omo_task_call(self):
+        from sdk_forge.task_dispatch import build_omo_task_call
+
+        call = build_omo_task_call({
+            "subagent_type": "forge-enrich",
+            "description": "Enrich batch 0",
+            "prompt_hint": "project_dir=/x batch_id=0",
+            "run_in_background": True,
+            "load_skills": [],
+            "batch_id": 0,
+        })
+        assert call["tool"] == "task"
+        assert call["args"]["subagent_type"] == "forge-enrich"
+        assert call["args"]["load_skills"] == []
+        assert call["args"]["description"] == "Enrich batch 0"
+        assert call["args"]["run_in_background"] is True
+        assert call["validation_errors"] == []
+
+    def test_delegation_mode_task_alias(self, tmp_path):
+        from sdk_forge.orchestration import delegation_mode
+
+        (tmp_path / ".forge.yaml").write_text("delegation_mode: task\n", encoding="utf-8")
+        assert delegation_mode(str(tmp_path)) == "omo"
+
+    def test_get_task_dispatch_plan(self, tmp_path):
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.task_dispatch import get_task_dispatch_plan_impl
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        for name in ("a_test.cpp", "b_test.cpp"):
+            (tests / name).write_text("// AGENT: fill\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text(
+            "multi_agent_batch_size: 2\ndelegation_mode: omo\n",
+            encoding="utf-8",
+        )
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+
+        plan = get_task_dispatch_plan_impl(str(tmp_path))
+        assert plan["dispatch_protocol"] == "omo_task_only"
+        assert plan["gui_task_card"] is True
+        assert plan["task_dispatches"]
+        assert plan["task_dispatches"][0]["tool"] == "task"
+        assert "call_omo_agent" in plan["forbidden_tools"]
+
+    def test_validate_call_omo_agent(self):
+        from sdk_forge.task_dispatch import validate_delegation_tool_text_impl
+
+        result = validate_delegation_tool_text_impl("call_omo_agent(subagent_type=librarian)")
+        assert result["status"] == "invalid"
+        assert result["issues"]
+
+    def test_delegation_plan_includes_task_dispatches(self, tmp_path):
+        from sdk_forge.delegation import get_delegation_plan_impl
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "a_test.cpp").write_text("// AGENT: x\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text("delegation_mode: omo\n", encoding="utf-8")
+        record_agent_completion(str(tmp_path), "forge-env", status="ok")
+        record_agent_completion(str(tmp_path), "forge-scan", status="ok")
+        record_agent_completion(str(tmp_path), "forge-scaffold", status="ok")
+
+        plan = get_delegation_plan_impl(str(tmp_path))
+        assert plan.get("task_dispatches")
+        assert plan.get("gui_task_card") is True
+
+    @pytest.mark.asyncio
+    async def test_mcp_get_task_dispatch_plan(self, tmp_path):
+        from mcp_server import get_task_dispatch_plan
+
+        raw = await get_task_dispatch_plan(str(tmp_path))
+        data = json.loads(raw)
+        assert data["status"] == "ok"
+        assert "task_dispatches" in data
+
+    @pytest.mark.asyncio
+    async def test_mcp_validate_delegation_tool(self):
+        from mcp_server import validate_forge_delegation_tool
+
+        raw = await validate_forge_delegation_tool("task(agent=forge-enrich)")
+        data = json.loads(raw)
+        assert data["status"] == "invalid"
 
 
 class TestGoldenSnapshot:

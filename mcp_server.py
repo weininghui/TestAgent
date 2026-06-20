@@ -62,6 +62,7 @@ Tools:
   - register_forge_delegation / poll_forge_delegations / get_delegation_plan → background delegation (v5.5)
   - update_forge_delegation_session / dispatch_forge_delegate → session nav + CLI runtime (v5.6)
   - register_from_omo_task_result → parse OMO task() output + bind sessionId (v5.7)
+  - get_task_dispatch_plan / validate_forge_delegation_tool → OMO task() GUI card dispatch (v5.9)
   - record_scan_batch     → store parallel scan batch result (v5.3)
   - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
@@ -594,6 +595,24 @@ async def get_delegation_plan(
     from sdk_forge.delegation import get_delegation_plan_impl
 
     return json.dumps(get_delegation_plan_impl(project_dir), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="OMO task() dispatch plan for OpenCode GUI Task cards (v5.9).")
+async def get_task_dispatch_plan(
+    project_dir: Annotated[str, "Project root."] = "",
+) -> str:
+    from sdk_forge.task_dispatch import get_task_dispatch_plan_impl
+
+    return json.dumps(get_task_dispatch_plan_impl(project_dir), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Validate agent tool text — reject call_omo_agent / task(agent=) (v5.9).")
+async def validate_forge_delegation_tool(
+    text: Annotated[str, "Agent tool call text or transcript snippet to validate."],
+) -> str:
+    from sdk_forge.task_dispatch import validate_delegation_tool_text_impl
+
+    return json.dumps(validate_delegation_tool_text_impl(text), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Store parallel scan batch JSON in workflow (forge-scan sub-agent).")
