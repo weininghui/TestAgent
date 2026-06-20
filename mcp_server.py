@@ -11,29 +11,29 @@ from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
 
-from sdk_forge.build import compile_tests_impl
-from sdk_forge.clean import delete_tests_impl
-from sdk_forge.coverage import collect_coverage_impl
-from sdk_forge.doctor import doctor_impl
-from sdk_forge.init import init_project_impl
-from sdk_forge.mock import generate_mocks_impl
-from sdk_forge.learn import forget_learned_config, load_learned_config
-from sdk_forge.pipeline import build_pipeline_impl
-from sdk_forge.compdb import export_compile_commands_impl, get_compile_commands_impl
-from sdk_forge.plan import suggest_test_plan_impl
-from sdk_forge.plan_gap import analyze_plan_gap_impl
-from sdk_forge.probe import probe_sdk_impl
-from sdk_forge.report import report_impl
-from sdk_forge.retry import load_build_state
-from sdk_forge.run import run_tests_impl
-from sdk_forge.scan import CLANG_AVAILABLE, scan_headers_impl
-from sdk_forge.session import get_session_context_impl, save_plan_state
-from sdk_forge.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl, load_scaffold_quality
-from sdk_forge.coverage_expand import coverage_expand_impl
-from sdk_forge.templates import generate_test_skeleton_impl
-from sdk_forge.toolchain_install import setup_toolchain_impl, ensure_toolchain_impl
-from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
-from sdk_forge.workflow import update_workflow_stage, record_agent_completion
+from sdk_forge.pipeline.build import compile_tests_impl
+from sdk_forge.infra.clean import delete_tests_impl
+from sdk_forge.pipeline.coverage import collect_coverage_impl
+from sdk_forge.infra.doctor import doctor_impl
+from sdk_forge.pipeline.init import init_project_impl
+from sdk_forge.pipeline.mock import generate_mocks_impl
+from sdk_forge.infra.learn import forget_learned_config, load_learned_config
+from sdk_forge.pipeline.core import build_pipeline_impl
+from sdk_forge.infra.compdb import export_compile_commands_impl, get_compile_commands_impl
+from sdk_forge.pipeline.plan import suggest_test_plan_impl
+from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
+from sdk_forge.pipeline.probe import probe_sdk_impl
+from sdk_forge.infra.report import report_impl
+from sdk_forge.pipeline.retry import load_build_state
+from sdk_forge.pipeline.run import run_tests_impl
+from sdk_forge.pipeline.scan import CLANG_AVAILABLE, scan_headers_impl
+from sdk_forge.infra.session import get_session_context_impl, save_plan_state
+from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl, load_scaffold_quality
+from sdk_forge.pipeline.coverage_expand import coverage_expand_impl
+from sdk_forge.pipeline.templates import generate_test_skeleton_impl
+from sdk_forge.infra.toolchain_install import setup_toolchain_impl, ensure_toolchain_impl
+from sdk_forge.pipeline.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
+from sdk_forge.orchestration.workflow import update_workflow_stage, record_agent_completion
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,7 +62,7 @@ Tools:
   - register_forge_delegation / poll_forge_delegations / get_delegation_plan → task() delegation tracking (v5.5+)
   - update_forge_delegation_session / get_task_dispatch_plan → session nav + GUI Task cards (v5.9+)
   - register_from_omo_task_result → parse OMO task() output + bind sessionId (v5.7)
-  - validate_forge_delegation_tool → reject call_omo_agent / bad task() syntax (v5.9)
+  - check_subagent_health / recover_stalled_subagent → timeout detection + orchestration retry (v5.11)
   - record_scan_batch     → store parallel scan batch result (v5.3)
   - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
@@ -110,7 +110,7 @@ async def ensure_forge_environment(
     method: Annotated[str, "Toolchain install method when compiler missing."] = "auto",
     auto_install: Annotated[bool | str, "Run package manager install if needed."] = True,
 ) -> str:
-    from sdk_forge.doctor import doctor_impl
+    from sdk_forge.infra.doctor import doctor_impl
 
     doctor = doctor_impl()
     ensure = ensure_toolchain_impl(method=method, auto_install=auto_install, agent_mode=True)
@@ -205,7 +205,7 @@ async def analyze_assertion_quality(
     tests_dir: Annotated[str, "Override tests directory."] = "",
     test_files: Annotated[str, "Comma-separated test basenames or paths."] = "",
 ) -> str:
-    from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+    from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl
     return json.dumps(
         analyze_assertion_quality_impl(project_dir, tests_dir=tests_dir, test_files=test_files),
         indent=2, ensure_ascii=False,
@@ -217,7 +217,7 @@ async def load_golden_cases(
     project_dir: Annotated[str, "Project root."] = "",
     symbol: Annotated[str, "Optional symbol filter."] = "",
 ) -> str:
-    from sdk_forge.golden import load_golden_cases as load_golden_impl
+    from sdk_forge.pipeline.golden import load_golden_cases as load_golden_impl
     return json.dumps(load_golden_impl(project_dir, symbol=symbol), indent=2, ensure_ascii=False)
 
 
@@ -225,7 +225,7 @@ async def load_golden_cases(
 async def verify_golden_coverage(
     project_dir: Annotated[str, "Project root with tests/."] = "",
 ) -> str:
-    from sdk_forge.golden import verify_golden_in_tests
+    from sdk_forge.pipeline.golden import verify_golden_in_tests
     return json.dumps(verify_golden_in_tests(project_dir), indent=2, ensure_ascii=False)
 
 
@@ -235,8 +235,8 @@ async def snapshot_golden_cases(
     merge: Annotated[bool | str, "Merge with existing golden.yaml (default true)."] = True,
     confirm: Annotated[bool | str, "Write golden.yaml (default false = dry-run)."] = False,
 ) -> str:
-    from sdk_forge.golden import snapshot_golden_from_plan_impl
-    from sdk_forge.util import parse_bool
+    from sdk_forge.pipeline.golden import snapshot_golden_from_plan_impl
+    from sdk_forge.domain.util import parse_bool
     return json.dumps(
         snapshot_golden_from_plan_impl(
             project_dir,
@@ -254,8 +254,8 @@ async def draft_golden_cases(
     merge: Annotated[bool | str, "Merge with existing golden.yaml (default true)."] = True,
     confirm: Annotated[bool | str, "Write golden.yaml (default false = dry-run)."] = False,
 ) -> str:
-    from sdk_forge.oracle import draft_golden_from_plan_impl
-    from sdk_forge.util import parse_bool
+    from sdk_forge.pipeline.oracle import draft_golden_from_plan_impl
+    from sdk_forge.domain.util import parse_bool
     return json.dumps(
         draft_golden_from_plan_impl(
             project_dir,
@@ -274,7 +274,7 @@ async def run_forge_autopilot(
     profile: Annotated[str, "Forge profile: production (default) or default."] = "production",
     max_enrich_rounds: Annotated[int | str, "Max assertion-driven enrich rounds (0 = config default)."] = 0,
 ) -> str:
-    from sdk_forge.autopilot import run_autopilot_impl
+    from sdk_forge.orchestration.autopilot import run_autopilot_impl
     rounds: int | str = ""
     if max_enrich_rounds not in (0, "0", "", None):
         rounds = max_enrich_rounds
@@ -416,7 +416,7 @@ async def advance_forge_workflow(
     review_verdict: Annotated[str, "forge-review only: pass or block."] = "",
     detail_json: Annotated[str, "Optional JSON detail for last run."] = "",
 ) -> str:
-    from sdk_forge.workflow_advance import advance_forge_workflow_impl
+    from sdk_forge.orchestration.workflow_advance import advance_forge_workflow_impl
 
     bid: int | None = None
     if batch_id not in ("", None):
@@ -453,7 +453,7 @@ async def register_forge_delegation(
     title: Annotated[str, "Human-readable task title."] = "",
     session_id: Annotated[str, "OpenCode session id when known (enables TUI navigation)."] = "",
 ) -> str:
-    from sdk_forge.delegation import register_delegation_impl
+    from sdk_forge.delegation.core import register_delegation_impl
 
     bid: int | None = None
     if batch_id not in ("", None):
@@ -477,7 +477,7 @@ async def update_forge_delegation_session(
     session_id: Annotated[str, "OpenCode session id e.g. ses_xxx."],
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:
-    from sdk_forge.delegation import update_delegation_session_impl
+    from sdk_forge.delegation.core import update_delegation_session_impl
 
     return json.dumps(
         update_delegation_session_impl(project_dir, task_id, session_id),
@@ -494,7 +494,7 @@ async def register_from_omo_task_result(
     batch_id: Annotated[int | str, "Batch id when applicable."] = "",
     title: Annotated[str, "Human-readable task title."] = "",
 ) -> str:
-    from sdk_forge.delegation import register_from_omo_result_impl
+    from sdk_forge.delegation.core import register_from_omo_result_impl
 
     bid: int | None = None
     if batch_id not in ("", None):
@@ -513,7 +513,7 @@ async def register_from_omo_task_result(
 async def poll_forge_delegations(
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:
-    from sdk_forge.delegation import poll_forge_delegations_impl
+    from sdk_forge.delegation.core import poll_forge_delegations_impl
 
     return json.dumps(poll_forge_delegations_impl(project_dir), indent=2, ensure_ascii=False)
 
@@ -523,7 +523,7 @@ async def sync_delegation_sessions(
     project_dir: Annotated[str, "Project root."] = "",
     parent_session_id: Annotated[str, "Optional forge primary session id to filter child sessions."] = "",
 ) -> str:
-    from sdk_forge.session_nav import sync_delegation_sessions_impl
+    from sdk_forge.delegation.session_nav import sync_delegation_sessions_impl
 
     return json.dumps(
         sync_delegation_sessions_impl(project_dir, parent_session_id=parent_session_id),
@@ -538,7 +538,7 @@ async def get_subagent_dashboard(
     parent_session_id: Annotated[str, "Optional forge primary session id."] = "",
     include_preview: Annotated[bool, "Include live_preview from session export."] = True,
 ) -> str:
-    from sdk_forge.session_nav import get_subagent_dashboard_impl
+    from sdk_forge.delegation.session_nav import get_subagent_dashboard_impl
 
     return json.dumps(
         get_subagent_dashboard_impl(
@@ -556,10 +556,45 @@ async def peek_subagent_session(
     session_id: Annotated[str, "OpenCode session id e.g. ses_xxx."],
     max_chars: Annotated[int, "Max preview characters."] = 500,
 ) -> str:
-    from sdk_forge.session_nav import export_session_preview_impl
+    from sdk_forge.delegation.session_nav import export_session_preview_impl
 
     return json.dumps(
         export_session_preview_impl(session_id, max_chars=max_chars),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Detect sub-agent timeouts, tool failures, and stale pending delegations (v5.11).")
+async def check_subagent_health(
+    project_dir: Annotated[str, "Project root."] = "",
+    include_preview: Annotated[bool, "Scan session export for timeout/tool errors."] = True,
+) -> str:
+    from sdk_forge.delegation.health import check_subagent_health_impl
+
+    return json.dumps(
+        check_subagent_health_impl(project_dir, include_preview=include_preview),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Recover from sub-agent timeout: mark error, advance workflow, enable orchestration retry (v5.11).")
+async def recover_stalled_subagent(
+    project_dir: Annotated[str, "Project root."] = "",
+    task_id: Annotated[str, "Delegation task_id (empty = first pending)."] = "",
+    action: Annotated[str, "retry | skip"] = "retry",
+    failure_reason: Annotated[str, "Recorded failure code e.g. upstream_idle_timeout."] = "upstream_idle_timeout",
+) -> str:
+    from sdk_forge.delegation.health import recover_stalled_subagent_impl
+
+    return json.dumps(
+        recover_stalled_subagent_impl(
+            project_dir=project_dir,
+            task_id=task_id,
+            action=action,
+            failure_reason=failure_reason,
+        ),
         indent=2,
         ensure_ascii=False,
     )
@@ -569,7 +604,7 @@ async def peek_subagent_session(
 async def get_delegation_plan(
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:
-    from sdk_forge.delegation import get_delegation_plan_impl
+    from sdk_forge.delegation.core import get_delegation_plan_impl
 
     return json.dumps(get_delegation_plan_impl(project_dir), indent=2, ensure_ascii=False)
 
@@ -578,7 +613,7 @@ async def get_delegation_plan(
 async def get_task_dispatch_plan(
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:
-    from sdk_forge.task_dispatch import get_task_dispatch_plan_impl
+    from sdk_forge.delegation.task_dispatch import get_task_dispatch_plan_impl
 
     return json.dumps(get_task_dispatch_plan_impl(project_dir), indent=2, ensure_ascii=False)
 
@@ -587,7 +622,7 @@ async def get_task_dispatch_plan(
 async def validate_forge_delegation_tool(
     text: Annotated[str, "Agent tool call text or transcript snippet to validate."],
 ) -> str:
-    from sdk_forge.task_dispatch import validate_delegation_tool_text_impl
+    from sdk_forge.delegation.task_dispatch import validate_delegation_tool_text_impl
 
     return json.dumps(validate_delegation_tool_text_impl(text), indent=2, ensure_ascii=False)
 
@@ -598,7 +633,7 @@ async def record_scan_batch(
     batch_id: Annotated[int | str, "Scan batch id."] = 0,
     scan_json: Annotated[str, "scan_headers JSON for this batch."] = "",
 ) -> str:
-    from sdk_forge.workflow import save_scan_batch_result
+    from sdk_forge.orchestration.workflow import save_scan_batch_result
 
     try:
         bid = int(batch_id)
@@ -778,14 +813,14 @@ def main() -> None:
         mcp.run(transport="stdio")
 
 
-from sdk_forge.build import generate_cmake_content as _generate_cmake_content
-from sdk_forge.cache import gtest_cache_dir as _gtest_cache_dir
-from sdk_forge.scan import (
+from sdk_forge.pipeline.build import generate_cmake_content as _generate_cmake_content
+from sdk_forge.infra.cache import gtest_cache_dir as _gtest_cache_dir
+from sdk_forge.pipeline.scan import (
     HeaderFileInfo,
     parse_header as _parse_header,
     parse_header_clang as _parse_header_clang,
 )
-from sdk_forge.util import normalize_str_list as _normalize_str_list
+from sdk_forge.domain.util import normalize_str_list as _normalize_str_list
 
 _CLANG_AVAILABLE = CLANG_AVAILABLE
 

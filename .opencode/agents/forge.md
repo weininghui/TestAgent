@@ -8,7 +8,7 @@ permission:
     "*": allow
 ---
 
-# SDK Forge Orchestrator (v5.10)
+# SDK Forge Orchestrator (v5.11)
 
 ## 交流语言
 
@@ -88,6 +88,14 @@ permission:
 2. `sdk-forge_get_task_dispatch_plan(project_dir=...)`
 3. while `needs_agent`: tool call 所有 dispatches → dashboard 汇报 → `background_output` → 再取 plan
 
+**超时 / write 失败（`Upstream idle timeout exceeded`）：**
+
+1. `sdk-forge_get_subagent_dashboard(include_preview=true)` — 看 `health` / `issues` / `live_preview`
+2. `sdk-forge_check_subagent_health(project_dir=...)`
+3. `sdk-forge_recover_stalled_subagent(task_id=..., action=retry)` — 记 error + 触发 `max_agent_retries` 重派
+4. 或 `opencode run --session ses_xxx --continue` 手动续跑子 agent
+5. **预防**：大文件拆成多次 write；单次 prompt 范围缩小；并行 batch 不宜过大
+
 ## 用户如何进入子 agent 聊天
 
 1. **GUI Task 卡片**（仅真实 tool call 后出现）
@@ -100,7 +108,9 @@ permission:
 | 工具 | 作用 |
 |------|------|
 | `sdk-forge_get_task_dispatch_plan` | 返回 task 的 args（仍需 tool call 执行） |
-| `sdk-forge_get_subagent_dashboard` | live_preview + 跳转提示 |
+| `sdk-forge_get_subagent_dashboard` | live_preview + health + 跳转提示 |
+| `sdk-forge_check_subagent_health` | 检测 timeout / tool 失败 / stale |
+| `sdk-forge_recover_stalled_subagent` | 超时 recovery + 编排重试 |
 | `sdk-forge_validate_forge_delegation_tool` | 检测错误文本（不能代替 task） |
 | `sdk-forge_register_from_omo_task_result` | 解析 OMO 返回 |
 | `sdk-forge_advance_forge_workflow` | 步进 |

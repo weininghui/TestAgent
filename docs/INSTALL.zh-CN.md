@@ -96,7 +96,7 @@ powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
 ```bash
 python -c "import sdk_forge; print(sdk_forge.__version__)"   # 应为 5.10.0
 forge autopilot --help                                         # 必须有 autopilot 子命令
-python -c "import sdk_forge.task_dispatch"                     # task 派发模块
+python -c "import sdk_forge.delegation.task_dispatch"          # task 派发模块
 ```
 
 OpenCode MCP 工具列表中应有 **`get_task_dispatch_plan`**、**`validate_forge_delegation_tool`**、**`get_subagent_dashboard`**、**`run_forge_autopilot`**、**`advance_forge_workflow`**。  

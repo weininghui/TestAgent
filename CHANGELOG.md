@@ -1,5 +1,22 @@
 # Changelog
 
+## [5.11.0] - 2026-06-20
+
+Layered `sdk_forge` package + sub-agent **timeout recovery** for multi-agent workflows.
+
+### Added
+- **`sdk_forge/delegation/health.py`** — detect `Upstream idle timeout`, tool failures, stale pending delegations
+- MCP: **`check_subagent_health`**, **`recover_stalled_subagent`**
+- Dashboard `health` / `issues` / `recovery` on `get_subagent_dashboard` and `poll_forge_delegations`
+- Config: **`delegation_stale_sec`** (default 900)
+- **`TestDelegationV511`**
+
+### Changed (breaking)
+- **`sdk_forge/` layered layout** — `domain/`, `orchestration/`, `delegation/`, `pipeline/`, `infra/`
+- Root keeps only `cli.py`, `__init__.py`, `__main__.py` — **all flat import shims removed**
+- Imports must use layered paths (e.g. `sdk_forge.pipeline.scan`, `sdk_forge.delegation.task_dispatch`)
+- [`forge.md`](.opencode/agents/forge.md) — v5.11 timeout recovery playbook
+
 ## [5.10.0] - 2026-06-20
 
 Single delegation path: OpenCode/OMO **`task()` tool call** only (GUI Task cards).

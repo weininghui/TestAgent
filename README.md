@@ -8,9 +8,9 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: [v5.10.0](docs/releases/RELEASE_NOTES_v5.10.0.md)** — OpenCode GUI Task card alignment via OMO `task()` only.
+**Current release: [v5.11.0](docs/releases/RELEASE_NOTES_v5.11.0.md)** — Layered package + sub-agent timeout recovery.
 
-Previous: [v5.9.0](docs/releases/RELEASE_NOTES_v5.9.0.md) — Task dispatch plan + forbid `call_omo_agent`.
+Previous: [v5.10.0](docs/releases/RELEASE_NOTES_v5.10.0.md) — OpenCode GUI Task card alignment via OMO `task()` only.
 
 ## What it does
 
@@ -295,7 +295,7 @@ python -m pytest tests/ -v
 ## Releases
 
 - [All releases](https://github.com/weininghui/sdk-forge/releases)
-- Latest: [RELEASE_NOTES_v5.10.0.md](docs/releases/RELEASE_NOTES_v5.10.0.md)
+- Latest: [RELEASE_NOTES_v5.11.0.md](docs/releases/RELEASE_NOTES_v5.11.0.md)
 
 ## License
 

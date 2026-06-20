@@ -8,28 +8,28 @@ import argparse
 import json
 import sys
 
-from sdk_forge.build import compile_tests_impl
-from sdk_forge.clean import delete_tests_impl
-from sdk_forge.coverage import collect_coverage_impl
-from sdk_forge.doctor import doctor_impl
-from sdk_forge.init import init_project_impl
-from sdk_forge.mock import generate_mocks_impl
-from sdk_forge.pipeline import build_pipeline_impl
-from sdk_forge.compdb import export_compile_commands_impl, get_compile_commands_impl
-from sdk_forge.plan import suggest_test_plan_impl
-from sdk_forge.plan_gap import analyze_plan_gap_impl
-from sdk_forge.probe import probe_sdk_impl
-from sdk_forge.report import report_impl
-from sdk_forge.run import run_tests_impl
-from sdk_forge.scan import scan_headers_impl
-from sdk_forge.session import get_session_context_impl, save_plan_state
-from sdk_forge.coverage_expand import coverage_expand_impl
-from sdk_forge.bench import run_bench_impl
-from sdk_forge.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl
-from sdk_forge.templates import generate_test_skeleton_impl
-from sdk_forge.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
-from sdk_forge.workflow import update_workflow_stage
-from sdk_forge.util import normalize_str_list, parse_bool
+from sdk_forge.pipeline.build import compile_tests_impl
+from sdk_forge.infra.clean import delete_tests_impl
+from sdk_forge.pipeline.coverage import collect_coverage_impl
+from sdk_forge.infra.doctor import doctor_impl
+from sdk_forge.pipeline.init import init_project_impl
+from sdk_forge.pipeline.mock import generate_mocks_impl
+from sdk_forge.pipeline.core import build_pipeline_impl
+from sdk_forge.infra.compdb import export_compile_commands_impl, get_compile_commands_impl
+from sdk_forge.pipeline.plan import suggest_test_plan_impl
+from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
+from sdk_forge.pipeline.probe import probe_sdk_impl
+from sdk_forge.infra.report import report_impl
+from sdk_forge.pipeline.run import run_tests_impl
+from sdk_forge.pipeline.scan import scan_headers_impl
+from sdk_forge.infra.session import get_session_context_impl, save_plan_state
+from sdk_forge.pipeline.coverage_expand import coverage_expand_impl
+from sdk_forge.pipeline.bench import run_bench_impl
+from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl, enrich_test_cases_impl
+from sdk_forge.pipeline.templates import generate_test_skeleton_impl
+from sdk_forge.pipeline.test_fix import analyze_test_failures_impl, apply_proposed_fixes_impl, propose_test_fixes_impl
+from sdk_forge.orchestration.workflow import update_workflow_stage
+from sdk_forge.domain.util import normalize_str_list, parse_bool
 
 
 def _emit(result: dict, quiet: bool = False) -> int:
@@ -108,7 +108,7 @@ def cmd_clean(args: argparse.Namespace) -> int:
 def cmd_coverage(args: argparse.Namespace) -> int:
     result = collect_coverage_impl(args.build_dir, args.source_dir or "", args.coverage_tool)
     if args.project_dir and result.get("status") == "ok":
-        from sdk_forge.coverage import save_coverage_cache
+        from sdk_forge.pipeline.coverage import save_coverage_cache
         path = save_coverage_cache(args.project_dir, result)
         if path:
             result["saved_to"] = path
@@ -132,7 +132,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def cmd_setup_toolchain(args: argparse.Namespace) -> int:
-    from sdk_forge.toolchain_install import setup_toolchain_impl
+    from sdk_forge.infra.toolchain_install import setup_toolchain_impl
 
     return _emit(
         setup_toolchain_impl(method=args.method or "auto", confirm=args.confirm),
@@ -165,7 +165,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def cmd_assert_quality(args: argparse.Namespace) -> int:
-    from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+    from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl
     return _emit(
         analyze_assertion_quality_impl(
             project_dir=args.project_dir or "",
@@ -177,18 +177,18 @@ def cmd_assert_quality(args: argparse.Namespace) -> int:
 
 
 def cmd_golden_verify(args: argparse.Namespace) -> int:
-    from sdk_forge.golden import verify_golden_in_tests
+    from sdk_forge.pipeline.golden import verify_golden_in_tests
     return _emit(verify_golden_in_tests(args.project_dir or ""), args.quiet)
 
 
 def cmd_golden_init(args: argparse.Namespace) -> int:
-    from sdk_forge.golden import init_golden_template
+    from sdk_forge.pipeline.golden import init_golden_template
     path = init_golden_template(args.project_dir or ".")
     return _emit({"status": "ok", "golden_file": str(path)}, args.quiet)
 
 
 def cmd_golden_snapshot(args: argparse.Namespace) -> int:
-    from sdk_forge.golden import snapshot_golden_from_plan_impl
+    from sdk_forge.pipeline.golden import snapshot_golden_from_plan_impl
     return _emit(
         snapshot_golden_from_plan_impl(
             args.project_dir or "",
@@ -201,7 +201,7 @@ def cmd_golden_snapshot(args: argparse.Namespace) -> int:
 
 
 def cmd_autopilot(args: argparse.Namespace) -> int:
-    from sdk_forge.autopilot import run_autopilot_impl
+    from sdk_forge.orchestration.autopilot import run_autopilot_impl
     return _emit(
         run_autopilot_impl(
             sdk_root=args.sdk_root or "",
@@ -417,6 +417,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run = sub.add_parser("run", help="Run compiled tests")
     p_run.add_argument("build_dir")
     p_run.add_argument("--filter", default="")
+    p_run.add_argument("--quiet", action="store_true", help="Minimal JSON output")
     p_run.set_defaults(func=cmd_run)
 
     p_clean = sub.add_parser("clean", help="Delete GTest files")

@@ -79,7 +79,7 @@ If `pip show` says `4.0.0` but `sdk_forge.__version__` says `5.2.0`, your **code
 ```bash
 python -c "import sdk_forge; print(sdk_forge.__version__)"   # expect 5.10.0
 forge autopilot --help                                         # subcommand must appear
-python -c "import sdk_forge.task_dispatch"                     # task dispatch module
+python -c "import sdk_forge.delegation.task_dispatch"          # task dispatch module
 ```
 
 In OpenCode MCP tool list, look for **`get_task_dispatch_plan`**, **`validate_forge_delegation_tool`**, **`get_subagent_dashboard`**, **`run_forge_autopilot`**, and **`advance_forge_workflow`**.  

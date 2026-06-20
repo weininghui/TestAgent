@@ -26,11 +26,11 @@ from mcp_server import (
     _parse_header,
     _parse_header_clang,
 )
-from sdk_forge.scan import compute_if_depths
-from sdk_forge.mock import generate_mocks_impl
-from sdk_forge.errors import parse_cmake_error
-from sdk_forge.build import find_test_binary
-from sdk_forge.scan import scan_headers_impl
+from sdk_forge.pipeline.scan import compute_if_depths
+from sdk_forge.pipeline.mock import generate_mocks_impl
+from sdk_forge.domain.errors import parse_cmake_error
+from sdk_forge.pipeline.build import find_test_binary
+from sdk_forge.pipeline.scan import scan_headers_impl
 
 
 def _cmake_available() -> bool:
@@ -219,10 +219,10 @@ class TestGenerateCmakeContent:
         assert "target_link_libraries(run_tests PRIVATE gtest_main gmock calc)" in content
 
     def test_gtest_cache_block(self, monkeypatch):
-        from sdk_forge.gtest import gtest_source_path
+        from sdk_forge.infra.gtest import gtest_source_path
 
         monkeypatch.setattr(
-            "sdk_forge.build.gtest_source_path",
+            "sdk_forge.pipeline.build.gtest_source_path",
             lambda tag: Path("/nonexistent/forge/gtest"),
         )
         content = _generate_cmake_content(
@@ -238,12 +238,12 @@ class TestGenerateCmakeContent:
         assert "FETCHCONTENT_UPDATES_DISCONNECTED TRUE" in content
 
     def test_gtest_local_subdirectory(self, tmp_path, monkeypatch):
-        from sdk_forge.gtest import gtest_source_path
+        from sdk_forge.infra.gtest import gtest_source_path
 
         local = tmp_path / "gtest-src"
         local.mkdir()
         (local / "CMakeLists.txt").write_text("cmake_minimum_required(VERSION 3.14)\n", encoding="utf-8")
-        monkeypatch.setattr("sdk_forge.build.gtest_source_path", lambda tag: local)
+        monkeypatch.setattr("sdk_forge.pipeline.build.gtest_source_path", lambda tag: local)
         content = _generate_cmake_content(
             project_name="demo_tests",
             test_file_names=["demo_test.cpp"],
@@ -255,7 +255,7 @@ class TestGenerateCmakeContent:
 
     def test_gtest_fetch_block(self, monkeypatch):
         monkeypatch.setattr(
-            "sdk_forge.build.gtest_source_path",
+            "sdk_forge.pipeline.build.gtest_source_path",
             lambda tag: Path("/nonexistent/forge/gtest"),
         )
         content = _generate_cmake_content(
@@ -436,27 +436,27 @@ class TestCli:
 
 class TestGtestVersion:
     def test_resolve_pin_version(self):
-        from sdk_forge.gtest import resolve_gtest_tag
+        from sdk_forge.infra.gtest import resolve_gtest_tag
 
         assert resolve_gtest_tag("1.13.0") == "v1.13.0"
         assert resolve_gtest_tag("v1.12.0") == "v1.12.0"
 
     def test_resolve_auto_gcc(self, monkeypatch):
-        from sdk_forge import gtest as gtest_mod
+        import sdk_forge.infra.gtest as gtest_mod
 
         monkeypatch.setattr(gtest_mod, "detect_compiler", lambda: {"kind": "gcc", "major": 11})
         monkeypatch.setattr(gtest_mod, "detect_cmake_major", lambda: 3)
         assert gtest_mod.resolve_gtest_tag("auto") == "v1.13.0"
 
     def test_resolve_auto_modern_clang(self, monkeypatch):
-        from sdk_forge import gtest as gtest_mod
+        import sdk_forge.infra.gtest as gtest_mod
 
         monkeypatch.setattr(gtest_mod, "detect_compiler", lambda: {"kind": "clang", "major": 16})
         monkeypatch.setattr(gtest_mod, "detect_cmake_major", lambda: 3)
         assert gtest_mod.resolve_gtest_tag("auto") == "v1.14.0"
 
     def test_doctor_includes_googletest(self):
-        from sdk_forge.doctor import doctor_impl
+        from sdk_forge.infra.doctor import doctor_impl
 
         result = doctor_impl()
         names = {c["name"] for c in result["checks"]}
@@ -465,7 +465,7 @@ class TestGtestVersion:
 
 class TestForgeConfig:
     def test_load_forge_json(self, tmp_path):
-        from sdk_forge.config import (
+        from sdk_forge.infra.config import (
             compile_params_from_config,
             find_forge_config,
             load_forge_config,
@@ -500,7 +500,7 @@ class TestForgeConfig:
 
 class TestForgeDoctor:
     def test_doctor_returns_checks(self):
-        from sdk_forge.doctor import doctor_impl
+        from sdk_forge.infra.doctor import doctor_impl
 
         result = doctor_impl()
         assert "checks" in result
@@ -513,7 +513,7 @@ class TestForgeDoctor:
 
 class TestToolchain:
     def test_check_cxx_toolchain_shape(self):
-        from sdk_forge.toolchain import check_cxx_toolchain
+        from sdk_forge.infra.toolchain import check_cxx_toolchain
 
         tc = check_cxx_toolchain()
         assert "available" in tc
@@ -529,8 +529,8 @@ class TestToolchain:
                 "compile": {"status": "compiler_not_found", "stage": "toolchain", "hints": []},
             }
 
-        monkeypatch.setattr("sdk_forge.retry.compiler_gate_result", _blocked)
-        from sdk_forge.retry import build_with_retry_impl
+        monkeypatch.setattr("sdk_forge.pipeline.retry.compiler_gate_result", _blocked)
+        from sdk_forge.pipeline.retry import build_with_retry_impl
 
         tests = tmp_path / "tests"
         build = tmp_path / "build"
@@ -541,7 +541,7 @@ class TestToolchain:
         assert result["status"] == "compiler_not_found"
 
     def test_report_compiler_not_found_summary(self):
-        from sdk_forge.report import build_auto_summary
+        from sdk_forge.infra.report import build_auto_summary
 
         text = build_auto_summary({
             "status": "compiler_not_found",
@@ -551,17 +551,17 @@ class TestToolchain:
         assert "PASS" not in text or "推断" in text
 
     def test_setup_requires_confirm(self):
-        from sdk_forge.toolchain_install import setup_toolchain_impl
+        from sdk_forge.infra.toolchain_install import setup_toolchain_impl
 
         result = setup_toolchain_impl(method="auto", confirm=False)
         assert result["status"] == "confirmation_required"
         assert "available_options" in result
 
     def test_setup_skips_when_compiler_ready(self, monkeypatch):
-        from sdk_forge.toolchain_install import setup_toolchain_impl
+        from sdk_forge.infra.toolchain_install import setup_toolchain_impl
 
         monkeypatch.setattr(
-            "sdk_forge.toolchain_install.check_cxx_toolchain",
+            "sdk_forge.infra.toolchain_install.check_cxx_toolchain",
             lambda: {"available": True, "kind": "msvc"},
         )
         result = setup_toolchain_impl(confirm=True)
@@ -569,20 +569,20 @@ class TestToolchain:
         assert result.get("skipped") is True
 
     def test_detect_installers_windows(self, monkeypatch):
-        from sdk_forge.toolchain_install import detect_installers
+        from sdk_forge.infra.toolchain_install import detect_installers
 
         if sys.platform != "win32":
             pytest.skip("Windows only")
-        monkeypatch.setattr("sdk_forge.toolchain_install._which", lambda n: "/usr/bin/winget" if n == "winget" else None)
+        monkeypatch.setattr("sdk_forge.infra.toolchain_install._which", lambda n: "/usr/bin/winget" if n == "winget" else None)
         detected = detect_installers()
         assert detected.get("auto_method") == "winget-msvc"
         assert len(detected.get("options") or []) >= 1
 
     def test_ensure_skips_when_ready(self, monkeypatch):
-        from sdk_forge.toolchain_install import ensure_toolchain_impl
+        from sdk_forge.infra.toolchain_install import ensure_toolchain_impl
 
         monkeypatch.setattr(
-            "sdk_forge.toolchain_install.check_cxx_toolchain",
+            "sdk_forge.infra.toolchain_install.check_cxx_toolchain",
             lambda: {"available": True, "kind": "msvc"},
         )
         result = ensure_toolchain_impl()
@@ -592,7 +592,7 @@ class TestToolchain:
 
 class TestForgeInit:
     def test_init_scaffold(self, tmp_path):
-        from sdk_forge.init import init_project_impl
+        from sdk_forge.pipeline.init import init_project_impl
 
         target = tmp_path / "my_forge_proj"
         result = init_project_impl(str(target), sdk_root="../test_sdk", project_name="calc")
@@ -604,7 +604,7 @@ class TestForgeInit:
 
 class TestForgePipeline:
     def test_build_no_config_dirs(self, tmp_path):
-        from sdk_forge.pipeline import build_pipeline_impl
+        from sdk_forge.pipeline.core import build_pipeline_impl
 
         tests = tmp_path / "tests"
         build = tmp_path / "build"
@@ -625,7 +625,7 @@ class TestForgePipeline:
 
 class TestHintActions:
     def test_undefined_reference_actions(self):
-        from sdk_forge.hint_actions import parse_cmake_error_with_actions
+        from sdk_forge.domain.hint_actions import parse_cmake_error_with_actions
 
         parsed = parse_cmake_error_with_actions(
             "undefined reference to `calc_add'",
@@ -637,7 +637,7 @@ class TestHintActions:
         assert any("calc" in a.get("values", []) for a in parsed["actions"])
 
     def test_missing_header_actions(self):
-        from sdk_forge.hint_actions import parse_cmake_error_with_actions
+        from sdk_forge.domain.hint_actions import parse_cmake_error_with_actions
 
         parsed = parse_cmake_error_with_actions(
             "fatal error: api.h: No such file or directory",
@@ -646,7 +646,7 @@ class TestHintActions:
         assert any(a["type"] == "merge_sdk_include_dirs" for a in parsed["actions"])
 
     def test_apply_actions_to_params(self):
-        from sdk_forge.config import apply_actions_to_params
+        from sdk_forge.infra.config import apply_actions_to_params
 
         params = {"link_libraries": ["a"], "sdk_include_dirs": []}
         updated = apply_actions_to_params(params, [
@@ -659,7 +659,7 @@ class TestHintActions:
 
 class TestSuggestPlan:
     def test_plan_from_scan_json(self):
-        from sdk_forge.plan import suggest_test_plan_impl
+        from sdk_forge.pipeline.plan import suggest_test_plan_impl
 
         scan = {
             "status": "ok",
@@ -684,7 +684,7 @@ class TestSuggestPlan:
         assert len(target["scenarios"]) >= 2
 
     def test_plan_marks_virtual_class(self):
-        from sdk_forge.plan import suggest_test_plan_impl
+        from sdk_forge.pipeline.plan import suggest_test_plan_impl
 
         scan = {
             "status": "ok",
@@ -707,7 +707,7 @@ class TestSuggestPlan:
 
 class TestBuildRetry:
     def test_retry_applies_actions(self, tmp_path, monkeypatch):
-        from sdk_forge import retry as retry_mod
+        import sdk_forge.pipeline.retry as retry_mod
 
         calls = {"n": 0}
 
@@ -745,7 +745,7 @@ class TestBuildRetry:
 
 class TestReport:
     def test_report_markdown(self):
-        from sdk_forge.report import report_impl
+        from sdk_forge.infra.report import report_impl
 
         state = {
             "status": "ok",
@@ -762,7 +762,7 @@ class TestReport:
         assert "v1.14.0" in result["markdown"]
 
     def test_report_html(self, tmp_path):
-        from sdk_forge.report import report_impl
+        from sdk_forge.infra.report import report_impl
 
         cache = tmp_path / ".forge" / "cache"
         cache.mkdir(parents=True)
@@ -799,7 +799,7 @@ class TestReport:
 
 class TestHtmlReport:
     def test_xss_escaped(self):
-        from sdk_forge.report_html import format_report_html
+        from sdk_forge.infra.report_html import format_report_html
 
         html_out = format_report_html(
             {"status": "ok", "run": {"total": 1, "passed": 1, "failed": 0}},
@@ -809,7 +809,7 @@ class TestHtmlReport:
         assert "&lt;script&gt;" in html_out
 
     def test_agent_summary_hidden_when_empty(self):
-        from sdk_forge.report_html import format_report_html
+        from sdk_forge.infra.report_html import format_report_html
 
         html_out = format_report_html({"status": "ok"}, agent_summary="")
         assert "测试摘要" not in html_out
@@ -817,7 +817,7 @@ class TestHtmlReport:
 
 class TestAutoReport:
     def test_build_auto_summary_failures(self):
-        from sdk_forge.report import build_auto_summary
+        from sdk_forge.infra.report import build_auto_summary
 
         state = {
             "status": "test_failures",
@@ -842,7 +842,7 @@ class TestAutoReport:
         assert "Calc.Add" in text
 
     def test_auto_generate_report_writes_html(self, tmp_path):
-        from sdk_forge.report import auto_generate_report
+        from sdk_forge.infra.report import auto_generate_report
 
         state = {"status": "ok", "run": {"total": 1, "passed": 1, "failed": 0, "status": "ok"}}
         result = auto_generate_report(str(tmp_path), state)
@@ -851,7 +851,7 @@ class TestAutoReport:
         assert "测试摘要" in result["html"]
 
     def test_pipeline_attaches_html_path(self, tmp_path, monkeypatch):
-        from sdk_forge import pipeline
+        import sdk_forge.pipeline.core as pipeline
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -872,7 +872,7 @@ class TestAutoReport:
 
 class TestCodegen:
     def test_parse_params(self):
-        from sdk_forge.codegen import parse_params
+        from sdk_forge.pipeline.codegen import parse_params
 
         params = parse_params("int a, const char* name")
         assert len(params) == 2
@@ -880,7 +880,7 @@ class TestCodegen:
         assert params[1].is_pointer
 
     def test_render_add_normal(self):
-        from sdk_forge.codegen import render_assertion
+        from sdk_forge.pipeline.codegen import render_assertion
 
         target = {
             "symbol": "calc_add",
@@ -892,21 +892,21 @@ class TestCodegen:
         assert "calc_add(2, 3)" in body
 
     def test_render_unknown_type_agent_marker(self):
-        from sdk_forge.codegen import render_assertion
+        from sdk_forge.pipeline.codegen import render_assertion
 
         target = {"symbol": "foo", "return_type": "MyType", "params": "MyType x"}
         body = render_assertion("foo", {"name": "normal"}, target, fidelity="smart")
         assert "AGENT:" in body
 
     def test_skeleton_fidelity(self):
-        from sdk_forge.codegen import render_assertion
+        from sdk_forge.pipeline.codegen import render_assertion
 
         target = {"symbol": "calc_add", "return_type": "int", "params": "int a, int b"}
         body = render_assertion("calc_add", {"name": "normal"}, target, fidelity="skeleton")
         assert "TODO" in body
 
     def test_smart_scaffold_expect_eq(self, tmp_path):
-        from sdk_forge.templates import generate_test_skeleton_impl
+        from sdk_forge.pipeline.templates import generate_test_skeleton_impl
 
         plan = {
             "status": "ok",
@@ -926,7 +926,7 @@ class TestCodegen:
         assert "EXPECT_EQ" in content
 
     def test_count_placeholders(self):
-        from sdk_forge.codegen import count_placeholders
+        from sdk_forge.pipeline.codegen import count_placeholders
 
         text = "// TODO: x\nEXPECT_TRUE(true);\n// AGENT: fill"
         counts = count_placeholders(text)
@@ -935,7 +935,7 @@ class TestCodegen:
 
 class TestEnrich:
     def test_analyze_scaffold_quality(self, tmp_path):
-        from sdk_forge.enrich import analyze_scaffold_quality_impl
+        from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -949,7 +949,7 @@ class TestEnrich:
         assert Path(result["saved_to"]).is_file()
 
     def test_enrich_briefs(self, tmp_path):
-        from sdk_forge.enrich import enrich_test_cases_impl
+        from sdk_forge.pipeline.enrich import enrich_test_cases_impl
 
         cache = tmp_path / ".forge" / "cache"
         cache.mkdir(parents=True)
@@ -971,7 +971,7 @@ class TestEnrich:
 
 class TestEnrichBatch:
     def test_enrich_test_files_filter(self, tmp_path):
-        from sdk_forge.enrich import enrich_test_cases_impl
+        from sdk_forge.pipeline.enrich import enrich_test_cases_impl
 
         cache = tmp_path / ".forge" / "cache"
         cache.mkdir(parents=True)
@@ -997,7 +997,7 @@ class TestEnrichBatch:
         assert "calc_add" in result["briefs"][0]["test_file"].lower()
 
     def test_quality_test_files_filter(self, tmp_path):
-        from sdk_forge.enrich import analyze_scaffold_quality_impl
+        from sdk_forge.pipeline.enrich import analyze_scaffold_quality_impl
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -1014,7 +1014,7 @@ class TestEnrichBatch:
 
 class TestOrchestration:
     def test_split_enrich_batches(self):
-        from sdk_forge.orchestration import split_enrich_batches
+        from sdk_forge.orchestration.core import split_enrich_batches
 
         batches = split_enrich_batches(["a.cpp", "b.cpp", "c.cpp", "d.cpp", "e.cpp"], batch_size=2)
         assert len(batches) == 3
@@ -1022,23 +1022,23 @@ class TestOrchestration:
         assert batches[2]["files"] == ["e.cpp"]
 
     def test_single_file_one_batch(self):
-        from sdk_forge.orchestration import split_enrich_batches
+        from sdk_forge.orchestration.core import split_enrich_batches
 
         batches = split_enrich_batches(["only_test.cpp"], batch_size=4)
         assert len(batches) == 1
         assert batches[0]["batch_id"] == 0
 
     def test_next_actions_env_first(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.orchestration.core import get_orchestration_context
 
         ctx = get_orchestration_context(str(tmp_path))
         assert ctx["status"] == "ok"
         assert ctx["next_actions"][0]["agent"] == "forge-env"
 
     def test_next_actions_enrich_parallel(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
@@ -1057,9 +1057,9 @@ class TestOrchestration:
         assert all(a["parallel"] for a in enrich_actions)
 
     def test_serial_enrich_one_batch_at_a_time(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
@@ -1078,7 +1078,7 @@ class TestOrchestration:
         assert enrich_actions[0]["parallel"] is False
 
     def test_record_agent_completion(self, tmp_path):
-        from sdk_forge.workflow import load_workflow_state, record_agent_completion
+        from sdk_forge.orchestration.workflow import load_workflow_state, record_agent_completion
 
         record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
         state = load_workflow_state(str(tmp_path))
@@ -1088,7 +1088,7 @@ class TestOrchestration:
 
 class TestAutopilotLoop:
     def test_enrich_round_and_clear_agent_runs(self, tmp_path):
-        from sdk_forge.workflow import (
+        from sdk_forge.orchestration.workflow import (
             clear_agent_runs,
             get_enrich_round,
             increment_enrich_round,
@@ -1104,9 +1104,9 @@ class TestAutopilotLoop:
         assert cleared["remaining_runs"] == 0
 
     def test_redispatch_after_assertion_fail(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import get_enrich_round, record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import get_enrich_round, record_agent_completion
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "good"}, {"symbol": "weak"}],
@@ -1139,7 +1139,7 @@ class TestAutopilotLoop:
         assert ctx["assertion_gate_preview"].get("passed") is False
 
     def test_files_needing_assertion_fix(self, tmp_path):
-        from sdk_forge.orchestration import files_needing_assertion_fix
+        from sdk_forge.orchestration.core import files_needing_assertion_fix
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -1150,8 +1150,8 @@ class TestAutopilotLoop:
 
 class TestOrchestrationV52:
     def _base_project(self, tmp_path):
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
@@ -1168,8 +1168,8 @@ class TestOrchestrationV52:
         return tmp_path
 
     def test_agent_error_retry(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         self._base_project(tmp_path)
         record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="error")
@@ -1180,8 +1180,8 @@ class TestOrchestrationV52:
         assert enrich[0].get("retry") is True
 
     def test_agent_error_blocked_after_max_retries(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         self._base_project(tmp_path)
         for _ in range(3):
@@ -1192,8 +1192,8 @@ class TestOrchestrationV52:
         assert blocked
 
     def test_review_verdict_blocks_build(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.workflow import record_agent_completion, set_review_verdict
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.orchestration.workflow import record_agent_completion, set_review_verdict
 
         self._base_project(tmp_path)
         record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
@@ -1205,8 +1205,8 @@ class TestOrchestrationV52:
         assert ctx["review_verdict"] == "block"
 
     def test_review_pass_allows_build(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         self._base_project(tmp_path)
         record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
@@ -1220,9 +1220,9 @@ class TestOrchestrationV52:
         assert build
 
     def test_build_blocked_redispatch_enrich(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.retry import save_build_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.pipeline.retry import save_build_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         self._base_project(tmp_path)
         (tmp_path / "tests" / "x_test.cpp").write_text(
@@ -1242,9 +1242,9 @@ class TestOrchestrationV52:
         assert ctx["enrich_round"] >= 1
 
     def test_merge_ready_when_complete(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.retry import save_build_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.pipeline.retry import save_build_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         self._base_project(tmp_path)
         record_agent_completion(str(tmp_path), "forge-enrich", batch_id=0, status="ok")
@@ -1262,8 +1262,8 @@ class TestOrchestrationV52:
 
 class TestForgeOracle:
     def test_draft_golden_from_plan(self, tmp_path):
-        from sdk_forge.oracle import draft_golden_from_plan_impl
-        from sdk_forge.session import save_plan_state
+        from sdk_forge.pipeline.oracle import draft_golden_from_plan_impl
+        from sdk_forge.infra.session import save_plan_state
 
         save_plan_state(str(tmp_path), {
             "status": "ok",
@@ -1283,9 +1283,9 @@ class TestForgeOracle:
 
 class TestAutopilotAdvance:
     def test_advance_after_enrich(self, tmp_path):
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
-        from sdk_forge.workflow_advance import advance_forge_workflow_impl
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
+        from sdk_forge.orchestration.workflow_advance import advance_forge_workflow_impl
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
@@ -1307,8 +1307,8 @@ class TestAutopilotAdvance:
 
     async def test_mcp_advance_forge_workflow(self, tmp_path):
         from mcp_server import advance_forge_workflow
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
@@ -1327,16 +1327,16 @@ class TestAutopilotAdvance:
 
 class TestOrchestrationV53:
     def test_resolve_batch_size_auto(self):
-        from sdk_forge.orchestration import resolve_batch_size
+        from sdk_forge.orchestration.core import resolve_batch_size
 
         assert resolve_batch_size("auto", 3) == 1
         assert resolve_batch_size("auto", 10) == 4
         assert resolve_batch_size("auto", 20) == 7
 
     def test_oracle_gate_before_enrich(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "x"}],
@@ -1356,8 +1356,8 @@ class TestOrchestrationV53:
         assert oracle, ctx["next_actions"]
 
     def test_scan_batch_dispatch(self, tmp_path, monkeypatch):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         sdk = tmp_path / "sdk"
         inc = sdk / "include"
@@ -1378,8 +1378,8 @@ class TestOrchestrationV53:
         assert ctx["scan_batches"]
 
     def test_merge_scan_batches(self, tmp_path):
-        from sdk_forge.scan_merge import merge_scan_batches_impl
-        from sdk_forge.workflow import save_scan_batch_result
+        from sdk_forge.pipeline.scan_merge import merge_scan_batches_impl
+        from sdk_forge.orchestration.workflow import save_scan_batch_result
 
         sdk = tmp_path / "sdk"
         sdk.mkdir()
@@ -1394,7 +1394,7 @@ class TestOrchestrationV53:
             "files": [{"filename": "b.h", "functions": [{"name": "bar"}]}],
         })
         for bid in (0, 1):
-            from sdk_forge.workflow import record_agent_completion
+            from sdk_forge.orchestration.workflow import record_agent_completion
             record_agent_completion(str(tmp_path), "forge-scan", batch_id=bid, status="ok")
 
         result = merge_scan_batches_impl(str(tmp_path), sdk_root=str(sdk))
@@ -1402,8 +1402,8 @@ class TestOrchestrationV53:
         assert result["target_count"] >= 1
 
     def test_stage_timeline(self, tmp_path):
-        from sdk_forge.orchestration import build_stage_timeline, get_orchestration_context
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import build_stage_timeline, get_orchestration_context
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         record_agent_completion(str(tmp_path), "forge-env", status="ok")
         record_agent_completion(str(tmp_path), "forge-scan", status="ok")
@@ -1415,9 +1415,9 @@ class TestOrchestrationV53:
 
 class TestDelegationV55:
     def test_parallel_enrich_delegation_metadata(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
@@ -1445,7 +1445,7 @@ class TestDelegationV55:
             assert "title" not in action
 
     def test_serial_stage_foreground_delegation(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.orchestration.core import get_orchestration_context
 
         (tmp_path / ".forge.yaml").write_text("delegation_mode: omo\n", encoding="utf-8")
         ctx = get_orchestration_context(str(tmp_path))
@@ -1455,7 +1455,7 @@ class TestDelegationV55:
         assert env["subagent_type"] == "forge-env"
 
     def test_legacy_inline_config_still_omo_task(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.orchestration.core import get_orchestration_context
 
         (tmp_path / ".forge.yaml").write_text("delegation_mode: inline\n", encoding="utf-8")
         ctx = get_orchestration_context(str(tmp_path))
@@ -1465,12 +1465,12 @@ class TestDelegationV55:
         assert action.get("subagent_type") == "forge-env"
 
     def test_register_poll_advance_flow(self, tmp_path):
-        from sdk_forge.delegation import (
+        from sdk_forge.delegation.core import (
             get_delegation_plan_impl,
             poll_forge_delegations_impl,
             register_delegation_impl,
         )
-        from sdk_forge.workflow_advance import advance_forge_workflow_impl
+        from sdk_forge.orchestration.workflow_advance import advance_forge_workflow_impl
 
         register_delegation_impl(str(tmp_path), "task-1", "forge-enrich", batch_id=0, title="Enrich batch 0")
         polled = poll_forge_delegations_impl(str(tmp_path))
@@ -1488,10 +1488,10 @@ class TestDelegationV55:
         assert "background_actions" in plan
 
     def test_get_delegation_plan_splits_actions(self, tmp_path):
-        from sdk_forge.delegation import get_delegation_plan_impl
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.delegation.core import get_delegation_plan_impl
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}],
@@ -1527,7 +1527,7 @@ class TestDelegationV55:
 
 class TestDelegationV56:
     def test_register_with_session_navigation(self, tmp_path):
-        from sdk_forge.delegation import register_delegation_impl
+        from sdk_forge.delegation.core import register_delegation_impl
 
         result = register_delegation_impl(
             str(tmp_path), "bg_test1", "forge-enrich",
@@ -1539,7 +1539,7 @@ class TestDelegationV56:
         assert "ses_abc123" in nav["cli_resume"]
 
     def test_update_delegation_session(self, tmp_path):
-        from sdk_forge.delegation import (
+        from sdk_forge.delegation.core import (
             register_delegation_impl,
             update_delegation_session_impl,
         )
@@ -1550,7 +1550,7 @@ class TestDelegationV56:
         assert updated["navigation"]["session_id"] == "ses_new"
 
     def test_poll_includes_navigation(self, tmp_path):
-        from sdk_forge.delegation import poll_forge_delegations_impl, register_delegation_impl
+        from sdk_forge.delegation.core import poll_forge_delegations_impl, register_delegation_impl
 
         register_delegation_impl(str(tmp_path), "bg_poll", "forge-enrich", session_id="ses_x")
         polled = poll_forge_delegations_impl(str(tmp_path))
@@ -1570,9 +1570,9 @@ class TestDelegationV56:
 
 class TestDelegationV57:
     def test_next_actions_omo_fields(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.orchestration.core import get_orchestration_context
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
         tests = tmp_path / "tests"
@@ -1595,7 +1595,7 @@ class TestDelegationV57:
         assert "title" not in enrich
 
     def test_parse_omo_task_result(self):
-        from sdk_forge.delegation import parse_omo_task_result_impl
+        from sdk_forge.delegation.core import parse_omo_task_result_impl
 
         text = """Background task launched.
 
@@ -1609,7 +1609,7 @@ Description: Enrich batch 0
         assert parsed["clickable"] is True
 
     def test_parse_omo_task_metadata_block(self):
-        from sdk_forge.delegation import parse_omo_task_result_impl
+        from sdk_forge.delegation.core import parse_omo_task_result_impl
 
         text = """Background task launched.
 <task_metadata>
@@ -1624,7 +1624,7 @@ subagent: forge-enrich
         assert parsed["clickable"] is True
 
     def test_register_from_omo_result(self, tmp_path):
-        from sdk_forge.delegation import register_from_omo_result_impl
+        from sdk_forge.delegation.core import register_from_omo_result_impl
 
         text = "Task ID: bg_test99\nSession ID: ses_test88\n"
         result = register_from_omo_result_impl(
@@ -1637,7 +1637,7 @@ subagent: forge-enrich
 
 class TestDelegationV58:
     def test_export_preview_parsing(self):
-        from sdk_forge.session_nav import _extract_message_text, export_session_preview_impl
+        from sdk_forge.delegation.session_nav import _extract_message_text, export_session_preview_impl
 
         sample = {
             "parts": [
@@ -1650,15 +1650,15 @@ class TestDelegationV58:
         assert "grep" in text
 
     def test_session_match_delegation(self):
-        from sdk_forge.session_nav import _session_matches_delegation
+        from sdk_forge.delegation.session_nav import _session_matches_delegation
 
         session = {"title": "Enrich batch 0 (@forge-enrich subagent)"}
         entry = {"agent": "forge-enrich", "title": "Enrich batch 0"}
         assert _session_matches_delegation(session, entry) is True
 
     def test_sync_binds_session(self, tmp_path, monkeypatch):
-        from sdk_forge.delegation import register_delegation_impl
-        from sdk_forge.session_nav import sync_delegation_sessions_impl
+        from sdk_forge.delegation.core import register_delegation_impl
+        from sdk_forge.delegation.session_nav import sync_delegation_sessions_impl
 
         register_delegation_impl(
             str(tmp_path), "bg_sync1", "forge-enrich", batch_id=0, title="Enrich batch 0",
@@ -1677,15 +1677,15 @@ class TestDelegationV58:
             }
 
         monkeypatch.setattr(
-            "sdk_forge.session_nav.list_opencode_sessions_impl", fake_list,
+            "sdk_forge.delegation.session_nav.list_opencode_sessions_impl", fake_list,
         )
         result = sync_delegation_sessions_impl(str(tmp_path))
         assert result["bound_count"] == 1
         assert result["bound"][0]["session_id"] == "ses_bind001"
 
     def test_dashboard_structure(self, tmp_path, monkeypatch):
-        from sdk_forge.delegation import register_delegation_impl
-        from sdk_forge.session_nav import get_subagent_dashboard_impl
+        from sdk_forge.delegation.core import register_delegation_impl
+        from sdk_forge.delegation.session_nav import get_subagent_dashboard_impl
 
         register_delegation_impl(
             str(tmp_path), "dash1", "forge-enrich", batch_id=0,
@@ -1693,11 +1693,11 @@ class TestDelegationV58:
         )
 
         monkeypatch.setattr(
-            "sdk_forge.session_nav.list_opencode_sessions_impl",
+            "sdk_forge.delegation.session_nav.list_opencode_sessions_impl",
             lambda max_count=100: {"status": "ok", "sessions": [], "count": 0},
         )
         monkeypatch.setattr(
-            "sdk_forge.session_nav.export_session_preview_impl",
+            "sdk_forge.delegation.session_nav.export_session_preview_impl",
             lambda sid, max_chars=500: {
                 "status": "ok",
                 "session_id": sid,
@@ -1716,11 +1716,11 @@ class TestDelegationV58:
         from mcp_server import get_subagent_dashboard
 
         monkeypatch.setattr(
-            "sdk_forge.session_nav.list_opencode_sessions_impl",
+            "sdk_forge.delegation.session_nav.list_opencode_sessions_impl",
             lambda max_count=100: {"status": "ok", "sessions": [], "count": 0},
         )
         monkeypatch.setattr(
-            "sdk_forge.session_nav.export_session_preview_impl",
+            "sdk_forge.delegation.session_nav.export_session_preview_impl",
             lambda sid, max_chars=500: {"status": "ok", "session_id": sid, "live_preview": ""},
         )
         raw = await get_subagent_dashboard(str(tmp_path))
@@ -1728,9 +1728,96 @@ class TestDelegationV58:
         assert data["status"] == "ok"
 
 
+class TestDelegationV511:
+    def test_scan_timeout_in_tool_error(self):
+        from sdk_forge.delegation.health import scan_message_parts
+
+        parts = [
+            {
+                "type": "tool",
+                "tool": "write",
+                "state": {
+                    "status": "failed",
+                    "title": "write 失败",
+                    "error": "Tool execution aborted — Upstream idle timeout exceeded",
+                },
+            }
+        ]
+        issues = scan_message_parts(parts)
+        assert any(i.get("kind") == "timeout" for i in issues)
+        assert any(i.get("tool") == "write" for i in issues)
+
+    def test_export_preview_includes_health(self):
+        from sdk_forge.delegation.session_nav import _build_session_preview
+
+        data = {
+            "info": {"title": "test"},
+            "messages": [
+                {
+                    "info": {"role": "assistant", "time": {"updated": "2026-01-01T00:00:00+00:00"}},
+                    "parts": [
+                        {
+                            "type": "tool",
+                            "tool": "write",
+                            "state": {
+                                "status": "failed",
+                                "title": "write 失败",
+                                "error": "Upstream idle timeout exceeded",
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+        preview = _build_session_preview(data, "ses_timeout1", 500)
+        assert preview["health"] == "timeout"
+        assert preview["issues"]
+
+    def test_recover_stalled_triggers_retry(self, tmp_path):
+        from sdk_forge.delegation.core import register_delegation_impl
+        from sdk_forge.delegation.health import recover_stalled_subagent_impl
+        from sdk_forge.orchestration.workflow import record_agent_completion
+
+        register_delegation_impl(
+            str(tmp_path), "task_to1", "forge-enrich", batch_id=0, title="Enrich batch 0",
+        )
+        record_agent_completion(str(tmp_path), "forge-enrich", status="error", batch_id=0)
+        result = recover_stalled_subagent_impl(str(tmp_path), task_id="task_to1", action="retry")
+        assert result["status"] == "ok"
+        assert result["workflow"]["status"] in ("needs_agent", "blocked", "idle", "ok")
+        polled = __import__("sdk_forge.delegation.core", fromlist=["list_delegations_impl"]).list_delegations_impl(
+            str(tmp_path)
+        )
+        done = [d for d in polled["completed"] if d.get("task_id") == "task_to1"]
+        assert done and done[0].get("status") == "error"
+
+    @pytest.mark.asyncio
+    async def test_mcp_check_subagent_health(self, tmp_path, monkeypatch):
+        from mcp_server import check_subagent_health
+
+        monkeypatch.setattr(
+            "sdk_forge.delegation.health.export_session_preview_impl",
+            lambda sid, max_chars=2000: {
+                "status": "ok",
+                "health": "timeout",
+                "issues": [{"kind": "timeout"}],
+                "live_preview": "Upstream idle timeout exceeded",
+            },
+        )
+        from sdk_forge.delegation.core import register_delegation_impl
+
+        register_delegation_impl(
+            str(tmp_path), "task_h1", "forge-enrich", batch_id=0, session_id="ses_h1",
+        )
+        raw = await check_subagent_health(str(tmp_path))
+        data = json.loads(raw)
+        assert data["unhealthy_count"] >= 1
+        assert data["needs_recovery"]
+
+
 class TestTaskDispatchV59:
     def test_build_omo_task_call(self):
-        from sdk_forge.task_dispatch import build_omo_task_call
+        from sdk_forge.delegation.task_dispatch import build_omo_task_call
 
         call = build_omo_task_call({
             "subagent_type": "forge-enrich",
@@ -1748,7 +1835,7 @@ class TestTaskDispatchV59:
         assert call["validation_errors"] == []
 
     def test_delegation_mode_always_omo(self, tmp_path):
-        from sdk_forge.orchestration import delegation_mode
+        from sdk_forge.orchestration.core import delegation_mode
 
         (tmp_path / ".forge.yaml").write_text("delegation_mode: cli\n", encoding="utf-8")
         assert delegation_mode(str(tmp_path)) == "omo"
@@ -1756,9 +1843,9 @@ class TestTaskDispatchV59:
         assert delegation_mode(str(tmp_path)) == "omo"
 
     def test_get_task_dispatch_plan(self, tmp_path):
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.task_dispatch import get_task_dispatch_plan_impl
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.delegation.task_dispatch import get_task_dispatch_plan_impl
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
         tests = tmp_path / "tests"
@@ -1782,16 +1869,16 @@ class TestTaskDispatchV59:
         assert plan["invocation_guide"]["not_mcp"] is True
 
     def test_validate_call_omo_agent(self):
-        from sdk_forge.task_dispatch import validate_delegation_tool_text_impl
+        from sdk_forge.delegation.task_dispatch import validate_delegation_tool_text_impl
 
         result = validate_delegation_tool_text_impl("call_omo_agent(subagent_type=librarian)")
         assert result["status"] == "invalid"
         assert result["issues"]
 
     def test_delegation_plan_includes_task_dispatches(self, tmp_path):
-        from sdk_forge.delegation import get_delegation_plan_impl
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.workflow import record_agent_completion
+        from sdk_forge.delegation.core import get_delegation_plan_impl
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.orchestration.workflow import record_agent_completion
 
         save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
         (tmp_path / "tests").mkdir()
@@ -1826,8 +1913,8 @@ class TestTaskDispatchV59:
 
 class TestGoldenSnapshot:
     def test_extract_expect_eq_to_golden(self, tmp_path):
-        from sdk_forge.golden import load_golden_cases, snapshot_golden_from_plan_impl
-        from sdk_forge.session import save_plan_state
+        from sdk_forge.pipeline.golden import load_golden_cases, snapshot_golden_from_plan_impl
+        from sdk_forge.infra.session import save_plan_state
 
         save_plan_state(str(tmp_path), {
             "status": "ok", "targets": [{"symbol": "calc_add"}],
@@ -1850,7 +1937,7 @@ class TestGoldenSnapshot:
         assert any(c.get("expect") == 5 for c in cases)
 
     def test_snapshot_merge_skips_existing(self, tmp_path):
-        from sdk_forge.golden import init_golden_template, snapshot_golden_from_plan_impl
+        from sdk_forge.pipeline.golden import init_golden_template, snapshot_golden_from_plan_impl
 
         init_golden_template(str(tmp_path))
         tests = tmp_path / "tests"
@@ -1868,7 +1955,7 @@ class TestGoldenSnapshot:
 
 class TestAutopilotEntry:
     def test_autopilot_init_returns_needs_agent(self, tmp_path, monkeypatch):
-        from sdk_forge.autopilot import run_autopilot_impl
+        from sdk_forge.orchestration.autopilot import run_autopilot_impl
 
         sdk = tmp_path / "sdk"
         inc = sdk / "include"
@@ -1880,7 +1967,7 @@ class TestAutopilotEntry:
         project = tmp_path / "forge_project"
 
         monkeypatch.setattr(
-            "sdk_forge.autopilot.ensure_toolchain_impl",
+            "sdk_forge.orchestration.autopilot.ensure_toolchain_impl",
             lambda **kw: {"status": "ok", "skipped": True},
         )
 
@@ -1906,7 +1993,7 @@ class TestAutopilotEntry:
         project = tmp_path / "proj"
 
         monkeypatch.setattr(
-            "sdk_forge.autopilot.ensure_toolchain_impl",
+            "sdk_forge.orchestration.autopilot.ensure_toolchain_impl",
             lambda **kw: {"status": "ok"},
         )
         result = json.loads(await run_forge_autopilot(str(sdk), str(project), "production", 2))
@@ -1916,7 +2003,7 @@ class TestAutopilotEntry:
 
 class TestAssertionQuality:
     def test_detects_weak_succeed(self, tmp_path):
-        from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+        from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -1930,7 +2017,7 @@ class TestAssertionQuality:
         assert result["score"] < 100
 
     def test_detects_tautology(self, tmp_path):
-        from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+        from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -1942,7 +2029,7 @@ class TestAssertionQuality:
         assert any("tautology" in (t.get("issues") or []) for t in result["weak_tests"])
 
     def test_real_assertion_scores_high(self, tmp_path):
-        from sdk_forge.assertion_quality import analyze_assertion_quality_impl
+        from sdk_forge.pipeline.assertion_quality import analyze_assertion_quality_impl
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -1956,14 +2043,14 @@ class TestAssertionQuality:
 
 class TestProductionProfile:
     def test_production_profile_presets(self):
-        from sdk_forge.profile import resolve_forge_config
+        from sdk_forge.infra.profile import resolve_forge_config
 
         cfg = resolve_forge_config({}, "production")
         assert cfg["forge_profile"] == "production"
         assert cfg["min_assertion_score"] == 80
 
     def test_assertion_gate_blocks_agent(self, tmp_path):
-        from sdk_forge.quality_gate import run_assertion_quality_gate
+        from sdk_forge.pipeline.quality_gate import run_assertion_quality_gate
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -1976,7 +2063,7 @@ class TestProductionProfile:
         assert gate["block_reasons"]
 
     def test_pipeline_blocks_weak_production(self, tmp_path):
-        from sdk_forge.pipeline import build_pipeline_impl
+        from sdk_forge.pipeline.core import build_pipeline_impl
 
         tests = tmp_path / "tests"
         build = tmp_path / "build"
@@ -1993,7 +2080,7 @@ class TestProductionProfile:
 
 class TestGolden:
     def test_load_golden_cases(self, tmp_path):
-        from sdk_forge.golden import init_golden_template, load_golden_cases
+        from sdk_forge.pipeline.golden import init_golden_template, load_golden_cases
 
         init_golden_template(str(tmp_path))
         loaded = load_golden_cases(str(tmp_path), symbol="calc_add")
@@ -2001,7 +2088,7 @@ class TestGolden:
         assert len(loaded.get("cases") or []) >= 1
 
     def test_golden_codegen_body(self):
-        from sdk_forge.codegen import _smart_function_body
+        from sdk_forge.pipeline.codegen import _smart_function_body
 
         target = {
             "return_type": "int",
@@ -2013,9 +2100,9 @@ class TestGolden:
         assert "5" in body
 
     def test_golden_enrich_hints(self, tmp_path):
-        from sdk_forge.enrich import enrich_test_cases_impl
-        from sdk_forge.golden import init_golden_template
-        from sdk_forge.session import save_plan_state
+        from sdk_forge.pipeline.enrich import enrich_test_cases_impl
+        from sdk_forge.pipeline.golden import init_golden_template
+        from sdk_forge.infra.session import save_plan_state
 
         init_golden_template(str(tmp_path))
         cache = tmp_path / ".forge" / "cache"
@@ -2035,7 +2122,7 @@ class TestGolden:
 
 class TestQualityGate:
     def test_gate_settings_defaults(self):
-        from sdk_forge.quality_gate import quality_gate_settings
+        from sdk_forge.pipeline.quality_gate import quality_gate_settings
 
         s = quality_gate_settings({})
         assert s["enabled"] is True
@@ -2043,7 +2130,7 @@ class TestQualityGate:
         assert s["max_placeholder_ratio"] == 0.5
 
     def test_gate_blocks_when_ratio_high(self, tmp_path):
-        from sdk_forge.pipeline import build_pipeline_impl
+        from sdk_forge.pipeline.core import build_pipeline_impl
 
         tests = tmp_path / "tests"
         build = tmp_path / "build"
@@ -2062,7 +2149,7 @@ class TestQualityGate:
         assert result["quality_gate"]["passed"] is False
 
     def test_skip_quality_gate(self, tmp_path):
-        from sdk_forge.pipeline import build_pipeline_impl
+        from sdk_forge.pipeline.core import build_pipeline_impl
 
         tests = tmp_path / "tests"
         build = tmp_path / "build"
@@ -2087,7 +2174,7 @@ class TestQualityGate:
 
 class TestCoverageExpand:
     def test_appends_test_p_block(self, tmp_path):
-        from sdk_forge.coverage_expand import coverage_expand_impl
+        from sdk_forge.pipeline.coverage_expand import coverage_expand_impl
 
         cache = tmp_path / ".forge" / "cache"
         cache.mkdir(parents=True)
@@ -2124,8 +2211,8 @@ class TestCoverageExpand:
 
 class TestPlanEnum:
     def test_status_enum_members_from_scan(self):
-        from sdk_forge.plan import suggest_test_plan_impl
-        from sdk_forge.scan import scan_headers_impl
+        from sdk_forge.pipeline.plan import suggest_test_plan_impl
+        from sdk_forge.pipeline.scan import scan_headers_impl
 
         sdk = EXAMPLES / "test_sdk_cpp"
         scan = scan_headers_impl(str(sdk / "include"), use_clang=False, use_cache=False)
@@ -2147,7 +2234,7 @@ class TestPlanEnum:
 
 class TestScaffoldGroup:
     def test_group_by_header(self, tmp_path):
-        from sdk_forge.templates import generate_test_skeleton_impl
+        from sdk_forge.pipeline.templates import generate_test_skeleton_impl
 
         plan = {
             "status": "ok",
@@ -2186,7 +2273,7 @@ class TestScaffoldGroup:
 
 class TestTemplates:
     def test_scaffold_from_plan(self, tmp_path):
-        from sdk_forge.templates import generate_test_skeleton_impl
+        from sdk_forge.pipeline.templates import generate_test_skeleton_impl
 
         plan = {
             "status": "ok",
@@ -2215,7 +2302,7 @@ class TestTemplates:
 
 class TestLearn:
     def test_learn_and_load(self, tmp_path):
-        from sdk_forge.learn import learn_from_build, load_learned_config, merge_learned_into_params
+        from sdk_forge.infra.learn import learn_from_build, load_learned_config, merge_learned_into_params
 
         state = {
             "status": "ok",
@@ -2236,7 +2323,7 @@ class TestLearn:
 
 class TestTestFix:
     def test_parse_gtest_failure(self):
-        from sdk_forge.test_fix import parse_test_failures
+        from sdk_forge.pipeline.test_fix import parse_test_failures
 
         run_result = {
             "status": "test_failures",
@@ -2255,8 +2342,8 @@ Actual: 0
 
 class TestSessionContext:
     def test_session_context(self, tmp_path):
-        from sdk_forge.session import get_session_context_impl, save_plan_state
-        from sdk_forge.retry import save_build_state
+        from sdk_forge.infra.session import get_session_context_impl, save_plan_state
+        from sdk_forge.pipeline.retry import save_build_state
 
         save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": []})
         save_build_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "passed": 1})
@@ -2271,8 +2358,8 @@ class TestSessionContext:
 
 class TestPlanGap:
     def test_analyze_gap_missing_target(self, tmp_path):
-        from sdk_forge.plan_gap import analyze_plan_gap_impl
-        from sdk_forge.session import save_plan_state
+        from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
+        from sdk_forge.infra.session import save_plan_state
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -2300,7 +2387,7 @@ class TestPlanGap:
 
 class TestProposeFix:
     def test_propose_assertion_fix(self, tmp_path):
-        from sdk_forge.test_fix import propose_test_fixes_impl
+        from sdk_forge.pipeline.test_fix import propose_test_fixes_impl
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -2336,7 +2423,7 @@ class TestProposeFix:
 
 class TestCompdb:
     def test_export_and_get(self, tmp_path):
-        from sdk_forge.compdb import export_compile_commands_impl, get_compile_commands_impl
+        from sdk_forge.infra.compdb import export_compile_commands_impl, get_compile_commands_impl
 
         build = tmp_path / "build"
         build.mkdir()
@@ -2350,7 +2437,7 @@ class TestCompdb:
 
 class TestProbeCmake:
     def test_yaml_cpp_library_name(self):
-        from sdk_forge.probe import parse_cmake_link_libraries
+        from sdk_forge.pipeline.probe import parse_cmake_link_libraries
         from pathlib import Path
 
         cmake = Path(r"C:\Users\14513\Downloads\test\CMakeLists.txt")
@@ -2360,7 +2447,7 @@ class TestProbeCmake:
         assert "yaml-cpp" in libs
 
     def test_probe_not_folder_name(self):
-        from sdk_forge.probe import probe_sdk_impl
+        from sdk_forge.pipeline.probe import probe_sdk_impl
         from pathlib import Path
 
         root = Path(r"C:\Users\14513\Downloads\test")
@@ -2373,13 +2460,13 @@ class TestProbeCmake:
 
 class TestPlanFilter:
     def test_filters_macro_symbols(self):
-        from sdk_forge.plan import _is_noise_symbol
+        from sdk_forge.pipeline.plan import _is_noise_symbol
 
         assert _is_noise_symbol("YAML_CPP_API", "class") is True
         assert _is_noise_symbol("calc_add", "function") is False
 
     def test_max_targets_limits(self):
-        from sdk_forge.plan import suggest_test_plan_impl
+        from sdk_forge.pipeline.plan import suggest_test_plan_impl
 
         scan = {
             "status": "ok",
@@ -2399,14 +2486,14 @@ class TestPlanFilter:
 
 class TestApplyFix:
     def test_requires_confirm(self, tmp_path):
-        from sdk_forge.test_fix import apply_proposed_fixes_impl
+        from sdk_forge.pipeline.test_fix import apply_proposed_fixes_impl
 
         result = apply_proposed_fixes_impl(str(tmp_path), confirm=False)
         assert result["status"] == "error"
         assert "confirm" in result["error"].lower()
 
     def test_apply_line(self, tmp_path):
-        from sdk_forge.test_fix import apply_proposed_fixes_impl, propose_test_fixes_impl
+        from sdk_forge.pipeline.test_fix import apply_proposed_fixes_impl, propose_test_fixes_impl
 
         tests = tmp_path / "tests"
         tests.mkdir()
@@ -2425,17 +2512,17 @@ class TestApplyFix:
 
 class TestSanitizerCmake:
     def test_asan_block_linux(self, monkeypatch):
-        from sdk_forge.build import sanitizer_cmake_block
+        from sdk_forge.pipeline.build import sanitizer_cmake_block
 
-        monkeypatch.setattr("sdk_forge.build.sys.platform", "linux")
+        monkeypatch.setattr("sdk_forge.pipeline.build.sys.platform", "linux")
         block, hints = sanitizer_cmake_block("asan")
         assert "-fsanitize=address" in block
         assert not hints
 
     def test_msvc_unsupported(self, monkeypatch):
-        from sdk_forge.build import sanitizer_cmake_block
+        from sdk_forge.pipeline.build import sanitizer_cmake_block
 
-        monkeypatch.setattr("sdk_forge.build.sys.platform", "win32")
+        monkeypatch.setattr("sdk_forge.pipeline.build.sys.platform", "win32")
         block, hints = sanitizer_cmake_block("asan")
         assert block == ""
         assert hints
@@ -2752,13 +2839,13 @@ def _build_test_sdk(repo_root: Path) -> tuple[Path, Path]:
 @pytest.mark.skipif(not _cmake_available(), reason="cmake not found")
 class TestE2EPipeline:
     def test_scaffold_build_analyze_propose(self):
-        from sdk_forge.build import compile_tests_impl
-        from sdk_forge.plan import suggest_test_plan_impl
-        from sdk_forge.plan_gap import analyze_plan_gap_impl
-        from sdk_forge.run import run_tests_impl
-        from sdk_forge.session import save_plan_state
-        from sdk_forge.templates import generate_test_skeleton_impl
-        from sdk_forge.test_fix import analyze_test_failures_impl, propose_test_fixes_impl
+        from sdk_forge.pipeline.build import compile_tests_impl
+        from sdk_forge.pipeline.plan import suggest_test_plan_impl
+        from sdk_forge.domain.plan_gap import analyze_plan_gap_impl
+        from sdk_forge.pipeline.run import run_tests_impl
+        from sdk_forge.infra.session import save_plan_state
+        from sdk_forge.pipeline.templates import generate_test_skeleton_impl
+        from sdk_forge.pipeline.test_fix import analyze_test_failures_impl, propose_test_fixes_impl
 
         repo_root = Path(__file__).resolve().parent.parent
         include_dir, lib_dir = _build_test_sdk(repo_root)
@@ -2770,7 +2857,7 @@ class TestE2EPipeline:
             tests.mkdir()
             build.mkdir()
 
-            from sdk_forge.scan import scan_headers_impl
+            from sdk_forge.pipeline.scan import scan_headers_impl
 
             sdk_path = str(repo_root / "examples" / "test_sdk")
             scan = scan_headers_impl(sdk_path, use_clang=False, use_cache=False)
@@ -2821,12 +2908,12 @@ class TestE2EPipeline:
             assert gap["status"] == "ok"
 
     def test_smart_scaffold_build_passes_without_manual_edit(self):
-        from sdk_forge.build import compile_tests_impl
-        from sdk_forge.plan import suggest_test_plan_impl
-        from sdk_forge.run import run_tests_impl
-        from sdk_forge.templates import generate_test_skeleton_impl
+        from sdk_forge.pipeline.build import compile_tests_impl
+        from sdk_forge.pipeline.plan import suggest_test_plan_impl
+        from sdk_forge.pipeline.run import run_tests_impl
+        from sdk_forge.pipeline.templates import generate_test_skeleton_impl
 
-        from sdk_forge.scan import scan_headers_impl
+        from sdk_forge.pipeline.scan import scan_headers_impl
 
         repo_root = Path(__file__).resolve().parent.parent
         sdk_root = repo_root / "examples" / "test_sdk"
@@ -2869,8 +2956,8 @@ class TestE2EPipeline:
             assert run_result["failed"] == 0
 
     def test_quality_gate_blocks_when_ratio_high(self, tmp_path):
-        from sdk_forge.pipeline import build_pipeline_impl
-        from sdk_forge.templates import generate_test_skeleton_impl
+        from sdk_forge.pipeline.core import build_pipeline_impl
+        from sdk_forge.pipeline.templates import generate_test_skeleton_impl
 
         plan = {
             "status": "ok",
