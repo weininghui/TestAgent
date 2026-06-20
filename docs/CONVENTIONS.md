@@ -46,7 +46,7 @@ def build_pipeline_impl(...) -> dict:
 修改 Agent 行为或工作流时，同步更新：
 
 - `.opencode/agents/forge.md`
-- `.opencode/skills/test-forge/SKILL.md`
+- `.opencode/skills/sdk-forge/SKILL.md`
 - `docs/AGENTS.md`（提示词源文件）
 
 OpenCode 全局 Agent：复制 `forge.md` 到 `~/.config/opencode/agents/forge.md` 后重启 OpenCode。

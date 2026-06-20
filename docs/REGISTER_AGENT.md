@@ -95,7 +95,7 @@ mcp:
 
 # Skills（可选）
 skills:
-  - name: test-forge                           # Skill 名称
+  - name: sdk-forge                           # Skill 名称
     description: |
       Scan C/C++ SDK headers, design test cases,
       generate GTest code, compile, run...
@@ -114,7 +114,7 @@ mcp:
   transport: stdio
 
 skills:
-  - name: test-forge
+  - name: sdk-forge
     description: |
       Scan C/C++ SDK headers, design test cases, generate GTest code,
       compile, run, and report results — all using OpenCode's built-in
@@ -124,7 +124,7 @@ skills:
 ### 效果
 
 - 项目在 OpenCode 中打开时**自动注册** MCP 服务器和 Skill
-- 用户可在对话中通过 `task(load_skills=["test-forge"], ...)` 使用
+- 用户可在对话中通过 `task(load_skills=["sdk-forge"], ...)` 使用
 - 无需手动配置任何全局文件
 
 ### Skill 文件配置
@@ -138,7 +138,7 @@ Skill 的详细工作流定义在：
 本项目：
 
 ```
-.opencode/skills/test-forge/SKILL.md
+.opencode/skills/sdk-forge/SKILL.md
 ```
 
 Skill 文件包含：触发条件、详细工作流（分步骤）、规则约束。
@@ -267,7 +267,7 @@ C:\Users\<用户名>\.config\opencode\opencode.json
 ```json
 {
   "agent": {
-    "test-forge": {
+    "sdk-forge": {
       "prompt": "你是 SDK 接口测试助手...",
       "description": "SDK 接口测试助手",
       "mode": "all",
@@ -304,7 +304,7 @@ C:\Users\<用户名>\.config\opencode\opencode.json
 ### 效果
 
 - 重启 OpenCode 后，Agent 会出现在可用 Agent 列表中
-- Agent 名称 = 配置键名（如上例为 `test-forge`）
+- Agent 名称 = 配置键名（如上例为 `sdk-forge`）
 
 ---
 
@@ -362,13 +362,13 @@ C:\Users\<用户名>\.config\opencode\opencode.json
 ### .opencode/skills/<name>/SKILL.md（Skill 定义）
 
 ```
-<project-root>/.opencode/skills/test-forge/SKILL.md
+<project-root>/.opencode/skills/sdk-forge/SKILL.md
 ```
 
 Skill 是 OpenCode 的**任务级复用单元**，通过 `plugin.yaml` 的 `skills` 字段注册后，可在对话中使用：
 
 ```
-task(load_skills=["test-forge"], prompt="generate tests for /path/to/sdk")
+task(load_skills=["sdk-forge"], prompt="generate tests for /path/to/sdk")
 ```
 
 Skill 文件一般包含：

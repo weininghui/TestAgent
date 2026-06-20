@@ -3,7 +3,7 @@
 **English** | [简体中文](README.zh-CN.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/weininghui/sdk-forge)](https://github.com/weininghui/sdk-forge/releases)
+[![Release](https://img.shields.io/github/v/release/weininghui/TestAgent)](https://github.com/weininghui/TestAgent/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
@@ -48,7 +48,8 @@ After any update: `pip install -e .` in that directory, then **restart OpenCode 
 ## Quick start (CLI)
 
 ```bash
-git clone https://github.com/weininghui/sdk-forge.git`ncd sdk-forge
+git clone https://github.com/weininghui/TestAgent.git
+cd TestAgent
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -76,7 +77,7 @@ Agent registration details: [docs/REGISTER_AGENT.md](docs/REGISTER_AGENT.md).
 
 The orchestrator runs: `forge-env` → `forge-scan` → `forge-scaffold` → parallel `forge-enrich` → `forge-review` → `forge-build`.
 
-Agent docs: [`.opencode/agents/forge.md`](.opencode/agents/forge.md) · Skill: [`.opencode/skills/test-forge/SKILL.md`](.opencode/skills/test-forge/SKILL.md)
+Agent docs: [`.opencode/agents/forge.md`](.opencode/agents/forge.md) · Skill: [`.opencode/skills/sdk-forge/SKILL.md`](.opencode/skills/sdk-forge/SKILL.md)
 
 ## Autopilot (v5.1)
 
@@ -294,7 +295,7 @@ python -m pytest tests/ -v
 
 ## Releases
 
-- [All releases](https://github.com/weininghui/sdk-forge/releases)
+- [All releases](https://github.com/weininghui/TestAgent/releases)
 - Latest: [RELEASE_NOTES_v5.11.0.md](docs/releases/RELEASE_NOTES_v5.11.0.md)
 
 ## License

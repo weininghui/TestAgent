@@ -3,7 +3,7 @@
 [English](README.md) | **简体中文**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/weininghui/sdk-forge)](https://github.com/weininghui/sdk-forge/releases)
+[![Release](https://img.shields.io/github/v/release/weininghui/TestAgent)](https://github.com/weininghui/TestAgent/releases)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
 面向 C/C++ SDK 的 OpenCode 插件与 **独立 CLI**（`forge`）：扫描头文件、生成 GTest 用例、链接真实 SDK 编译运行，并输出 HTML 报告。
@@ -48,7 +48,8 @@ OpenCode 插件目录（Windows）：`%APPDATA%\OpenCode\plugins\sdk-forge`
 ## 快速开始（CLI）
 
 ```bash
-git clone https://github.com/weininghui/sdk-forge.git`ncd sdk-forge
+git clone https://github.com/weininghui/TestAgent.git
+cd TestAgent
 pip install -r requirements.txt
 pip install -e .
 ```
@@ -76,7 +77,7 @@ Agent 注册细节：[docs/REGISTER_AGENT.md](docs/REGISTER_AGENT.md)。
 
 编排器自动调度：`forge-env` → `forge-scan` → `forge-scaffold` → 并行 `forge-enrich` → `forge-review` → `forge-build`。
 
-Agent 提示词：[`.opencode/agents/forge.md`](.opencode/agents/forge.md) · Skill：[`.opencode/skills/test-forge/SKILL.md`](.opencode/skills/test-forge/SKILL.md)
+Agent 提示词：[`.opencode/agents/forge.md`](.opencode/agents/forge.md) · Skill：[`.opencode/skills/sdk-forge/SKILL.md`](.opencode/skills/sdk-forge/SKILL.md)
 
 ## Autopilot 一键流程（v5.1）
 
@@ -294,7 +295,7 @@ python -m pytest tests/ -v
 
 ## 发布
 
-- [全部 Release](https://github.com/weininghui/sdk-forge/releases)
+- [全部 Release](https://github.com/weininghui/TestAgent/releases)
 - 最新：[RELEASE_NOTES_v5.11.0.md](docs/releases/RELEASE_NOTES_v5.11.0.md)
 
 ## 许可证

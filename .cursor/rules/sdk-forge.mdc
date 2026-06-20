@@ -1,0 +1,80 @@
+---
+description: SDK Forge project conventions — layered imports, bilingual comments, release workflow
+alwaysApply: true
+---
+
+# SDK Forge — Cursor Agent Rules
+
+## Project
+
+- **Name:** SDK Forge (`sdk-forge` pip package, `forge` CLI)
+- **Repo:** https://github.com/weininghui/TestAgent (may rename to `sdk-forge`)
+- **Python:** 3.10+; layered package under `sdk_forge/`
+
+## Layered imports (v5.11+)
+
+Root `sdk_forge/` keeps only `cli.py`, `__init__.py`, `__main__.py`. **No flat shims.**
+
+| Area | Module prefix |
+|------|----------------|
+| Scan / build / enrich | `sdk_forge.pipeline.*` |
+| Orchestration | `sdk_forge.orchestration.*` |
+| Delegation / task dispatch | `sdk_forge.delegation.*` |
+| Config / gtest / doctor | `sdk_forge.infra.*` |
+| Domain models / util | `sdk_forge.domain.*` |
+
+MCP tools live in `mcp_server.py`; add tests in `tests/test_mcp_server.py`.
+
+See [docs/MIGRATION_v5.11.md](docs/MIGRATION_v5.11.md) for full import table.
+
+## Code style
+
+- Follow [docs/CONVENTIONS.md](docs/CONVENTIONS.md): bilingual docstrings (EN + CN) for public APIs
+- MCP tool `description` fields: English
+- Default **中文** when replying to the user; keep commands/paths in English
+- Minimize scope; match existing patterns; no over-engineering
+
+## Tests
+
+```bash
+# Fast (no C++ build)
+python -m pytest tests/ -v -k "not TestCompileAndRun and not TestCoveragePipeline and not TestCliIntegration"
+
+# Windows integration subset (before release)
+python -m pytest tests/ -v -k "TestCompileAndRun and not pkg_config and not test_medium"
+python -m pytest tests/ -v -k TestCliIntegration
+```
+
+## Release files (must stay in sync)
+
+When bumping version, update all of:
+
+- `sdk_forge/__init__.py` → `__version__`
+- `pyproject.toml` → `version`
+- `plugin.yaml` → `version`
+- `CHANGELOG.md`
+- `docs/releases/RELEASE_NOTES_vX.Y.Z.md`
+- `README.md` / `README.zh-CN.md` (current release link)
+- `docs/INSTALL.md` / `docs/INSTALL.zh-CN.md` (current release + verify examples)
+
+Use `scripts/release.ps1 -Version X.Y.Z` when available.
+
+Process: [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md)
+
+## OpenCode sync
+
+After release: `scripts/update-opencode-plugin.ps1 -Ref vX.Y.Z` then restart OpenCode.
+
+## Git safety
+
+- **Only commit/push when the user explicitly asks**
+- Never force-push to `main`
+- Never commit secrets (`model_config.local.yaml`, `.forge/`, credentials)
+
+## Agent docs sync
+
+When changing forge orchestration or MCP tools, also update:
+
+- `.opencode/agents/forge.md`
+- `.opencode/skills/sdk-forge/SKILL.md`
+- `docs/AGENTS.md`
