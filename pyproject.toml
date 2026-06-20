@@ -58,3 +58,4 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/test_mcp_server.py" = ["E402"]
+"mcp_server.py" = ["E402"]

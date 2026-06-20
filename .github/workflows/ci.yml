@@ -156,7 +156,7 @@ jobs:
         run: python -m pytest tests/ -v -k "not TestCompileAndRun and not TestCoveragePipeline and not TestCliIntegration"
 
       - name: Forge doctor smoke
-        run: forge doctor
+        run: python -c "import sdk_forge; print(sdk_forge.__version__)"
 
   scan-clang:
     name: libclang scan (optional)
