@@ -59,6 +59,9 @@ Tools:
   - load_golden_cases / verify_golden_coverage / snapshot_golden_cases / draft_golden_cases → golden oracle
   - run_forge_autopilot   → hands-off init→orchestration next_actions (v5.1)
   - advance_forge_workflow → record sub-agent + return next step (v5.3)
+  - register_forge_delegation / poll_forge_delegations / get_delegation_plan → background delegation (v5.5)
+  - update_forge_delegation_session / dispatch_forge_delegate → session nav + CLI runtime (v5.6)
+  - register_from_omo_task_result → parse OMO task() output + bind sessionId (v5.7)
   - record_scan_batch     → store parallel scan batch result (v5.3)
   - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
@@ -438,6 +441,159 @@ async def advance_forge_workflow(
         indent=2,
         ensure_ascii=False,
     )
+
+
+@mcp.tool(description="Register OMO background task_id after primary dispatches a sub-agent (v5.5+).")
+async def register_forge_delegation(
+    task_id: Annotated[str, "OMO task() return value."],
+    agent: Annotated[str, "Sub-agent name e.g. forge-enrich."],
+    project_dir: Annotated[str, "Project root."] = "",
+    batch_id: Annotated[int | str, "Batch id when applicable."] = "",
+    title: Annotated[str, "Human-readable task title."] = "",
+    session_id: Annotated[str, "OpenCode session id when known (enables TUI navigation)."] = "",
+) -> str:
+    from sdk_forge.delegation import register_delegation_impl
+
+    bid: int | None = None
+    if batch_id not in ("", None):
+        try:
+            bid = int(batch_id)
+        except (TypeError, ValueError):
+            bid = None
+    return json.dumps(
+        register_delegation_impl(
+            project_dir, task_id, agent,
+            batch_id=bid, title=title, session_id=session_id,
+        ),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Attach OpenCode session_id to a delegation for sub-agent navigation (v5.6).")
+async def update_forge_delegation_session(
+    task_id: Annotated[str, "Delegation task_id from register_forge_delegation or dispatch_forge_delegate."],
+    session_id: Annotated[str, "OpenCode session id e.g. ses_xxx."],
+    project_dir: Annotated[str, "Project root."] = "",
+) -> str:
+    from sdk_forge.delegation import update_delegation_session_impl
+
+    return json.dumps(
+        update_delegation_session_impl(project_dir, task_id, session_id),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Dispatch sub-agent via CLI `opencode run` when delegation_mode=cli (v5.6).")
+async def dispatch_forge_delegate(
+    agent: Annotated[str, "Sub-agent name e.g. forge-enrich."],
+    prompt: Annotated[str, "Prompt for the sub-agent."],
+    project_dir: Annotated[str, "Project root."] = "",
+    batch_id: Annotated[int | str, "Batch id when applicable."] = "",
+    title: Annotated[str, "Human-readable task title."] = "",
+) -> str:
+    from sdk_forge.delegate_runner import dispatch_cli_delegate_impl
+
+    bid: int | None = None
+    if batch_id not in ("", None):
+        try:
+            bid = int(batch_id)
+        except (TypeError, ValueError):
+            bid = None
+    return json.dumps(
+        dispatch_cli_delegate_impl(project_dir, agent, prompt, batch_id=bid, title=title),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Parse OMO task()/call_omo_agent text and register delegation (v5.7).")
+async def register_from_omo_task_result(
+    omo_result_text: Annotated[str, "Raw text returned by OMO task() or call_omo_agent."],
+    agent: Annotated[str, "Sub-agent name e.g. forge-enrich."],
+    project_dir: Annotated[str, "Project root."] = "",
+    batch_id: Annotated[int | str, "Batch id when applicable."] = "",
+    title: Annotated[str, "Human-readable task title."] = "",
+) -> str:
+    from sdk_forge.delegation import register_from_omo_result_impl
+
+    bid: int | None = None
+    if batch_id not in ("", None):
+        try:
+            bid = int(batch_id)
+        except (TypeError, ValueError):
+            bid = None
+    return json.dumps(
+        register_from_omo_result_impl(project_dir, omo_result_text, agent, batch_id=bid, title=title),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Poll pending/completed background delegations and stage_timeline (v5.5).")
+async def poll_forge_delegations(
+    project_dir: Annotated[str, "Project root."] = "",
+) -> str:
+    from sdk_forge.delegation import poll_forge_delegations_impl
+
+    return json.dumps(poll_forge_delegations_impl(project_dir), indent=2, ensure_ascii=False)
+
+
+@mcp.tool(description="Auto-bind delegations to OpenCode sessions by title pattern (v5.8).")
+async def sync_delegation_sessions(
+    project_dir: Annotated[str, "Project root."] = "",
+    parent_session_id: Annotated[str, "Optional forge primary session id to filter child sessions."] = "",
+) -> str:
+    from sdk_forge.session_nav import sync_delegation_sessions_impl
+
+    return json.dumps(
+        sync_delegation_sessions_impl(project_dir, parent_session_id=parent_session_id),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Live dashboard: sub-agent session ids, previews, and jump hints (v5.8).")
+async def get_subagent_dashboard(
+    project_dir: Annotated[str, "Project root."] = "",
+    parent_session_id: Annotated[str, "Optional forge primary session id."] = "",
+    include_preview: Annotated[bool, "Include live_preview from session export."] = True,
+) -> str:
+    from sdk_forge.session_nav import get_subagent_dashboard_impl
+
+    return json.dumps(
+        get_subagent_dashboard_impl(
+            project_dir,
+            parent_session_id=parent_session_id,
+            include_preview=include_preview,
+        ),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Peek what a sub-agent session is doing right now (v5.8).")
+async def peek_subagent_session(
+    session_id: Annotated[str, "OpenCode session id e.g. ses_xxx."],
+    max_chars: Annotated[int, "Max preview characters."] = 500,
+) -> str:
+    from sdk_forge.session_nav import export_session_preview_impl
+
+    return json.dumps(
+        export_session_preview_impl(session_id, max_chars=max_chars),
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+@mcp.tool(description="Build dispatch plan from orchestration next_actions with run_in_background hints (v5.5).")
+async def get_delegation_plan(
+    project_dir: Annotated[str, "Project root."] = "",
+) -> str:
+    from sdk_forge.delegation import get_delegation_plan_impl
+
+    return json.dumps(get_delegation_plan_impl(project_dir), indent=2, ensure_ascii=False)
 
 
 @mcp.tool(description="Store parallel scan batch JSON in workflow (forge-scan sub-agent).")

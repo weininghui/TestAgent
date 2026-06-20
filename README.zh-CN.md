@@ -1,4 +1,4 @@
-﻿# SDK Forge
+# SDK Forge
 
 [English](README.md) | **简体中文**
 
@@ -8,9 +8,9 @@
 
 面向 C/C++ SDK 的 OpenCode 插件与 **独立 CLI**（`forge`）：扫描头文件、生成 GTest 用例、链接真实 SDK 编译运行，并输出 HTML 报告。
 
-**当前版本：[v5.4.0](docs/releases/RELEASE_NOTES_v5.4.0.md)** — 品牌重命名为 SDK Forge（`sdk-forge` 插件与 GitHub 仓库）。
+**当前版本：[v5.6.0](docs/releases/RELEASE_NOTES_v5.6.0.md)** — 子 agent 可观测性（session 绑定 + CLI 委托运行时）。
 
-上一版：[v5.0.0](docs/releases/RELEASE_NOTES_v5.0.0.md) — 生产级门禁、Golden oracle、多 Agent 编排。
+上一版：[v5.4.0](docs/releases/RELEASE_NOTES_v5.4.0.md) — 品牌重命名为 SDK Forge。
 
 ## 功能概览
 
@@ -193,7 +193,9 @@ JSON 配置示例：[`examples/forge_test_sdk/.forge.json`](examples/forge_test_
 
 完整列表与注册步骤：[REGISTER_AGENT.md](docs/REGISTER_AGENT.md)
 
-## 多 Agent 架构（v4.6+）
+## 多 Agent 架构（v4.6+，v5.5 后台委托）
+
+编排器 **forge**（primary）通过 oh-my-openagent **`task(run_in_background=true)`** 后台并行派发 enrich/scan batch，完成后 `background_output` → `advance_forge_workflow`。详见 [docs/DELEGATION.md](docs/DELEGATION.md)。
 
 | Agent | 职责 |
 |-------|------|

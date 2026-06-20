@@ -14,7 +14,7 @@ color: "#00BCD4"
 - `enrich_test_cases`
 - `analyze_scaffold_quality`
 - `analyze_assertion_quality`
-- `record_agent_run`
+- `advance_forge_workflow`
 
 ## 工作流
 
@@ -25,7 +25,7 @@ color: "#00BCD4"
    - 将 `// AGENT:` 替换为真实 `EXPECT_*` 断言
 4. `analyze_assertion_quality(project_dir=..., test_files=...)` — **必须执行**；score ≥ 80，无 weak/tautology
 5. `analyze_scaffold_quality(project_dir=..., test_files=...)` 确认 batch 内无 AGENT 标记
-6. `record_agent_run(agent="forge-enrich", batch_id=N, project_dir=..., status="ok")`
+6. `advance_forge_workflow(project_dir=..., last_agent="forge-enrich", batch_id=N, last_status="ok")`
 
 ## 规则
 

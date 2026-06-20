@@ -1,10 +1,17 @@
 {
+  "background_task": {
+    "defaultConcurrency": 4
+  },
   "agents": {
     "forge": {
       "model": "opencode/deepseek-v4-flash-free",
       "fallback_models": [
         "opencode/nemotron-3-ultra-free"
-      ]
+      ],
+      "permission": {
+        "task": "allow",
+        "call_omo_agent": "allow"
+      }
     },
     "forge-env": {
       "model": "opencode/deepseek-v4-flash-free",

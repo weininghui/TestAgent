@@ -3,7 +3,7 @@
 
 name: sdk-forge
 description: SDK Forge — auto-generate GTest test suites from C/C++ SDK headers
-version: 5.4.0
+version: 5.8.0
 
 # MCP server configuration
 mcp:

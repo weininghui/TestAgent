@@ -13,6 +13,7 @@ color: "#2196F3"
 
 - `ensure_forge_environment`
 - `setup_cxx_toolchain`（`agent_mode=true`）
+- `advance_forge_workflow`
 - `forge_doctor`
 
 ## 工作流
@@ -20,7 +21,7 @@ color: "#2196F3"
 1. 从 orchestrator prompt 解析 `project_dir`
 2. 调用 `ensure_forge_environment({})`
 3. 若 `ready=false` 且 `installed_needs_restart`，在回复中说明需新开终端
-4. 调用 `record_agent_run(agent="forge-env", project_dir=..., status="ok"|"error")`
+4. `advance_forge_workflow(project_dir=..., last_agent="forge-env", last_status="ok"|"error")`
 
 ## 规则
 

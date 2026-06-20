@@ -1,4 +1,4 @@
-﻿# OpenCode Agent / Plugin 注册指南
+# OpenCode Agent / Plugin 注册指南
 
 > 以本仓库 (SDK Forge) 为例，详细说明如何在 OpenCode 中注册一个自定义 Agent。
 

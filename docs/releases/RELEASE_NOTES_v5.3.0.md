@@ -1,4 +1,4 @@
-﻿# Release Notes — v5.3.0
+# Release Notes — v5.3.0
 
 Multi-agent speed: Autopilot step loop, parallel scan, dynamic enrich batch, oracle pipeline.
 
@@ -34,7 +34,7 @@ max_agent_retries: 2
 ## Upgrade
 
 ```powershell
-cd $env:APPDATA\OpenCode\plugins\sdk-forge
+cd $env:APPDATA\OpenCode\plugins\sdk-test-forge
 git fetch --tags; git checkout v5.3.0
 pip install -e .
 ```

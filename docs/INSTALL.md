@@ -1,4 +1,4 @@
-﻿# Install & Update — OpenCode Plugin & CLI
+# Install & Update — OpenCode Plugin & CLI
 
 **English** | [简体中文](INSTALL.zh-CN.md)
 

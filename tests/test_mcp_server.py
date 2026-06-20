@@ -1,4 +1,4 @@
-﻿"""Tests for mcp_server.py — SDK Forge MCP server."""
+"""Tests for mcp_server.py — SDK Forge MCP server."""
 
 import json
 import os
@@ -1411,6 +1411,344 @@ class TestOrchestrationV53:
         timeline = ctx.get("stage_timeline") or []
         assert len(timeline) >= 2
         assert timeline[0]["agent"] == "forge-env"
+
+
+class TestDelegationV55:
+    def test_parallel_enrich_delegation_metadata(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}, {"symbol": "b"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        for name in ("a_test.cpp", "b_test.cpp", "c_test.cpp", "d_test.cpp"):
+            (tests / name).write_text("// AGENT: fill\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text(
+            "multi_agent_batch_size: 2\ndelegation_mode: omo\n",
+            encoding="utf-8",
+        )
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        enrich = [a for a in ctx["next_actions"] if a["agent"] == "forge-enrich"]
+        assert len(enrich) >= 2
+        for action in enrich:
+            assert action["run_in_background"] is True
+            assert action["subagent_type"] == "forge-enrich"
+            assert action["delegation_mode"] == "omo"
+            assert "title" in action
+
+    def test_serial_stage_foreground_delegation(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+
+        (tmp_path / ".forge.yaml").write_text("delegation_mode: omo\n", encoding="utf-8")
+        ctx = get_orchestration_context(str(tmp_path))
+        env = ctx["next_actions"][0]
+        assert env["agent"] == "forge-env"
+        assert env["run_in_background"] is False
+        assert env["subagent_type"] == "forge-env"
+
+    def test_inline_mode_no_delegation_fields(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+
+        (tmp_path / ".forge.yaml").write_text("delegation_mode: inline\n", encoding="utf-8")
+        ctx = get_orchestration_context(str(tmp_path))
+        action = ctx["next_actions"][0]
+        assert "run_in_background" not in action
+        assert "subagent_type" not in action
+
+    def test_register_poll_advance_flow(self, tmp_path):
+        from sdk_forge.delegation import (
+            get_delegation_plan_impl,
+            poll_forge_delegations_impl,
+            register_delegation_impl,
+        )
+        from sdk_forge.workflow_advance import advance_forge_workflow_impl
+
+        register_delegation_impl(str(tmp_path), "task-1", "forge-enrich", batch_id=0, title="Enrich batch 0")
+        polled = poll_forge_delegations_impl(str(tmp_path))
+        assert polled["pending_count"] == 1
+
+        advance_forge_workflow_impl(
+            str(tmp_path), last_agent="forge-enrich", last_status="ok", batch_id=0,
+        )
+        polled2 = poll_forge_delegations_impl(str(tmp_path))
+        assert polled2["pending_count"] == 0
+
+        plan = get_delegation_plan_impl(str(tmp_path))
+        assert plan["status"] == "ok"
+        assert "foreground_actions" in plan
+        assert "background_actions" in plan
+
+    def test_get_delegation_plan_splits_actions(self, tmp_path):
+        from sdk_forge.delegation import get_delegation_plan_impl
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {
+            "status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}],
+        })
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        for name in ("a_test.cpp", "b_test.cpp", "c_test.cpp", "d_test.cpp"):
+            (tests / name).write_text("// AGENT: fill\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text(
+            "multi_agent_batch_size: 2\ndelegation_mode: omo\n",
+            encoding="utf-8",
+        )
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+
+        plan = get_delegation_plan_impl(str(tmp_path))
+        assert plan["delegation_mode"] == "omo"
+        assert len(plan["background_actions"]) >= 1
+        assert plan["orchestration_status"] == "needs_agent"
+
+    @pytest.mark.asyncio
+    async def test_mcp_register_and_get_plan(self, tmp_path):
+        from mcp_server import get_delegation_plan, register_forge_delegation
+
+        raw = await register_forge_delegation(
+            "omo-task-42", "forge-enrich", str(tmp_path), 0, "Enrich batch 0",
+        )
+        assert json.loads(raw)["status"] == "ok"
+        plan_raw = await get_delegation_plan(str(tmp_path))
+        plan = json.loads(plan_raw)
+        assert plan["status"] == "ok"
+
+
+class TestDelegationV56:
+    def test_register_with_session_navigation(self, tmp_path):
+        from sdk_forge.delegation import register_delegation_impl
+
+        result = register_delegation_impl(
+            str(tmp_path), "bg_test1", "forge-enrich",
+            batch_id=0, session_id="ses_abc123",
+        )
+        assert result["status"] == "ok"
+        nav = result["navigation"]
+        assert nav["session_id"] == "ses_abc123"
+        assert "ses_abc123" in nav["cli_resume"]
+
+    def test_update_delegation_session(self, tmp_path):
+        from sdk_forge.delegation import (
+            register_delegation_impl,
+            update_delegation_session_impl,
+        )
+
+        register_delegation_impl(str(tmp_path), "bg_upd", "forge-scan", batch_id=1)
+        updated = update_delegation_session_impl(str(tmp_path), "bg_upd", "ses_new")
+        assert updated["status"] == "ok"
+        assert updated["navigation"]["session_id"] == "ses_new"
+
+    def test_poll_includes_navigation(self, tmp_path):
+        from sdk_forge.delegation import poll_forge_delegations_impl, register_delegation_impl
+
+        register_delegation_impl(str(tmp_path), "bg_poll", "forge-enrich", session_id="ses_x")
+        polled = poll_forge_delegations_impl(str(tmp_path))
+        assert polled["navigation"]["pending"]
+        assert polled["navigation"]["pending"][0]["session_id"] == "ses_x"
+
+    def test_cli_mode_delegation_metadata(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+
+        (tmp_path / ".forge.yaml").write_text("delegation_mode: cli\n", encoding="utf-8")
+        ctx = get_orchestration_context(str(tmp_path))
+        action = ctx["next_actions"][0]
+        assert action.get("run_in_background") is False
+        assert action.get("delegation_mode") == "cli"
+
+    def test_dispatch_cli_delegate_mock(self, tmp_path, monkeypatch):
+        from sdk_forge.delegate_runner import dispatch_cli_delegate_impl
+
+        class FakeProc:
+            pid = 4242
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+        monkeypatch.setattr("sdk_forge.delegate_runner.subprocess.Popen", FakeProc)
+        result = dispatch_cli_delegate_impl(
+            str(tmp_path), "forge-enrich", "project_dir=... batch_id=0",
+            batch_id=0, title="Enrich batch 0",
+        )
+        assert result["status"] == "ok"
+        assert result["runtime"] == "cli"
+        assert result["pid"] == 4242
+        assert result["task_id"].startswith("cli_")
+
+    @pytest.mark.asyncio
+    async def test_mcp_update_session(self, tmp_path):
+        from mcp_server import register_forge_delegation, update_forge_delegation_session
+
+        await register_forge_delegation("t1", "forge-enrich", str(tmp_path), 0, "Test")
+        raw = await update_forge_delegation_session("t1", "ses_mcp", str(tmp_path))
+        data = json.loads(raw)
+        assert data["status"] == "ok"
+        assert data["navigation"]["session_id"] == "ses_mcp"
+
+
+class TestDelegationV57:
+    def test_next_actions_omo_fields(self, tmp_path):
+        from sdk_forge.orchestration import get_orchestration_context
+        from sdk_forge.session import save_plan_state
+        from sdk_forge.workflow import record_agent_completion
+
+        save_plan_state(str(tmp_path), {"status": "ok", "sdk_root": "/sdk", "targets": [{"symbol": "a"}]})
+        tests = tmp_path / "tests"
+        tests.mkdir()
+        for name in ("a_test.cpp", "b_test.cpp", "c_test.cpp", "d_test.cpp"):
+            (tests / name).write_text("// AGENT: fill\n", encoding="utf-8")
+        (tmp_path / ".forge.yaml").write_text(
+            "multi_agent_batch_size: 2\ndelegation_mode: omo\n",
+            encoding="utf-8",
+        )
+        for agent in ("forge-env", "forge-scan", "forge-scaffold"):
+            record_agent_completion(str(tmp_path), agent, status="ok")
+
+        ctx = get_orchestration_context(str(tmp_path))
+        enrich = [a for a in ctx["next_actions"] if a["agent"] == "forge-enrich"][0]
+        assert enrich["load_skills"] == []
+        assert enrich["description"] == enrich["title"]
+        assert enrich["subagent_type"] == "forge-enrich"
+
+    def test_parse_omo_task_result(self):
+        from sdk_forge.delegation import parse_omo_task_result_impl
+
+        text = """Background task launched.
+
+Background Task ID: bg_abc123
+Session ID: ses_xyz789
+Description: Enrich batch 0
+"""
+        parsed = parse_omo_task_result_impl(text)
+        assert parsed["task_id"] == "bg_abc123"
+        assert parsed["session_id"] == "ses_xyz789"
+        assert parsed["clickable"] is True
+
+    def test_parse_omo_task_metadata_block(self):
+        from sdk_forge.delegation import parse_omo_task_result_impl
+
+        text = """Background task launched.
+<task_metadata>
+session_id: ses_meta01
+background_task_id: bg_meta99
+subagent: forge-enrich
+</task_metadata>
+"""
+        parsed = parse_omo_task_result_impl(text)
+        assert parsed["task_id"] == "bg_meta99"
+        assert parsed["session_id"] == "ses_meta01"
+        assert parsed["clickable"] is True
+
+    def test_register_from_omo_result(self, tmp_path):
+        from sdk_forge.delegation import register_from_omo_result_impl
+
+        text = "Task ID: bg_test99\nSession ID: ses_test88\n"
+        result = register_from_omo_result_impl(
+            str(tmp_path), text, "forge-enrich", batch_id=0, title="Enrich batch 0",
+        )
+        assert result["status"] == "ok"
+        assert result["delegation"]["session_id"] == "ses_test88"
+        assert result["navigation"]["session_id"] == "ses_test88"
+
+
+class TestDelegationV58:
+    def test_export_preview_parsing(self):
+        from sdk_forge.session_nav import _extract_message_text, export_session_preview_impl
+
+        sample = {
+            "parts": [
+                {"type": "text", "text": "hello"},
+                {"type": "tool", "tool": "grep", "state": {"status": "completed", "title": "search"}},
+            ]
+        }
+        text = _extract_message_text(sample)
+        assert "hello" in text
+        assert "grep" in text
+
+    def test_session_match_delegation(self):
+        from sdk_forge.session_nav import _session_matches_delegation
+
+        session = {"title": "Enrich batch 0 (@forge-enrich subagent)"}
+        entry = {"agent": "forge-enrich", "title": "Enrich batch 0"}
+        assert _session_matches_delegation(session, entry) is True
+
+    def test_sync_binds_session(self, tmp_path, monkeypatch):
+        from sdk_forge.delegation import register_delegation_impl
+        from sdk_forge.session_nav import sync_delegation_sessions_impl
+
+        register_delegation_impl(
+            str(tmp_path), "bg_sync1", "forge-enrich", batch_id=0, title="Enrich batch 0",
+        )
+
+        def fake_list(max_count=100):
+            return {
+                "status": "ok",
+                "sessions": [
+                    {
+                        "id": "ses_bind001",
+                        "title": "Enrich batch 0 (@forge-enrich subagent)",
+                    }
+                ],
+                "count": 1,
+            }
+
+        monkeypatch.setattr(
+            "sdk_forge.session_nav.list_opencode_sessions_impl", fake_list,
+        )
+        result = sync_delegation_sessions_impl(str(tmp_path))
+        assert result["bound_count"] == 1
+        assert result["bound"][0]["session_id"] == "ses_bind001"
+
+    def test_dashboard_structure(self, tmp_path, monkeypatch):
+        from sdk_forge.delegation import register_delegation_impl
+        from sdk_forge.session_nav import get_subagent_dashboard_impl
+
+        register_delegation_impl(
+            str(tmp_path), "dash1", "forge-enrich", batch_id=0,
+            title="Enrich batch 0", session_id="ses_dash01",
+        )
+
+        monkeypatch.setattr(
+            "sdk_forge.session_nav.list_opencode_sessions_impl",
+            lambda max_count=100: {"status": "ok", "sessions": [], "count": 0},
+        )
+        monkeypatch.setattr(
+            "sdk_forge.session_nav.export_session_preview_impl",
+            lambda sid, max_chars=500: {
+                "status": "ok",
+                "session_id": sid,
+                "live_preview": "正在 enrich a_test.cpp",
+                "message_count": 3,
+                "title": "Enrich batch 0 (@forge-enrich subagent)",
+            },
+        )
+        dash = get_subagent_dashboard_impl(str(tmp_path))
+        assert dash["status"] == "ok"
+        assert dash["subagents"][0]["live_preview"] == "正在 enrich a_test.cpp"
+        assert "how_to_open" in dash
+
+    @pytest.mark.asyncio
+    async def test_mcp_get_subagent_dashboard(self, tmp_path, monkeypatch):
+        from mcp_server import get_subagent_dashboard
+
+        monkeypatch.setattr(
+            "sdk_forge.session_nav.list_opencode_sessions_impl",
+            lambda max_count=100: {"status": "ok", "sessions": [], "count": 0},
+        )
+        monkeypatch.setattr(
+            "sdk_forge.session_nav.export_session_preview_impl",
+            lambda sid, max_chars=500: {"status": "ok", "session_id": sid, "live_preview": ""},
+        )
+        raw = await get_subagent_dashboard(str(tmp_path))
+        data = json.loads(raw)
+        assert data["status"] == "ok"
 
 
 class TestGoldenSnapshot:

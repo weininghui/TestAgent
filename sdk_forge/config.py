@@ -171,6 +171,7 @@ def save_forge_config(config: dict[str, Any]) -> dict[str, Any]:
         "multi_agent_batch_size", "forge_profile", "autopilot_profile",
         "max_enrich_rounds", "auto_golden_snapshot", "max_agent_retries",
         "scan_batch_size", "auto_oracle_draft",
+        "delegation_mode", "delegation_concurrency",
         "min_assertion_score", "block_weak_tests", "block_agent_markers",
         "assertion_quality_gate", "coverage_gate", "min_line_coverage_pct",
     )

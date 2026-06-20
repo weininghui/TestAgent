@@ -15,7 +15,7 @@ color: "#795548"
 - `verify_golden_coverage`
 - `analyze_plan_gap`
 - `get_session_context`
-- `record_agent_run`
+- `advance_forge_workflow`
 
 ## 工作流
 
@@ -30,9 +30,9 @@ color: "#795548"
    - golden 缺口
    - 覆盖率 / plan gap
    - 建议：**可 merge** 或 **需继续 enrich**
-7. **必须**调用 `record_agent_run` 并设置 **`review_verdict`**：
-   - 可 merge：`record_agent_run(agent="forge-review", status="ok", review_verdict="pass")`
-   - 需修复：`record_agent_run(agent="forge-review", status="ok", review_verdict="block")`
+7. **必须**调用 `advance_forge_workflow` 并设置 **`review_verdict`**：
+   - 可 merge：`advance_forge_workflow(last_agent="forge-review", last_status="ok", review_verdict="pass", project_dir=...)`
+   - 需修复：`advance_forge_workflow(last_agent="forge-review", last_status="ok", review_verdict="block", project_dir=...)`
 
 ## 规则
 

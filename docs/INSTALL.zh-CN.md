@@ -1,4 +1,4 @@
-﻿# 安装与更新 — OpenCode 插件与 CLI
+# 安装与更新 — OpenCode 插件与 CLI
 
 [English](INSTALL.md) | **简体中文**
 

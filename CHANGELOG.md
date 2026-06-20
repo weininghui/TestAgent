@@ -1,5 +1,69 @@
 # Changelog
 
+## [5.8.0] - 2026-06-20
+
+Sub-agent **live dashboard** — see what child agents are doing and jump into their chat sessions.
+
+### Added
+- **`sdk_forge/session_nav.py`** — `opencode session list` / `opencode export` integration
+- MCP: **`get_subagent_dashboard`**, **`peek_subagent_session`**, **`sync_delegation_sessions`**
+- Parse OMO **`<task_metadata>`** blocks in `parse_omo_task_result_impl`
+- Navigation hints: GUI session list, TUI Down/Up, `opencode run --session ses_xxx --continue`
+- **`TestDelegationV58`**
+
+### Changed
+- [`.opencode/agents/forge.md`](.opencode/agents/forge.md) — v5.8 mandatory dashboard reporting after dispatch
+- [`docs/DELEGATION.md`](docs/DELEGATION.md) — OMO open-source reference mapping
+- [`docs/examples/oh-my-openagent.multi-agent.json`](docs/examples/oh-my-openagent.multi-agent.json) — forge `permission.task: allow`
+
+## [5.7.0] - 2026-06-20
+
+Align forge orchestrator with **OMO-native `task()` protocol** for clickable sub-agent sessions.
+
+### Fixed
+- forge.md used wrong params (`agent`/`title`) — OMO requires `subagent_type`/`description`/`load_skills=[]`
+- Added `register_from_omo_task_result` to parse OMO output and bind `sessionId` for TUI navigation
+
+### Added
+- `next_actions`: `description`, `load_skills`
+- `parse_omo_task_result_impl` / **`register_from_omo_task_result`** MCP
+- **`TestDelegationV57`**
+
+## [5.6.0] - 2026-06-20
+
+Sub-agent observability — session navigation + CLI delegation runtime.
+
+### Added
+- **`update_forge_delegation_session`** MCP — bind `ses_xxx` to task_id for user navigation
+- **`dispatch_forge_delegate`** MCP — `delegation_mode: cli` spawns background `opencode run`
+- **`sdk_forge/delegate_runner.py`** — CLI subprocess delegation
+- `poll_forge_delegations` returns **`navigation`** block (TUI keys, cli_resume, session_id)
+- `register_forge_delegation` accepts optional **`session_id`**
+- **`delegation_mode: cli`** alongside `omo` | `inline`
+- **`TestDelegationV56`**
+
+### Changed
+- [`.opencode/agents/forge.md`](.opencode/agents/forge.md) — v5.6 session reporting protocol
+- [`docs/DELEGATION.md`](docs/DELEGATION.md) — navigation + CLI mode docs
+
+## [5.5.0] - 2026-06-20
+
+Background delegation — OMO `run_in_background` + SDK Forge orchestration protocol.
+
+### Added
+- **`delegation_mode`** / **`delegation_concurrency`** config (`omo` | `inline`)
+- **`sdk_forge/delegation.py`** — `delegations.json` task tracking
+- MCP: **`register_forge_delegation`**, **`poll_forge_delegations`**, **`get_delegation_plan`**
+- `next_actions` fields: `run_in_background`, `subagent_type`, `title`
+- [`docs/DELEGATION.md`](docs/DELEGATION.md), [`scripts/merge-omo-forge-agents.ps1`](scripts/merge-omo-forge-agents.ps1)
+- **`TestDelegationV55`**
+
+### Changed
+- [`.opencode/agents/forge.md`](.opencode/agents/forge.md) — v5.5 OMO background delegation loop
+- All `forge-*.md` sub-agents — complete with **`advance_forge_workflow`**
+- Production preset: `delegation_mode: omo`, `delegation_concurrency: 4`
+- [`docs/examples/oh-my-openagent.multi-agent.json`](docs/examples/oh-my-openagent.multi-agent.json) — `background_task.defaultConcurrency`
+
 ## [5.4.0] - 2026-06-20
 
 Rebrand to **SDK Forge** — professional naming across GitHub, OpenCode plugin, and pip.

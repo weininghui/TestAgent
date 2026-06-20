@@ -15,7 +15,7 @@ color: "#F44336"
 - `analyze_test_failures`
 - `propose_test_fixes`
 - `apply_test_fixes`
-- `record_agent_run`
+- `advance_forge_workflow`
 
 ## 工作流
 
@@ -24,7 +24,7 @@ color: "#F44336"
 3. 若失败：`analyze_test_failures` → `propose_test_fixes` → `apply_test_fixes(confirm=true)` → 重试 build（最多 3 轮）
 4. 返回 `html_path` 与 `run` 结果
 5. 成功后提示 orchestrator 调用 `snapshot_golden_cases(project_dir, merge=true, confirm=true)`（v5.1）
-6. `record_agent_run(agent="forge-build", project_dir=..., status="ok"|"error", detail_json=...)`
+6. `advance_forge_workflow(project_dir=..., last_agent="forge-build", last_status="ok"|"error", detail_json=...)`
 
 ## 规则
 

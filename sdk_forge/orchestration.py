@@ -120,6 +120,57 @@ def max_agent_retries(project_dir: str = "") -> int:
     return max(0, retries)
 
 
+def delegation_mode(project_dir: str = "") -> str:
+    root = Path(project_dir or Path.cwd())
+    config = load_forge_config(start=root)
+    mode = str(config.get("delegation_mode", "omo")).strip().lower()
+    return mode if mode in ("omo", "inline", "cli") else "omo"
+
+
+def delegation_concurrency(project_dir: str = "") -> int:
+    root = Path(project_dir or Path.cwd())
+    config = load_forge_config(start=root)
+    try:
+        return max(1, int(config.get("delegation_concurrency", 4)))
+    except (TypeError, ValueError):
+        return 4
+
+
+def _delegation_title(agent: str, batch_id: int | None = None) -> str:
+    if agent == "forge-enrich" and batch_id is not None:
+        return f"Enrich batch {batch_id}"
+    if agent == "forge-scan" and batch_id is not None:
+        return f"Scan batch {batch_id}"
+    if agent.startswith("forge-"):
+        return agent.replace("forge-", "", 1).replace("-", " ").title()
+    return agent
+
+
+def apply_delegation_metadata(
+    next_actions: list[dict[str, Any]],
+    mode: str,
+) -> None:
+    """Attach OMO delegation hints to next_actions when mode=omo."""
+    if mode not in ("omo", "cli"):
+        return
+    for action in next_actions:
+        if action.get("blocked"):
+            continue
+        agent = str(action.get("agent") or "")
+        if not agent:
+            continue
+        batch_id = action.get("batch_id")
+        bid = int(batch_id) if batch_id is not None else None
+        parallel = bool(action.get("parallel"))
+        action["run_in_background"] = parallel
+        action["subagent_type"] = agent
+        action["delegation_mode"] = mode
+        title = _delegation_title(agent, bid)
+        action["title"] = title
+        action["description"] = title
+        action["load_skills"] = []
+
+
 def split_enrich_batches(files: list[str], batch_size: int = 4) -> list[dict[str, Any]]:
     """Split file basenames into enrich batches."""
     if not files:
@@ -674,6 +725,9 @@ def get_orchestration_context(project_dir: str = "") -> dict[str, Any]:
         and review_verdict in (None, "pass")
     )
 
+    del_mode = delegation_mode(str(root))
+    apply_delegation_metadata(next_actions, del_mode)
+
     return {
         "status": "ok",
         "current_stage": current_stage,
@@ -686,6 +740,8 @@ def get_orchestration_context(project_dir: str = "") -> dict[str, Any]:
         "enrich_round": enrich_round,
         "max_enrich_rounds": max_rounds,
         "max_agent_retries": agent_retries,
+        "delegation_mode": del_mode,
+        "delegation_concurrency": delegation_concurrency(str(root)),
         "parallel_enrich_enabled": batch_size > 1,
         "enrich_batches": enrich_batches,
         "files_needing_enrich": needing,

@@ -14,7 +14,7 @@ color: "#9C27B0"
 - `draft_golden_cases`
 - `load_golden_cases`
 - `get_session_context`
-- `record_agent_run`
+- `advance_forge_workflow`
 
 ## 工作流
 
@@ -22,7 +22,7 @@ color: "#9C27B0"
 2. `get_session_context(project_dir)` — 读 plan / golden 缺口
 3. `draft_golden_cases(project_dir=..., merge=true, confirm=false)` — 预览草稿
 4. 人工或 orchestrator 确认后：`draft_golden_cases(..., confirm=true)`
-5. `record_agent_run(agent="forge-oracle", project_dir=..., status="ok")`
+5. `advance_forge_workflow(project_dir=..., last_agent="forge-oracle", last_status="ok")`
 
 ## 规则
 

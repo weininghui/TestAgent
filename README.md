@@ -1,4 +1,4 @@
-﻿# SDK Forge
+# SDK Forge
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -8,7 +8,7 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: [v5.4.0](docs/releases/RELEASE_NOTES_v5.4.0.md)** — Rebrand to SDK Forge (`sdk-forge` plugin / GitHub repo).
+**Current release: [v5.6.0](docs/releases/RELEASE_NOTES_v5.6.0.md)** — Sub-agent observability (session binding + CLI delegation).
 
 Previous: [v5.3.0](docs/releases/RELEASE_NOTES_v5.3.0.md) — Autopilot step loop, parallel scan, dynamic enrich batch.
 
@@ -193,7 +193,9 @@ All commands emit JSON to stdout. Exit codes: `0` ok, `1` test failures, `2` err
 
 Full list and registration: [REGISTER_AGENT.md](docs/REGISTER_AGENT.md)
 
-## Multi-agent architecture (v4.6+)
+## Multi-agent architecture (v4.6+, v5.5 background delegation)
+
+Primary **forge** dispatches sub-agents via oh-my-openagent `task(run_in_background=true)` for parallel enrich/scan batches, then `background_output` → `advance_forge_workflow`. See [docs/DELEGATION.md](docs/DELEGATION.md).
 
 | Agent | Role |
 |-------|------|

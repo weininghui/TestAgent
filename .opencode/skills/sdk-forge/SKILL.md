@@ -24,34 +24,38 @@ python -c "import sdk_forge; print(sdk_forge.__version__)"
 
 ## Autopilot (preferred)
 
-Select **forge** orchestrator. Start with **`run_forge_autopilot`** then **`advance_forge_workflow`**:
+Select **forge** orchestrator. Start with **`run_forge_autopilot`** then **background delegation** (v5.5):
 
 ```
 run_forge_autopilot(sdk_root=..., profile=production)
-while needs_agent:
-  task(agent=next_agent, prompt=prompt_hint)
-  advance_forge_workflow(last_agent=..., last_status=ok)
+plan = get_delegation_plan(project_dir=...)
+# OMO: task(run_in_background=true/false, subagent_type=..., prompt=..., title=...)
+# register_forge_delegation → update_forge_delegation_session (if sessionId) → background_output
+# poll_forge_delegations → navigation.pending (TUI Down / opencode session list)
 ```
 
-## Multi-Agent
+## Multi-Agent (v5.5 background)
 
-Orchestrator delegates via OpenCode `task()`:
+Orchestrator delegates via OMO `task()` with explicit `run_in_background`:
 
 ```
-get_session_context → orchestration.next_actions
-task(forge-env) → task(forge-scan) → task(forge-scaffold)
-→ optional task(forge-oracle) → parallel task(forge-enrich) → task(forge-review) → task(forge-build)
-record_agent_run or advance_forge_workflow after each sub-agent
+get_delegation_plan → dispatch background_actions (parallel enrich/scan)
+→ foreground_actions (env/scaffold/review/build)
+→ background_output(task_id) → advance_forge_workflow
 ```
 
 Configure in `.forge.yaml`:
 
 ```yaml
+delegation_mode: omo
+delegation_concurrency: 4
 multi_agent_batch_size: auto
 scan_batch_size: 8
 auto_oracle_draft: true
 max_enrich_rounds: 3
 ```
+
+See [docs/DELEGATION.md](../../docs/DELEGATION.md).
 
 ## Single-Agent Fallback
 
