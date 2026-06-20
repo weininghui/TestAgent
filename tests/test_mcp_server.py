@@ -2759,6 +2759,8 @@ class TestCmakeHints:
 
 class TestFindTestBinary:
     def test_finds_x64_debug_exe(self, tmp_path):
+        if sys.platform != "win32":
+            pytest.skip("MSVC x64/Debug layout is Windows-only")
         nested = tmp_path / "x64" / "Debug"
         nested.mkdir(parents=True)
         exe = nested / "run_tests.exe"
