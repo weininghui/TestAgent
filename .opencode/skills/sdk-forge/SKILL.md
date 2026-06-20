@@ -24,21 +24,25 @@ python -c "import sdk_forge; print(sdk_forge.__version__)"
 
 ## Autopilot (preferred)
 
-Select **forge** orchestrator. Start with **`run_forge_autopilot`** then **background delegation** (v5.5):
+Select **forge** orchestrator. Start with **`run_forge_autopilot`** then **OpenCode `task()` tool call** (v5.10):
+
+**`task` is environment-managed** (not in MCP list) — invoke via **native tool call**, never as markdown/text.
 
 ```
 run_forge_autopilot(sdk_root=..., profile=production)
-plan = get_task_dispatch_plan(project_dir=...)
-# OMO task(subagent_type=..., load_skills=[], description=..., run_in_background=...)
-# register_from_omo_task_result → sync_delegation_sessions → get_subagent_dashboard
+plan = sdk-forge_get_task_dispatch_plan(project_dir=...)
+# tool call task(...) with plan.task_dispatches[].args — parallel in one turn
+# sdk-forge_register_from_omo_task_result → sync → sdk-forge_get_subagent_dashboard
 ```
 
-## Multi-Agent (v5.5 background)
+**Forbidden on forge primary:** `call_omo_agent`, `task(agent=...)`, `title=`
 
-Orchestrator delegates via OMO `task()` with explicit `run_in_background`:
+## Multi-Agent (v5.10 — task() tool call only)
+
+Orchestrator delegates via OMO `task()` only — never `call_omo_agent`:
 
 ```
-get_delegation_plan → dispatch background_actions (parallel enrich/scan)
+get_task_dispatch_plan → fire all task_dispatches (parallel enrich/scan)
 → foreground_actions (env/scaffold/review/build)
 → background_output(task_id) → advance_forge_workflow
 ```
@@ -46,7 +50,6 @@ get_delegation_plan → dispatch background_actions (parallel enrich/scan)
 Configure in `.forge.yaml`:
 
 ```yaml
-delegation_mode: omo
 delegation_concurrency: 4
 multi_agent_batch_size: auto
 scan_batch_size: 8

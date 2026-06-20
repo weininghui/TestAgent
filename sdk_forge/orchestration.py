@@ -121,12 +121,8 @@ def max_agent_retries(project_dir: str = "") -> int:
 
 
 def delegation_mode(project_dir: str = "") -> str:
-    root = Path(project_dir or Path.cwd())
-    config = load_forge_config(start=root)
-    mode = str(config.get("delegation_mode", "omo")).strip().lower()
-    if mode == "task":
-        return "omo"
-    return mode if mode in ("omo", "inline", "cli") else "omo"
+    """Forge always delegates via OpenCode/OMO `task()` tool call (GUI Task cards)."""
+    return "omo"
 
 
 def delegation_concurrency(project_dir: str = "") -> int:
@@ -150,25 +146,9 @@ def _delegation_title(agent: str, batch_id: int | None = None) -> str:
 
 def apply_delegation_metadata(
     next_actions: list[dict[str, Any]],
-    mode: str,
+    mode: str = "omo",
 ) -> None:
-    """Attach OMO delegation hints to next_actions when mode=omo/task."""
-    normalized = "omo" if mode == "task" else mode
-    if normalized not in ("omo", "cli"):
-        if normalized == "inline":
-            for action in next_actions:
-                if action.get("blocked"):
-                    continue
-                agent = str(action.get("agent") or "")
-                if agent:
-                    action["subagent_type"] = agent
-                    action["load_skills"] = []
-                    action["description"] = _delegation_title(
-                        agent,
-                        int(action["batch_id"]) if action.get("batch_id") is not None else None,
-                    )
-                    action["gui_task_card"] = False
-        return
+    """Attach OMO task() args to next_actions for OpenCode GUI Task cards."""
     for action in next_actions:
         if action.get("blocked"):
             continue
@@ -180,11 +160,10 @@ def apply_delegation_metadata(
         parallel = bool(action.get("parallel"))
         action["run_in_background"] = True if parallel else False
         action["subagent_type"] = agent
-        action["delegation_mode"] = normalized
-        desc = _delegation_title(agent, bid)
-        action["description"] = desc
+        action["delegation_mode"] = "omo"
+        action["description"] = _delegation_title(agent, bid)
         action["load_skills"] = []
-        action["gui_task_card"] = normalized == "omo"
+        action["gui_task_card"] = True
 
 
 def split_enrich_batches(files: list[str], batch_size: int = 4) -> list[dict[str, Any]]:

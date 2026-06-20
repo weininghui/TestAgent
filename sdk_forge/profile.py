@@ -24,7 +24,6 @@ PRODUCTION_PRESETS: dict[str, Any] = {
     "auto_oracle_draft": True,
     "autopilot_profile": "production",
     "auto_golden_snapshot": True,
-    "delegation_mode": "omo",
     "delegation_concurrency": 4,
 }
 

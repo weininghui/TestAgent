@@ -8,9 +8,9 @@
 
 面向 C/C++ SDK 的 OpenCode 插件与 **独立 CLI**（`forge`）：扫描头文件、生成 GTest 用例、链接真实 SDK 编译运行，并输出 HTML 报告。
 
-**当前版本：[v5.6.0](docs/releases/RELEASE_NOTES_v5.6.0.md)** — 子 agent 可观测性（session 绑定 + CLI 委托运行时）。
+**当前版本：[v5.10.0](docs/releases/RELEASE_NOTES_v5.10.0.md)** — 仅保留 OpenCode `task()` 派发，对齐 GUI Task 卡片。
 
-上一版：[v5.4.0](docs/releases/RELEASE_NOTES_v5.4.0.md) — 品牌重命名为 SDK Forge。
+上一版：[v5.9.0](docs/releases/RELEASE_NOTES_v5.9.0.md) — Task 派发计划 + 禁止 `call_omo_agent`。
 
 ## 功能概览
 
@@ -193,7 +193,7 @@ JSON 配置示例：[`examples/forge_test_sdk/.forge.json`](examples/forge_test_
 
 完整列表与注册步骤：[REGISTER_AGENT.md](docs/REGISTER_AGENT.md)
 
-## 多 Agent 架构（v4.6+，v5.5 后台委托）
+## 多 Agent 架构（v4.6+，v5.10 仅 task() 派发）
 
 编排器 **forge**（primary）通过 OMO **`task()`**（`get_task_dispatch_plan`）派发子 Agent，对齐 OpenCode GUI Task 卡片；并行 enrich 使用 `run_in_background=true`。详见 [docs/DELEGATION.md](docs/DELEGATION.md)。
 
@@ -295,7 +295,7 @@ python -m pytest tests/ -v
 ## 发布
 
 - [全部 Release](https://github.com/weininghui/sdk-forge/releases)
-- 最新：[RELEASE_NOTES_v5.4.0.md](docs/releases/RELEASE_NOTES_v5.4.0.md)
+- 最新：[RELEASE_NOTES_v5.10.0.md](docs/releases/RELEASE_NOTES_v5.10.0.md)
 
 ## 许可证
 

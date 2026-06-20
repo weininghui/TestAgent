@@ -15,7 +15,6 @@ from sdk_forge.delegation import (
     _navigation_hint,
     _save_state,
     list_delegations_impl,
-    poll_cli_delegate_processes,
 )
 
 _SUBAGENT_TITLE_RE = re.compile(r"@([a-zA-Z0-9_-]+)\s+subagent", re.IGNORECASE)
@@ -204,7 +203,6 @@ def get_subagent_dashboard_impl(
     max_preview_chars: int = 400,
 ) -> dict[str, Any]:
     """Unified view: pending sub-agents, session ids, live preview, jump hints."""
-    poll_cli_delegate_processes(project_dir)
     sync = sync_delegation_sessions_impl(project_dir, parent_session_id=parent_session_id)
     listing = list_delegations_impl(project_dir)
     pending = listing.get("pending") or []

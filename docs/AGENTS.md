@@ -13,9 +13,9 @@
 
 ---
 
-## 角色（v5.3 Multi-Agent）
+## 角色（v5.10 — 仅 OpenCode `task()` tool call）
 
-**forge** 是 **primary 编排器**：`run_forge_autopilot` 启动后，用 **`advance_forge_workflow`** 步进循环 + `task()` 调度子 agent。
+**forge** 是 **primary 编排器**：`run_forge_autopilot` 启动后，用 **`get_task_dispatch_plan`** 获取参数，**同一轮 tool call** 所有 `task_dispatches`。
 
 | 子 agent | 职责 |
 |----------|------|
@@ -27,36 +27,41 @@
 | `forge-review` | **`review_verdict=pass|block`** 硬门禁 |
 | `forge-build` | `build_tests(profile=production)` |
 
+**禁止** `call_omo_agent`、`task(agent=...)`、`title=`。必须用 **tool call** 调用 `task`，禁止在回复里写 `task(...)` 代码块。
+
 ## 编排器 MCP 工具
 
 | 工具 | 作用 |
 |------|------|
 | `run_forge_autopilot` | 一键 init + 返回 next_actions |
-| **`advance_forge_workflow`** | 记录子 agent + 返回 next_agent（v5.3 推荐） |
+| **`get_task_dispatch_plan`** | 返回 `task` tool call 参数（GUI Task 卡片） |
+| **`validate_forge_delegation_tool`** | 检测错误派发语法 |
+| **`get_subagent_dashboard`** | session_id + live_preview + 跳转提示 |
+| **`advance_forge_workflow`** | 记录子 agent + 返回 next_agent |
 | `get_session_context` | orchestration / stage_timeline / merge_ready |
-| `record_agent_run` | 低级：标记完成 |
-| `record_scan_batch` | 并行 scan batch 结果 |
+| `register_from_omo_task_result` | 解析 OMO 输出并绑定 session_id |
 
 ## 配置
 
 ```yaml
-multi_agent_batch_size: auto  # 或固定数字；auto 按文件数动态
-scan_batch_size: 8            # 0=不拆分；>0 并行 scan
-auto_oracle_draft: true       # enrich 前 draft golden
+delegation_concurrency: 4
+multi_agent_batch_size: auto
+scan_batch_size: 8
+auto_oracle_draft: true
 max_enrich_rounds: 3
 max_agent_retries: 2
 ```
 
-## v5.3 编排行为
+## v5.10 编排行为
 
-- **`advance_forge_workflow`** 固定步进：`task()` → advance → 直到 merge_ready
-- **并行 scan**：大 SDK header 分批 → merge plan
-- **oracle 前置**：首次 enrich 前自动 draft golden（可关闭）
-- v5.2：error retry、review gate、build↔enrich 回环仍有效
+- **`get_task_dispatch_plan`** → 同一轮 **tool call** 所有 `task(subagent_type=..., load_skills=[], description=..., run_in_background=...)`
+- **`register_from_omo_task_result`** → `sync_delegation_sessions` → **`get_subagent_dashboard`**
+- 等待通知后 **`background_output(task_id)`** → **`advance_forge_workflow`**
+- 并行 scan / oracle 前置 / review gate / build↔enrich 回环仍有效
 
 ## 单 Agent Fallback
 
-子 agent 不可用时，编排器可降级为直接调用：`ensure_forge_environment` → scan → plan → scaffold → enrich → `build_tests(max_retries=3)`。
+子 agent 不可用时，编排器可降级为直接调用 MCP：`ensure_forge_environment` → scan → plan → scaffold → enrich → `build_tests(max_retries=3)`。
 
 ## 规则
 

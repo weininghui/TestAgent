@@ -59,10 +59,10 @@ Tools:
   - load_golden_cases / verify_golden_coverage / snapshot_golden_cases / draft_golden_cases → golden oracle
   - run_forge_autopilot   → hands-off init→orchestration next_actions (v5.1)
   - advance_forge_workflow → record sub-agent + return next step (v5.3)
-  - register_forge_delegation / poll_forge_delegations / get_delegation_plan → background delegation (v5.5)
-  - update_forge_delegation_session / dispatch_forge_delegate → session nav + CLI runtime (v5.6)
+  - register_forge_delegation / poll_forge_delegations / get_delegation_plan → task() delegation tracking (v5.5+)
+  - update_forge_delegation_session / get_task_dispatch_plan → session nav + GUI Task cards (v5.9+)
   - register_from_omo_task_result → parse OMO task() output + bind sessionId (v5.7)
-  - get_task_dispatch_plan / validate_forge_delegation_tool → OMO task() GUI card dispatch (v5.9)
+  - validate_forge_delegation_tool → reject call_omo_agent / bad task() syntax (v5.9)
   - record_scan_batch     → store parallel scan batch result (v5.3)
   - coverage_expand       → append TEST_P for low-coverage symbols
   - build_tests         → probe + compile + run with retry/auto-fix
@@ -473,7 +473,7 @@ async def register_forge_delegation(
 
 @mcp.tool(description="Attach OpenCode session_id to a delegation for sub-agent navigation (v5.6).")
 async def update_forge_delegation_session(
-    task_id: Annotated[str, "Delegation task_id from register_forge_delegation or dispatch_forge_delegate."],
+    task_id: Annotated[str, "Delegation task_id from register_forge_delegation."],
     session_id: Annotated[str, "OpenCode session id e.g. ses_xxx."],
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:
@@ -486,32 +486,9 @@ async def update_forge_delegation_session(
     )
 
 
-@mcp.tool(description="Dispatch sub-agent via CLI `opencode run` when delegation_mode=cli (v5.6).")
-async def dispatch_forge_delegate(
-    agent: Annotated[str, "Sub-agent name e.g. forge-enrich."],
-    prompt: Annotated[str, "Prompt for the sub-agent."],
-    project_dir: Annotated[str, "Project root."] = "",
-    batch_id: Annotated[int | str, "Batch id when applicable."] = "",
-    title: Annotated[str, "Human-readable task title."] = "",
-) -> str:
-    from sdk_forge.delegate_runner import dispatch_cli_delegate_impl
-
-    bid: int | None = None
-    if batch_id not in ("", None):
-        try:
-            bid = int(batch_id)
-        except (TypeError, ValueError):
-            bid = None
-    return json.dumps(
-        dispatch_cli_delegate_impl(project_dir, agent, prompt, batch_id=bid, title=title),
-        indent=2,
-        ensure_ascii=False,
-    )
-
-
-@mcp.tool(description="Parse OMO task()/call_omo_agent text and register delegation (v5.7).")
+@mcp.tool(description="Parse OMO task() output and register delegation (v5.7).")
 async def register_from_omo_task_result(
-    omo_result_text: Annotated[str, "Raw text returned by OMO task() or call_omo_agent."],
+    omo_result_text: Annotated[str, "Raw text returned by OMO task()."],
     agent: Annotated[str, "Sub-agent name e.g. forge-enrich."],
     project_dir: Annotated[str, "Project root."] = "",
     batch_id: Annotated[int | str, "Batch id when applicable."] = "",
@@ -597,7 +574,7 @@ async def get_delegation_plan(
     return json.dumps(get_delegation_plan_impl(project_dir), indent=2, ensure_ascii=False)
 
 
-@mcp.tool(description="OMO task() dispatch plan for OpenCode GUI Task cards (v5.9).")
+@mcp.tool(description="OMO task() dispatch plan for OpenCode GUI Task cards (v5.9). task is environment-managed — invoke via native tool call, not markdown text.")
 async def get_task_dispatch_plan(
     project_dir: Annotated[str, "Project root."] = "",
 ) -> str:

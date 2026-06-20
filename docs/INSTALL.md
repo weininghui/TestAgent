@@ -10,7 +10,7 @@ This guide separates three topics:
 | [2. OpenCode plugin — first install](#2-opencode-plugin-first-install) | First-time MCP + Agent setup |
 | [3. Update to the latest release](#3-update-to-the-latest-release) | Already installed but version is old |
 
-**Current release:** [v5.4.0](releases/RELEASE_NOTES_v5.4.0.md) — check [GitHub Releases](https://github.com/weininghui/sdk-forge/releases) for the latest tag.
+**Current release:** [v5.10.0](releases/RELEASE_NOTES_v5.10.0.md) — check [GitHub Releases](https://github.com/weininghui/TestAgent/releases) for the latest tag.
 
 ## Easiest workflows (recommended)
 
@@ -74,15 +74,16 @@ powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
 
 If `pip show` says `4.0.0` but `sdk_forge.__version__` says `5.2.0`, your **code is new** but **package metadata is stale** — run `pip install -e .` again after updating files.
 
-**v5.2+ smoke check:** these should exist after a correct install:
+**v5.10+ smoke check:** these should exist after a correct install:
 
 ```bash
-python -c "import sdk_forge; print(sdk_forge.__version__)"   # expect 5.2.0
+python -c "import sdk_forge; print(sdk_forge.__version__)"   # expect 5.10.0
 forge autopilot --help                                         # subcommand must appear
-python -c "import sdk_forge.autopilot"                           # module must import
+python -c "import sdk_forge.task_dispatch"                     # task dispatch module
 ```
 
-In OpenCode MCP tool list, look for **`run_forge_autopilot`**, **`advance_forge_workflow`** (v5.3+), **`draft_golden_cases`**, and **`record_agent_run`** with `review_verdict`.
+In OpenCode MCP tool list, look for **`get_task_dispatch_plan`**, **`validate_forge_delegation_tool`**, **`get_subagent_dashboard`**, **`run_forge_autopilot`**, and **`advance_forge_workflow`**.  
+**Removed in v5.10:** `dispatch_forge_delegate` (use OpenCode `task` tool call only).
 
 ---
 

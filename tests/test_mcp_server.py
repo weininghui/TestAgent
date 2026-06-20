@@ -1454,15 +1454,15 @@ class TestDelegationV55:
         assert env["run_in_background"] is False
         assert env["subagent_type"] == "forge-env"
 
-    def test_inline_mode_no_delegation_fields(self, tmp_path):
+    def test_legacy_inline_config_still_omo_task(self, tmp_path):
         from sdk_forge.orchestration import get_orchestration_context
 
         (tmp_path / ".forge.yaml").write_text("delegation_mode: inline\n", encoding="utf-8")
         ctx = get_orchestration_context(str(tmp_path))
         action = ctx["next_actions"][0]
-        assert action.get("gui_task_card") is False
-        assert "run_in_background" not in action
-        assert "delegation_mode" not in action
+        assert action.get("delegation_mode") == "omo"
+        assert action.get("gui_task_card") is True
+        assert action.get("subagent_type") == "forge-env"
 
     def test_register_poll_advance_flow(self, tmp_path):
         from sdk_forge.delegation import (
@@ -1556,34 +1556,6 @@ class TestDelegationV56:
         polled = poll_forge_delegations_impl(str(tmp_path))
         assert polled["navigation"]["pending"]
         assert polled["navigation"]["pending"][0]["session_id"] == "ses_x"
-
-    def test_cli_mode_delegation_metadata(self, tmp_path):
-        from sdk_forge.orchestration import get_orchestration_context
-
-        (tmp_path / ".forge.yaml").write_text("delegation_mode: cli\n", encoding="utf-8")
-        ctx = get_orchestration_context(str(tmp_path))
-        action = ctx["next_actions"][0]
-        assert action.get("run_in_background") is False
-        assert action.get("delegation_mode") == "cli"
-
-    def test_dispatch_cli_delegate_mock(self, tmp_path, monkeypatch):
-        from sdk_forge.delegate_runner import dispatch_cli_delegate_impl
-
-        class FakeProc:
-            pid = 4242
-
-            def __init__(self, *args, **kwargs):
-                pass
-
-        monkeypatch.setattr("sdk_forge.delegate_runner.subprocess.Popen", FakeProc)
-        result = dispatch_cli_delegate_impl(
-            str(tmp_path), "forge-enrich", "project_dir=... batch_id=0",
-            batch_id=0, title="Enrich batch 0",
-        )
-        assert result["status"] == "ok"
-        assert result["runtime"] == "cli"
-        assert result["pid"] == 4242
-        assert result["task_id"].startswith("cli_")
 
     @pytest.mark.asyncio
     async def test_mcp_update_session(self, tmp_path):
@@ -1775,9 +1747,11 @@ class TestTaskDispatchV59:
         assert call["args"]["run_in_background"] is True
         assert call["validation_errors"] == []
 
-    def test_delegation_mode_task_alias(self, tmp_path):
+    def test_delegation_mode_always_omo(self, tmp_path):
         from sdk_forge.orchestration import delegation_mode
 
+        (tmp_path / ".forge.yaml").write_text("delegation_mode: cli\n", encoding="utf-8")
+        assert delegation_mode(str(tmp_path)) == "omo"
         (tmp_path / ".forge.yaml").write_text("delegation_mode: task\n", encoding="utf-8")
         assert delegation_mode(str(tmp_path)) == "omo"
 
@@ -1804,6 +1778,8 @@ class TestTaskDispatchV59:
         assert plan["task_dispatches"]
         assert plan["task_dispatches"][0]["tool"] == "task"
         assert "call_omo_agent" in plan["forbidden_tools"]
+        assert plan["invocation_guide"]["tool_name"] == "task"
+        assert plan["invocation_guide"]["not_mcp"] is True
 
     def test_validate_call_omo_agent(self):
         from sdk_forge.task_dispatch import validate_delegation_tool_text_impl
@@ -1828,6 +1804,7 @@ class TestTaskDispatchV59:
         plan = get_delegation_plan_impl(str(tmp_path))
         assert plan.get("task_dispatches")
         assert plan.get("gui_task_card") is True
+        assert plan.get("invocation_guide", {}).get("tool_name") == "task"
 
     @pytest.mark.asyncio
     async def test_mcp_get_task_dispatch_plan(self, tmp_path):

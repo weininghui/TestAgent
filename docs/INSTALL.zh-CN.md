@@ -10,7 +10,7 @@
 | [2. OpenCode 插件 — 首次安装](#2-opencode-插件--首次安装) | 第一次配置 MCP + Agent |
 | [3. 更新到最新版本](#3-更新到最新版本) | 已安装但版本过旧 |
 
-**当前 Release：** [v5.4.0](releases/RELEASE_NOTES_v5.4.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/sdk-forge/releases)。
+**当前 Release：** [v5.10.0](releases/RELEASE_NOTES_v5.10.0.md) — 最新 tag 见 [GitHub Releases](https://github.com/weininghui/TestAgent/releases)。
 
 ## 最省事怎么用（推荐）
 
@@ -91,18 +91,16 @@ powershell -ExecutionPolicy Bypass -File scripts/update-opencode-plugin.ps1
 
 若 `pip show` 仍是 `4.0.0`，但 `sdk_forge.__version__` 已是 `5.2.0`，说明 **代码已更新、pip 元数据未重装** — 在插件目录再执行一次 `pip install -e .`。
 
-**v5.2+ 安装自检：**
+**v5.10+ 安装自检：**
 
 ```bash
-python -c "import sdk_forge; print(sdk_forge.__version__)"   # 应为 5.2.0
+python -c "import sdk_forge; print(sdk_forge.__version__)"   # 应为 5.10.0
 forge autopilot --help                                         # 必须有 autopilot 子命令
-python -c "import sdk_forge.autopilot"                           # 模块应能导入
+python -c "import sdk_forge.task_dispatch"                     # task 派发模块
 ```
 
-OpenCode MCP 工具列表中应有 **`run_forge_autopilot`**、**`draft_golden_cases`**、**`record_agent_run`**（含 `review_verdict`）。
-```
-
-OpenCode MCP 工具列表中应能看到 **`run_forge_autopilot`**、**`snapshot_golden_cases`**。
+OpenCode MCP 工具列表中应有 **`get_task_dispatch_plan`**、**`validate_forge_delegation_tool`**、**`get_subagent_dashboard`**、**`run_forge_autopilot`**、**`advance_forge_workflow`**。  
+**v5.10 已移除：** `dispatch_forge_delegate`（仅使用 OpenCode `task` tool call）。
 
 ---
 

@@ -1,11 +1,11 @@
-"""OMO task() dispatch builder aligned with OpenCode GUI Task cards (v5.9)."""
+"""OMO task() dispatch builder aligned with OpenCode GUI Task cards (v5.10)."""
 
 from __future__ import annotations
 
 import re
 from typing import Any
 
-from sdk_forge.delegation import delegation_concurrency, delegation_mode
+from sdk_forge.delegation import delegation_concurrency
 from sdk_forge.orchestration import get_orchestration_context
 
 FORBIDDEN_TOOLS = ("call_omo_agent",)
@@ -13,16 +13,6 @@ FORBIDDEN_PARAM_PATTERNS = (
     re.compile(r"\btask\s*\(\s*agent\s*=", re.IGNORECASE),
     re.compile(r"\btitle\s*=", re.IGNORECASE),
 )
-
-TASK_GUI_MODES = frozenset({"omo", "task"})
-
-
-def normalize_delegation_mode(mode: str) -> str:
-    """`task` is an alias for `omo` (OpenCode GUI Task card path)."""
-    m = (mode or "omo").strip().lower()
-    if m == "task":
-        return "omo"
-    return m
 
 
 def validate_task_action(action: dict[str, Any]) -> list[str]:
@@ -70,39 +60,9 @@ def build_task_dispatches_impl(project_dir: str = "") -> dict[str, Any]:
     """Build ready-to-invoke OMO task() calls from orchestration next_actions."""
     orch = get_orchestration_context(project_dir)
     actions = orch.get("next_actions") or []
-    mode = normalize_delegation_mode(orch.get("delegation_mode") or delegation_mode(project_dir))
-    gui_task_card = mode in TASK_GUI_MODES
     dispatchable = [a for a in actions if not a.get("blocked")]
 
-    dispatches: list[dict[str, Any]] = []
-    for action in dispatchable:
-        if mode == "cli":
-            dispatches.append({
-                "tool": "dispatch_forge_delegate",
-                "args": {
-                    "agent": action.get("agent"),
-                    "prompt": action.get("prompt_hint") or action.get("prompt"),
-                    "batch_id": action.get("batch_id"),
-                    "title": action.get("description"),
-                },
-                "gui_expect": "No Task card — CLI subprocess fallback",
-            })
-            continue
-        if mode == "inline":
-            dispatches.append({
-                "tool": "task",
-                "args": {
-                    "subagent_type": action.get("subagent_type") or action.get("agent"),
-                    "load_skills": action.get("load_skills", []),
-                    "description": action.get("description"),
-                    "prompt": action.get("prompt_hint") or action.get("prompt"),
-                    "run_in_background": False,
-                },
-                "gui_expect": "No OMO Task card — inline sync fallback",
-                "gui_task_card": False,
-            })
-            continue
-        dispatches.append(build_omo_task_call(action))
+    dispatches = [build_omo_task_call(action) for action in dispatchable]
 
     parallel = [d for d in dispatches if d.get("args", {}).get("run_in_background")]
     serial = [d for d in dispatches if not d.get("args", {}).get("run_in_background")]
@@ -111,10 +71,10 @@ def build_task_dispatches_impl(project_dir: str = "") -> dict[str, Any]:
 
     return {
         "status": "ok",
-        "delegation_mode": mode,
+        "delegation_mode": "omo",
         "delegation_concurrency": orch.get("delegation_concurrency") or delegation_concurrency(project_dir),
-        "dispatch_protocol": "omo_task_only" if gui_task_card else f"{mode}_fallback",
-        "gui_task_card": gui_task_card,
+        "dispatch_protocol": "omo_task_only",
+        "gui_task_card": True,
         "forbidden_tools": list(FORBIDDEN_TOOLS),
         "forbidden_params": ["task(agent=...)", "title="],
         "task_dispatches": dispatches,
@@ -123,10 +83,26 @@ def build_task_dispatches_impl(project_dir: str = "") -> dict[str, Any]:
         "background_actions": background,
         "foreground_actions": foreground,
         "fire_parallel_in_one_turn": len(parallel) > 1,
+        "invocation_guide": {
+            "tool_name": "task",
+            "how": "MUST use native tool call (function calling). Markdown/code-block task(...) does NOT execute.",
+            "not_mcp": True,
+            "mcp_prefix": "sdk-forge_",
+            "forbidden_substitute": "call_omo_agent",
+            "opencode_ref": "https://github.com/anomalyco/opencode — packages/opencode/src/tool/task.ts",
+            "success_signal": "OpenCode GUI shows Explore-style Task card",
+            "failure_signal": "Gray code block with task(...) in assistant message = failed dispatch",
+            "example_tool_call": {
+                "subagent_type": "librarian",
+                "load_skills": [],
+                "description": "Quick research",
+                "prompt": "Find something interesting about AI history.",
+                "run_in_background": True,
+            },
+        },
         "user_hint_zh": (
-            "同一轮回复内并行调用所有 parallel_dispatches 的 task()，GUI 应显示 Task 卡片"
-            if gui_task_card
-            else "当前为后备模式，GUI 不会出现 OMO Task 卡片"
+            "必须用 tool call 调用 task，禁止在回复里写 task(...) 代码块。"
+            "出现 Task 卡片=成功；出现灰色代码块=失败需重试。"
         ),
         "orchestration_status": "needs_agent" if dispatchable else ("ok" if orch.get("merge_ready") else "idle"),
         "merge_ready": bool(orch.get("merge_ready")),
@@ -139,8 +115,8 @@ def validate_delegation_tool_text_impl(text: str) -> dict[str, Any]:
     issues: list[str] = []
     if "call_omo_agent" in raw:
         issues.append(
-            "call_omo_agent does not render OpenCode Task cards — use "
-            "task(subagent_type=..., load_skills=[], description=..., run_in_background=...)"
+            "call_omo_agent is removed — use task tool call with "
+            "subagent_type, load_skills=[], description, run_in_background"
         )
     for pat in FORBIDDEN_PARAM_PATTERNS:
         if pat.search(raw):
@@ -148,12 +124,12 @@ def validate_delegation_tool_text_impl(text: str) -> dict[str, Any]:
     return {
         "status": "ok" if not issues else "invalid",
         "issues": issues,
-        "fix": "Use get_task_dispatch_plan() and invoke task() with returned args",
+        "fix": "Use get_task_dispatch_plan() then tool-call task with returned args",
     }
 
 
 def get_task_dispatch_plan_impl(project_dir: str = "") -> dict[str, Any]:
-    """Full task dispatch plan for forge primary (v5.9)."""
+    """Full task dispatch plan for forge primary."""
     base = build_task_dispatches_impl(project_dir)
     base["after_dispatch"] = [
         "register_from_omo_task_result(omo_result_text=result, ...)",

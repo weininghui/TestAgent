@@ -53,7 +53,7 @@ def _parse_task_metadata_block(text: str) -> dict[str, str]:
 
 
 def parse_omo_task_result_impl(text: str) -> dict[str, Any]:
-    """Parse OMO task() / call_omo_agent text output for task_id and session_id."""
+    """Parse OMO task() text output for task_id and session_id."""
     raw = text or ""
     meta = _parse_task_metadata_block(raw)
     task_match = _TASK_ID_RE.search(raw)
@@ -234,30 +234,6 @@ def update_delegation_session_impl(
     }
 
 
-def poll_cli_delegate_processes(project_dir: str = "") -> dict[str, Any]:
-    """Mark CLI delegations complete when their subprocess exits."""
-    state = _load_state(project_dir)
-    updated: list[str] = []
-    for entry in state.get("delegations") or []:
-        if entry.get("runtime") != "cli" or entry.get("status") != "pending":
-            continue
-        pid = entry.get("pid")
-        if pid is None:
-            continue
-        try:
-            import os
-
-            os.kill(int(pid), 0)
-        except OSError:
-            entry["status"] = "ok"
-            entry["completed_at"] = datetime.now(timezone.utc).isoformat()
-            entry["exit_reason"] = "process_exited"
-            updated.append(str(entry.get("task_id")))
-    if updated:
-        _save_state(project_dir, state)
-    return {"status": "ok", "completed_task_ids": updated}
-
-
 def complete_delegation_impl(
     project_dir: str,
     agent: str,
@@ -289,7 +265,6 @@ def complete_delegation_impl(
 
 
 def list_delegations_impl(project_dir: str = "") -> dict[str, Any]:
-    poll_cli_delegate_processes(project_dir)
     state = _load_state(project_dir)
     delegations = state.get("delegations") or []
     pending = [d for d in delegations if d.get("status") == "pending"]
@@ -346,16 +321,14 @@ def get_delegation_plan_impl(project_dir: str = "") -> dict[str, Any]:
 
     orch = get_orchestration_context(project_dir)
     actions = orch.get("next_actions") or []
-    mode = orch.get("delegation_mode") or delegation_mode(project_dir)
     concurrency = orch.get("delegation_concurrency") or delegation_concurrency(project_dir)
     dispatchable = [a for a in actions if not a.get("blocked")]
     background = [a for a in dispatchable if a.get("run_in_background")]
     foreground = [a for a in dispatchable if not a.get("run_in_background")]
     task_plan = build_task_dispatches_impl(project_dir)
-    gui_modes = mode in ("omo", "task")
     return {
         "status": "ok",
-        "delegation_mode": mode,
+        "delegation_mode": "omo",
         "delegation_concurrency": concurrency,
         "actions": dispatchable,
         "background_actions": background,
@@ -364,22 +337,19 @@ def get_delegation_plan_impl(project_dir: str = "") -> dict[str, Any]:
         "merge_ready": bool(orch.get("merge_ready")),
         "orchestration_status": "needs_agent" if dispatchable else ("ok" if orch.get("merge_ready") else "idle"),
         "dispatch_protocol": task_plan.get("dispatch_protocol"),
-        "gui_task_card": gui_modes,
+        "gui_task_card": True,
         "task_dispatches": task_plan.get("task_dispatches"),
         "forbidden_tools": task_plan.get("forbidden_tools"),
         "forbidden_params": task_plan.get("forbidden_params"),
         "dispatch_hint": (
-            "OMO task(): subagent_type + load_skills=[] + description + run_in_background — "
-            "renders OpenCode GUI Task card. NEVER call_omo_agent or task(agent=)."
-            if gui_modes
-            else "cli: dispatch_forge_delegate — no GUI Task card"
-            if mode == "cli"
-            else "inline: sync task — no OMO GUI Task card"
+            "MUST tool-call `task` (function calling). Markdown task(...) = no GUI card. "
+            "Args: subagent_type + load_skills=[] + description + run_in_background."
         ),
+        "invocation_guide": task_plan.get("invocation_guide"),
         "omo_task_template": {
             "load_skills": [],
-            "note": "Use OMO task tool with subagent_type + description + run_in_background",
-        } if gui_modes else None,
+            "note": "OpenCode task tool — subagent_type + description + run_in_background",
+        },
     }
 
 

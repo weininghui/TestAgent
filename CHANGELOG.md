@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.10.0] - 2026-06-20
+
+Single delegation path: OpenCode/OMO **`task()` tool call** only (GUI Task cards).
+
+### Removed
+- `delegation_mode: cli` / `inline` — always `task()` now
+- MCP **`dispatch_forge_delegate`** and **`sdk_forge/delegate_runner.py`**
+- Redundant alternate-path documentation
+
+### Kept
+- `get_task_dispatch_plan`, `get_subagent_dashboard`, `register_from_omo_task_result`
+- forge `call_omo_agent: deny` in OMO config
+
 ## [5.9.0] - 2026-06-20
 
 Align forge delegation with **OpenCode GUI Task cards** — OMO `task()` only, forbid `call_omo_agent`.

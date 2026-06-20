@@ -8,9 +8,9 @@
 
 OpenCode plugin and **standalone CLI** (`forge`) for scanning C/C++ SDK headers, generating GTest suites, compiling, and running tests against real SDK binaries.
 
-**Current release: [v5.6.0](docs/releases/RELEASE_NOTES_v5.6.0.md)** — Sub-agent observability (session binding + CLI delegation).
+**Current release: [v5.10.0](docs/releases/RELEASE_NOTES_v5.10.0.md)** — OpenCode GUI Task card alignment via OMO `task()` only.
 
-Previous: [v5.3.0](docs/releases/RELEASE_NOTES_v5.3.0.md) — Autopilot step loop, parallel scan, dynamic enrich batch.
+Previous: [v5.9.0](docs/releases/RELEASE_NOTES_v5.9.0.md) — Task dispatch plan + forbid `call_omo_agent`.
 
 ## What it does
 
@@ -193,7 +193,7 @@ All commands emit JSON to stdout. Exit codes: `0` ok, `1` test failures, `2` err
 
 Full list and registration: [REGISTER_AGENT.md](docs/REGISTER_AGENT.md)
 
-## Multi-agent architecture (v4.6+, v5.5 background delegation)
+## Multi-agent architecture (v4.6+, v5.10 task() only)
 
 Primary **forge** dispatches via OMO `task()` (`get_task_dispatch_plan`) for OpenCode GUI Task cards; parallel enrich uses `run_in_background=true`. See [docs/DELEGATION.md](docs/DELEGATION.md).
 
@@ -295,7 +295,7 @@ python -m pytest tests/ -v
 ## Releases
 
 - [All releases](https://github.com/weininghui/sdk-forge/releases)
-- Latest: [RELEASE_NOTES_v5.3.0.md](docs/releases/RELEASE_NOTES_v5.3.0.md)
+- Latest: [RELEASE_NOTES_v5.10.0.md](docs/releases/RELEASE_NOTES_v5.10.0.md)
 
 ## License
 

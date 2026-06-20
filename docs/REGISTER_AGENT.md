@@ -464,20 +464,16 @@ project_dir=/path/to/project batch_id=0 test_files=foo_test.cpp,bar_test.cpp
 
 复制 [examples/oh-my-openagent.multi-agent.json](examples/oh-my-openagent.multi-agent.json) 到 `~/.config/opencode/oh-my-openagent.json`，为 scan/scaffold 配快模型，enrich/build 配强模型。
 
-### task() 语法（v5.9 — OMO，对齐 OpenCode GUI Task 卡片）
+### task() 语法（v5.10 — 仅 OpenCode tool call，GUI Task 卡片）
 
 ```
 plan = get_task_dispatch_plan(project_dir=...)
-task(
-  subagent_type="forge-enrich",
-  load_skills=[],
-  description="Enrich batch 0",
-  prompt="project_dir=... batch_id=0 test_files=a_test.cpp",
-  run_in_background=true,
-)
+# 必须用 tool call 调用 task（禁止写 markdown 代码块）
+# subagent_type + load_skills=[] + description + run_in_background
 ```
 
-**禁止** `task(agent=...)`、`title=`、`call_omo_agent`。
+**禁止** `task(agent=...)`、`title=`、`call_omo_agent`、`dispatch_forge_delegate`。  
+**无需** `.forge.yaml` 中的 `delegation_mode`（v5.10 起恒为 `task()`）。
 
 ---
 
